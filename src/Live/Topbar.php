@@ -70,8 +70,8 @@ final class Topbar
         $id = $this->data?->currentSessionId() ?? '';
         $goal = '';
         foreach ($this->data?->sessions() ?? [] as $s) {
-            if (\is_array($s) && (string) ($s['id'] ?? '') === $id) {
-                $goal = (string) ($s['goal'] ?? '');
+            if ((string) $s['id'] === $id) {
+                $goal = (string) $s['goal'];
 
                 break;
             }
@@ -79,7 +79,7 @@ final class Topbar
         $settings = $this->data?->settings() ?? [];
         $modeKey = \is_string($settings['mode'] ?? null) && $settings['mode'] !== '' ? (string) $settings['mode'] : 'ask';
         $counters = $this->data?->counters();
-        $state = \is_array($counters) ? (string) ($counters['state'] ?? 'idle') : 'idle';
+        $state = $counters !== null ? (string) $counters['state'] : 'idle';
 
         return [
             'goal' => $goal,
