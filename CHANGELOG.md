@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.13.0](https://github.com/getmilpa/desktop-app/compare/v0.12.0...v0.13.0) (2026-09-03)
+
+
+### Features
+
+* mutation and persistence — save settings, create sessions, round-trip to disk (evidence/0483) ([91a1a12](https://github.com/getmilpa/desktop-app/commit/91a1a12adeb87492a65c4c634389505ed2adb661))
+
 ## [0.12.0](https://github.com/getmilpa/desktop-app/compare/v0.11.0...v0.12.0) (2026-09-03)
 
 
