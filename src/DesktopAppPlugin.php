@@ -117,7 +117,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $topbar = new \Milpa\DesktopApp\Live\Topbar($this->liveSecret('signing'), $data, $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Topbar::class, $topbar);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar));
+        // The main tablist is the shell's third pure-Milpa-Components surface (greenhouse decisions/0189): the
+        // tablist declares the shared `desktop.tab` signal; the panes and composer dock project it.
+        $tabs = new \Milpa\DesktopApp\Live\Tabs($this->liveSecret('signing'), $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Tabs::class, $tabs);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
