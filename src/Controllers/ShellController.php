@@ -49,6 +49,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Sidebar $sidebar = null,
         private readonly ?\Milpa\DesktopApp\Live\Topbar $topbar = null,
         private readonly ?\Milpa\DesktopApp\Live\Tabs $tabs = null,
+        private readonly ?\Milpa\DesktopApp\Live\WorkBoard $workBoard = null,
     ) {
     }
 
@@ -119,7 +120,7 @@ final class ShellController
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -304,39 +305,11 @@ HTML;
         );
     }
 
-    /** The Work board (2e), columns by status, from the current session's work items. */
-    private function workBoard(): string
+    /** The Work board, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's fourth
+     *  pure-component surface. Moving a card still persists through /desktop/work (decisions/0484). */
+    private function workBoardHtml(): string
     {
-        $work = $this->data?->work() ?? [];
-        if ($work === []) {
-            return '<div class="mui-empty"><p class="mui-empty__title">No work board yet</p><p class="mui-empty__desc">A session writes its plan as work items; they appear here by status.</p></div>';
-        }
-
-        // Reaching here means work() returned items, so $this->data is non-null.
-        $session = htmlspecialchars($this->data->currentSessionId(), ENT_QUOTES);
-        $columns = ['pending' => 'Pending', 'in_progress' => 'In progress', 'done' => 'Done', 'blocked' => 'Blocked'];
-        $byStatus = ['pending' => '', 'in_progress' => '', 'done' => '', 'blocked' => ''];
-        foreach ($work as $i => $item) {
-            $status = \array_key_exists($item['status'], $columns) ? $item['status'] : 'pending';
-            $byStatus[$status] .= sprintf(
-                '<article class="mui-card mui-card--compact" draggable="true" data-index="%d" style="cursor:grab"><div class="mui-card__body"><p style="margin:0 0 var(--space-3);font-size:var(--text-sm)">%s</p><span class="mui-badge">%s</span></div></article>',
-                $i,
-                htmlspecialchars($item['title'], ENT_QUOTES),
-                htmlspecialchars($item['origin'], ENT_QUOTES),
-            );
-        }
-
-        $out = '<div class="work-board" data-session="' . $session . '" style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);align-items:start">';
-        foreach ($columns as $key => $label) {
-            $out .= sprintf(
-                '<section class="work-col" data-status="%s" style="display:flex;flex-direction:column;gap:var(--space-3);min-height:8rem;padding:var(--space-2);border-radius:var(--radius-md)"><div class="mui-cluster mui-cluster--sm" style="justify-content:space-between"><span class="mui-section__kicker" style="margin:0">%s</span></div>%s</section>',
-                htmlspecialchars($key, ENT_QUOTES),
-                htmlspecialchars($label, ENT_QUOTES),
-                $byStatus[$key],
-            );
-        }
-
-        return $out . '</div>';
+        return ($this->workBoard ?? new \Milpa\DesktopApp\Live\WorkBoard('desktop-work-board-fallback', $this->data, $this->events))->render();
     }
 
     /** The Audit projection stats (2f), from the current session's real counters. */

@@ -147,8 +147,10 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('3 turns', $body, 'status counters');
         self::assertStringContainsString('data-view="auth"', $body, 'the Auth screen');
         self::assertStringContainsString('data-pane="work"', $body);
-        // Drag-drop wiring (0484): draggable cards, drop columns and the persisting POST.
-        self::assertStringContainsString('class="work-board" data-session=', $body);
+        // The Work board is now a milpa/live component (0189); drag-drop still persists (0484):
+        // draggable cards, drop columns and the persisting POST, on the component's board.
+        self::assertStringContainsString('class="work-board" data-milpa-component="desktop-work-board"', $body);
+        self::assertStringContainsString('data-milpa-state="work-board"', $body);
         self::assertStringContainsString('draggable="true" data-index="0"', $body);
         self::assertStringContainsString('class="work-col" data-status="done"', $body);
         self::assertStringContainsString("fetch('/desktop/work'", $body);
