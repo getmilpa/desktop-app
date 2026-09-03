@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.14.0](https://github.com/getmilpa/desktop-app/compare/v0.13.0...v0.14.0) (2026-09-03)
+
+
+### Features
+
+* work board drag-drop persists a card's new status to the session (evidence/0484) ([386b102](https://github.com/getmilpa/desktop-app/commit/386b102e98f9524f1a2e16a6cabb6285a3e9f06f))
+
 ## [0.13.0](https://github.com/getmilpa/desktop-app/compare/v0.12.0...v0.13.0) (2026-09-03)
 
 
