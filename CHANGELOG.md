@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.23.0](https://github.com/getmilpa/desktop-app/compare/v0.22.0...v0.23.0) (2026-09-03)
+
+
+### Features
+
+* **live:** persistent, derived and linked signals in the Desktop ([#32](https://github.com/getmilpa/desktop-app/issues/32)) ([f56cf3f](https://github.com/getmilpa/desktop-app/commit/f56cf3f70bb227ae863184715daa42aad89b57d9))
+
 ## [0.22.0](https://github.com/getmilpa/desktop-app/compare/v0.21.0...v0.22.0) (2026-09-03)
 
 
