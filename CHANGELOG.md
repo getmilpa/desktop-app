@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.1](https://github.com/getmilpa/desktop-app/compare/v0.1.0...v0.1.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* the plugin declares #[PluginMetadata] so the runtime can boot it ([b5361d5](https://github.com/getmilpa/desktop-app/commit/b5361d53346b6ef13240adfebd4b11d116718755))
+
 ## 0.1.0 (2026-09-03)
 
 
