@@ -47,6 +47,7 @@ final class ShellController
         private readonly ?DesktopData $data = null,
         private readonly ?\Milpa\DesktopApp\Live\ComposerField $composerField = null,
         private readonly ?\Milpa\DesktopApp\Live\Sidebar $sidebar = null,
+        private readonly ?\Milpa\DesktopApp\Live\Topbar $topbar = null,
     ) {
     }
 
@@ -113,11 +114,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -257,34 +258,11 @@ HTML;
         return ($this->sidebar ?? new \Milpa\DesktopApp\Live\Sidebar('desktop-sidebar-fallback', $this->data, $this->events))->render();
     }
 
-    /** The topbar's session header — the active session's goal, id and mode, or an empty-workspace note. */
-    private function topbarHeader(): string
+    /** The topbar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's second
+     *  pure-component surface. A fallback Topbar is built from the same data when none was injected. */
+    private function topbarHtml(): string
     {
-        $id = $this->data?->currentSessionId() ?? '';
-        if ($id === '') {
-            return '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">No session open</span>'
-                . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Open a workspace to start one</span>';
-        }
-
-        $goal = '(no goal recorded)';
-        foreach ($this->data?->sessions() ?? [] as $s) {
-            if ((string) $s['id'] === $id) {
-                $goal = (string) $s['goal'];
-
-                break;
-            }
-        }
-        $settings = $this->data?->settings() ?? [];
-        $mode = \is_string($settings['mode'] ?? null) && $settings['mode'] !== '' ? (string) $settings['mode'] : 'ask';
-
-        return sprintf(
-            '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">%s</span>'
-            // The derived `session.summary` signal ("{state} · {turns} turns") re-computes reactively.
-            . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session %s · %s mode · <span x-data x-text="$store.milpa[\'session.summary\']"></span></span>',
-            htmlspecialchars($goal, ENT_QUOTES),
-            htmlspecialchars($id, ENT_QUOTES),
-            htmlspecialchars($mode, ENT_QUOTES),
-        );
+        return ($this->topbar ?? new \Milpa\DesktopApp\Live\Topbar('desktop-topbar-fallback', $this->data, $this->events))->render();
     }
 
     /** The initial shared signals, seeded into the page — one truth projected across the UI (decisions/0189). */
@@ -301,33 +279,6 @@ HTML;
             'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
             'desktop.nav' => 'sessions',
         ], \JSON_UNESCAPED_SLASHES);
-    }
-
-    /** The topbar's right side: the real session state, the mode, and Export session (autopsy/video material). */
-    private function topbarActions(): string
-    {
-        $state = $this->data?->counters()['state'] ?? 'idle';
-        $working = $state === 'working';
-        $id = $this->data?->currentSessionId() ?? '';
-
-        $modeLabels = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
-        $settings = $this->data?->settings() ?? [];
-        $mode = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? $modeLabels[$settings['mode']] : 'Ask before changing';
-
-        $href = '/desktop/export' . ($id !== '' ? '?session=' . rawurlencode($id) : '');
-
-        return sprintf(
-            // The session state is a SHARED signal too — the badge reads it (ready for a panel to read the same).
-            '<span class="%s" id="milpa-topstate" x-data x-text="$store.milpa[\'session.state.label\']">%s</span>'
-            // The mode is a SHARED signal: this topbar badge and the composer's chip read one truth, so
-            // changing the mode in one place projects to the other (greenhouse decisions/0189).
-            . '<span class="mui-badge" x-data x-text="$store.milpa[\'composer.mode.label\']">%s</span>'
-            . '<a class="mui-btn mui-btn--sm" id="milpa-export" href="%s" download>Export session</a>',
-            $working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge',
-            htmlspecialchars(ucfirst($state), ENT_QUOTES),
-            htmlspecialchars($mode, ENT_QUOTES),
-            htmlspecialchars($href, ENT_QUOTES),
-        );
     }
 
     /** The status bar's counters, from the current session (greenhouse decisions/0482). */
@@ -554,11 +505,7 @@ HTML;
   <div class="mui-shell" style="flex:1;min-height:0;--_sidebar-w:17.5rem;overflow:hidden;display:grid;grid-template-columns:var(--_sidebar-w) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)">
     <!--SIDEBAR-->
 
-    <header class="mui-topbar" style="grid-row:1;grid-column:2;min-height:64px">
-      <div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px"><!--TOPHEADER-->
-      </div>
-      <div class="mui-topbar__end"><!--TOPBARACTIONS--></div>
-    </header>
+    <!--TOPBAR-->
 
     <main class="mui-shell__main mui-shell__main--wide" style="grid-row:2;grid-column:2;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
       <div class="view" data-view="session" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
