@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.15.0](https://github.com/getmilpa/desktop-app/compare/v0.14.0...v0.15.0) (2026-09-03)
+
+
+### Features
+
+* the composer's floating Context and Session panels (wireframe 3a, evidence/0485) ([2c13270](https://github.com/getmilpa/desktop-app/commit/2c13270caaef7b332a2b7b25f1e022c10830f2b0))
+
 ## [0.14.0](https://github.com/getmilpa/desktop-app/compare/v0.13.0...v0.14.0) (2026-09-03)
 
 
