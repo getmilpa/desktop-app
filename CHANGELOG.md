@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.17.0](https://github.com/getmilpa/desktop-app/compare/v0.16.0...v0.17.0) (2026-09-03)
+
+
+### Features
+
+* **shell:** sticky composer, a typed message stream, real state, and session export ([#20](https://github.com/getmilpa/desktop-app/issues/20)) ([32464ad](https://github.com/getmilpa/desktop-app/commit/32464adb06cf615c99b8bcd08c4cde2d83f6ea9c))
+
 ## [0.16.0](https://github.com/getmilpa/desktop-app/compare/v0.15.0...v0.16.0) (2026-09-03)
 
 
