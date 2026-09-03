@@ -30,17 +30,19 @@ use Psr\Log\NullLogger;
  */
 final class DesktopAppPluginTest extends TestCase
 {
-    public function testItMountsTheShellRoute(): void
+    public function testItMountsTheShellAndTheEventsRoutes(): void
     {
         $plugin = new DesktopAppPlugin(new DIContainer());
 
         $routes = $plugin->routes();
-        self::assertCount(1, $routes);
-        $route = $routes[0];
-        self::assertInstanceOf(Route::class, $route);
-        self::assertSame('/desktop', $route->path);
-        self::assertContains(HttpMethod::GET, $route->methods);
-        self::assertNotNull($route->handler);
+        self::assertCount(2, $routes);
+        foreach ($routes as $route) {
+            self::assertInstanceOf(Route::class, $route);
+            self::assertContains(HttpMethod::GET, $route->methods);
+            self::assertNotNull($route->handler);
+        }
+        $paths = array_map(static fn (Route $r): string => $r->path, $routes);
+        self::assertSame(['/desktop', '/desktop/events'], $paths);
     }
 
     public function testBootRegistersTheShellController(): void
@@ -71,6 +73,6 @@ final class DesktopAppPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
 
-        self::assertCount(1, $plugin->routes(), 'the route is the whole effect');
+        self::assertCount(2, $plugin->routes(), 'the shell and its event feed are the whole effect');
     }
 }

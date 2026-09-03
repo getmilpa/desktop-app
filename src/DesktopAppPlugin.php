@@ -15,13 +15,18 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp;
 
 use Milpa\Attributes\PluginMetadata;
+use Milpa\DesktopApp\Controllers\EventsController;
 use Milpa\DesktopApp\Controllers\ShellController;
+use Milpa\DesktopApp\Live\ShellEvent;
+use Milpa\DesktopApp\Live\ShellEventLog;
+use Milpa\DesktopApp\Live\SseFormatter;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
+use Milpa\Runtime\Config;
 use Milpa\Runtime\Http\RouteProviderInterface;
 
 /**
@@ -49,6 +54,9 @@ use Milpa\Runtime\Http\RouteProviderInterface;
 )]
 final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
 {
+    /** A plugin dispatches this (with a {@see ShellEvent} in `payload['shellEvent']`) to push a live update. */
+    public const CHANGED_EVENT = 'desktop.shell.changed';
+
     public function __construct(private readonly DIContainerInterface $container)
     {
     }
@@ -60,10 +68,11 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
     }
 
     /**
-     * Register the shell controller so the router can resolve it, wired with the event dispatcher the
-     * shell composes through. The kernel registers the dispatcher BEFORE any plugin boots, so it is
-     * present here — the assert documents that invariant (and lets the container's own resolution be
-     * the loud failure if the contract is ever broken).
+     * Wire the shell controller (composed through the event dispatcher) and the live event feed (backed by
+     * the shared event log). The kernel registers the dispatcher and the Config bag BEFORE any plugin
+     * boots, so both are present here — the assert documents that invariant. Subscribing to
+     * {@see CHANGED_EVENT} is how any plugin's live update reaches connected clients: the dispatched
+     * {@see ShellEvent} is appended to the log the SSE feed reads.
      */
     public function boot(): void
     {
@@ -71,9 +80,19 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         assert($events instanceof MilpaEventDispatcherInterface);
 
         $this->container->registerService(ShellController::class, new ShellController($events));
+
+        $log = new ShellEventLog($this->logPath());
+        $this->container->registerService(EventsController::class, new EventsController($log, new SseFormatter()));
+
+        $events->subscribe(self::CHANGED_EVENT, static function (string $eventName, array $payload) use ($log): void {
+            $shellEvent = $payload['shellEvent'] ?? null;
+            if ($shellEvent instanceof ShellEvent) {
+                $log->append($shellEvent);
+            }
+        });
     }
 
-    /** The shell route: the app's own UI, served over HTTP for a host to load at a real origin. */
+    /** The shell and its live event feed — both served over HTTP for a host to load at a real origin. */
     public function routes(): array
     {
         return [
@@ -83,7 +102,24 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 name: 'desktop.shell',
                 handler: new HandlerReference(ShellController::class, 'shell'),
             ),
+            new Route(
+                path: '/desktop/events',
+                methods: HttpMethod::GET,
+                name: 'desktop.events',
+                handler: new HandlerReference(EventsController::class, 'events'),
+            ),
         ];
+    }
+
+    /** Where the shared event log lives: `desktop.events.log` in config, else a per-app temp file. */
+    private function logPath(): string
+    {
+        $config = $this->container->get(Config::class);
+        $configured = $config instanceof Config ? $config->get('desktop.events.log') : null;
+
+        return is_string($configured) && $configured !== ''
+            ? $configured
+            : sys_get_temp_dir() . '/milpa-desktop-shell-events.log';
     }
 
     /** No persistent state to create: the shell is served, not stored. */
