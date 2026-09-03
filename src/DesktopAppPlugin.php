@@ -82,7 +82,8 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $this->container->registerService(ShellController::class, new ShellController($events));
 
         $log = new ShellEventLog($this->logPath());
-        $this->container->registerService(EventsController::class, new EventsController($log, new SseFormatter()));
+        [$windowMs, $pollMs] = $this->feedTiming();
+        $this->container->registerService(EventsController::class, new EventsController($log, new SseFormatter(), $windowMs, $pollMs));
 
         $events->subscribe(self::CHANGED_EVENT, static function (string $eventName, array $payload) use ($log): void {
             $shellEvent = $payload['shellEvent'] ?? null;
@@ -120,6 +121,20 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         return is_string($configured) && $configured !== ''
             ? $configured
             : sys_get_temp_dir() . '/milpa-desktop-shell-events.log';
+    }
+
+    /**
+     * The live feed's connection window and poll interval, both in milliseconds.
+     *
+     * @return array{0: int, 1: int}
+     */
+    private function feedTiming(): array
+    {
+        $config = $this->container->get(Config::class);
+        $windowMs = $config instanceof Config ? $config->get('desktop.events.window_ms', 25000) : 25000;
+        $pollMs = $config instanceof Config ? $config->get('desktop.events.poll_ms', 1000) : 1000;
+
+        return [is_int($windowMs) ? $windowMs : 25000, is_int($pollMs) ? $pollMs : 1000];
     }
 
     /** No persistent state to create: the shell is served, not stored. */

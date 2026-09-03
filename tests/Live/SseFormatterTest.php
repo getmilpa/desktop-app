@@ -19,30 +19,28 @@ use Milpa\DesktopApp\Live\SseFormatter;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The SSE wire format a browser's EventSource reads (greenhouse decisions/0188): each event carries its
- * id (for Last-Event-ID resumption), its event name, and its data JSON.
+ * The SSE wire pieces a browser's EventSource reads (greenhouse decisions/0188): the preamble opens the
+ * stream with a retry hint, and each event carries its id (for Last-Event-ID resumption), name, and data.
  */
 final class SseFormatterTest extends TestCase
 {
-    public function testItRendersEachEventWithIdNameAndData(): void
+    public function testThePreambleOpensTheStreamWithARetryHint(): void
     {
-        $body = (new SseFormatter())->format([
-            ['id' => 1, 'event' => new ShellEvent('badge.updated', ['text' => 'hi'])],
-            ['id' => 2, 'event' => new ShellEvent('panel.closed')],
-        ]);
+        $preamble = (new SseFormatter())->preamble();
 
-        self::assertStringContainsString('id: 1' . "\n" . 'event: badge.updated' . "\n" . 'data: {"text":"hi"}', $body);
-        self::assertStringContainsString('id: 2' . "\n" . 'event: panel.closed' . "\n" . 'data: []', $body);
-        // Retry hint keeps the short-poll reconnect cadence honest.
-        self::assertStringContainsString('retry: ' . SseFormatter::RETRY_MS, $body);
+        self::assertStringContainsString(': keep-alive', $preamble);
+        self::assertStringContainsString('retry: ' . SseFormatter::RETRY_MS, $preamble);
     }
 
-    public function testAnEmptyFeedIsStillAValidStream(): void
+    public function testAnEventCarriesItsIdNameAndData(): void
     {
-        $body = (new SseFormatter())->format([]);
+        $record = (new SseFormatter())->event(7, new ShellEvent('badge.updated', ['text' => 'hi']));
 
-        // A comment line keeps the stream valid with zero events (and never confuses EventSource).
-        self::assertStringContainsString(': keep-alive', $body);
-        self::assertStringNotContainsString('event:', $body);
+        self::assertSame('id: 7' . "\n" . 'event: badge.updated' . "\n" . 'data: {"text":"hi"}' . "\n\n", $record);
+    }
+
+    public function testAnEventWithoutDataStillRendersValidJson(): void
+    {
+        self::assertStringContainsString('data: []', (new SseFormatter())->event(1, new ShellEvent('panel.closed')));
     }
 }
