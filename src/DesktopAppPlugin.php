@@ -18,8 +18,10 @@ use Milpa\Attributes\PluginMetadata;
 use Milpa\DesktopApp\Controllers\AssetsController;
 use Milpa\DesktopApp\Controllers\DataController;
 use Milpa\DesktopApp\Controllers\EventsController;
+use Milpa\DesktopApp\Controllers\MutationController;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\MercurePublisher;
 use Milpa\DesktopApp\Live\ShellChangeRecorder;
@@ -87,7 +89,11 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
 
         $log = new ShellEventLog($this->logPath());
 
-        $data = new DesktopData($this->container, $log, $this->sessionsPath());
+        $store = new DesktopStore($this->sessionsPath(), $this->settingsPath());
+        $this->container->registerService(DesktopStore::class, $store);
+        $this->container->registerService(MutationController::class, new MutationController($store));
+
+        $data = new DesktopData($this->container, $log, $this->sessionsPath(), $store);
         $this->container->registerService(DesktopData::class, $data);
         $this->container->registerService(DataController::class, new DataController($data));
 
@@ -144,6 +150,18 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 name: 'desktop.data',
                 handler: new HandlerReference(DataController::class, 'data'),
             ),
+            new Route(
+                path: '/desktop/settings',
+                methods: HttpMethod::POST,
+                name: 'desktop.settings.save',
+                handler: new HandlerReference(MutationController::class, 'saveSettings'),
+            ),
+            new Route(
+                path: '/desktop/sessions',
+                methods: HttpMethod::POST,
+                name: 'desktop.sessions.create',
+                handler: new HandlerReference(MutationController::class, 'createSession'),
+            ),
         ];
     }
 
@@ -153,6 +171,15 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $config = $this->container->get(Config::class);
 
         return $config instanceof Config ? MercureConfig::fromConfig($config) : null;
+    }
+
+    /** Where persisted Desktop settings live: `desktop.settings.path` in config, else `.milpa/desktop-settings.json`. */
+    private function settingsPath(): string
+    {
+        $config = $this->container->get(Config::class);
+        $configured = $config instanceof Config ? $config->get('desktop.settings.path') : null;
+
+        return is_string($configured) && $configured !== '' ? $configured : getcwd() . '/.milpa/desktop-settings.json';
     }
 
     /** Where the app's session store lives: `desktop.sessions.path` in config, else `.milpa/sessions/`. */

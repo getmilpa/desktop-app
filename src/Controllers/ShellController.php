@@ -117,10 +117,14 @@ final class ShellController
         return $rows;
     }
 
-    /** The configured model endpoint, from real config (falls back to a sensible default). */
+    /** The model endpoint: the persisted setting if saved (0483), else the configured one. */
     private function endpointValue(): string
     {
-        return htmlspecialchars($this->data?->model()['endpoint'] ?? 'http://llama.local:11438', ENT_QUOTES);
+        $settings = $this->data?->settings() ?? [];
+        $saved = $settings['endpoint'] ?? null;
+        $endpoint = is_string($saved) && $saved !== '' ? $saved : ($this->data?->model()['endpoint'] ?? 'http://llama.local:11438');
+
+        return htmlspecialchars($endpoint, ENT_QUOTES);
     }
 
     /** The real model label for the Auth provider option: "Local model · <model> (<endpoint>)". */
@@ -450,9 +454,9 @@ HTML;
           <div class="mui-card mui-card--raised">
             <div class="mui-card__header"><h2 class="mui-card__title">Default autonomy</h2></div>
             <div class="mui-card__body mui-stack mui-stack--sm">
-              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" checked="checked"><span class="mui-choice__text">Ask before changing <span class="mui-badge" style="margin-inline-start:8px">ask</span><span class="mui-choice__hint">Pauses mutations without a standing permission.</span></span></label>
-              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode"><span class="mui-choice__text">Compatibility <span class="mui-badge" style="margin-inline-start:8px">acknowledge</span><span class="mui-choice__hint">Today decides like auto: no observable prior notice.</span></span></label>
-              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode"><span class="mui-choice__text">Continue automatically <span class="mui-badge" style="margin-inline-start:8px">auto</span><span class="mui-choice__hint">Signatures and incomplete intent still stop.</span></span></label>
+              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" value="ask" checked="checked"><span class="mui-choice__text">Ask before changing <span class="mui-badge" style="margin-inline-start:8px">ask</span><span class="mui-choice__hint">Pauses mutations without a standing permission.</span></span></label>
+              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" value="acknowledge"><span class="mui-choice__text">Compatibility <span class="mui-badge" style="margin-inline-start:8px">acknowledge</span><span class="mui-choice__hint">Today decides like auto: no observable prior notice.</span></span></label>
+              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" value="auto"><span class="mui-choice__text">Continue automatically <span class="mui-badge" style="margin-inline-start:8px">auto</span><span class="mui-choice__hint">Signatures and incomplete intent still stop.</span></span></label>
               <div class="mui-alert mui-alert--info" role="note"><span class="mui-alert__icon" aria-hidden="true">i</span><div class="mui-alert__content"><p class="mui-alert__desc">The three values are not yet three behaviorally distinct levels.</p></div></div>
             </div>
           </div>
@@ -475,7 +479,7 @@ HTML;
           </div>
 
         </div>
-        <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none"><button type="button" class="mui-btn">Discard changes</button><button type="button" class="mui-btn mui-btn--primary">Save settings</button></div>
+        <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none;align-items:center"><span id="milpa-settings-saved" class="mui-badge mui-badge--success" hidden>Saved</span><button type="button" class="mui-btn" id="milpa-discard">Discard changes</button><button type="button" class="mui-btn mui-btn--primary" id="milpa-save-settings">Save settings</button></div>
       </div>
 
       <div class="view" data-view="capabilities" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
@@ -522,10 +526,37 @@ HTML;
 
 <script>
   (function () {
-    // Auth overlay (open the workspace).
+    // Auth overlay (open the workspace) — creating a session PERSISTS it, then reload shows it (0483).
     var auth = document.getElementById('milpa-auth');
     document.getElementById('milpa-auth-open').addEventListener('click', function () { auth.hidden = false; });
-    document.getElementById('milpa-auth-enter').addEventListener('click', function () { auth.hidden = true; });
+    document.getElementById('milpa-auth-enter').addEventListener('click', function () {
+      var app = document.getElementById('auth-app');
+      fetch('/desktop/sessions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: 'New session · ' + (app ? app.value : '') })
+      }).then(function () { location.reload(); });
+    });
+
+    // Settings persistence: Save posts the form, Discard reloads the persisted values.
+    var saveBtn = document.getElementById('milpa-save-settings');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function () {
+        var end = document.getElementById('set-end'), stream = document.getElementById('set-stream');
+        var comp = document.getElementById('set-comp'), mode = document.querySelector('input[name="set-mode"]:checked');
+        fetch('/desktop/settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            endpoint: end ? end.value : '', stream: stream ? stream.checked : true,
+            compact: comp ? comp.checked : true, mode: mode ? mode.value : 'ask'
+          })
+        }).then(function () {
+          var badge = document.getElementById('milpa-settings-saved');
+          if (badge) { badge.hidden = false; setTimeout(function () { badge.hidden = true; }, 2000); }
+        });
+      });
+    }
+    var discardBtn = document.getElementById('milpa-discard');
+    if (discardBtn) { discardBtn.addEventListener('click', function () { location.reload(); }); }
 
     // Theme toggle (dark-first; the design system reads data-theme on <html>).
     document.getElementById('milpa-theme').addEventListener('click', function () {

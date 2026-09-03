@@ -35,7 +35,18 @@ final class DesktopData
         private readonly DIContainerInterface $container,
         private readonly ?ShellEventLog $log = null,
         private readonly string $sessionsPath = '',
+        private readonly ?DesktopStore $store = null,
     ) {
+    }
+
+    /**
+     * The persisted Desktop settings (write side, decisions/0483), or an empty array if none saved.
+     *
+     * @return array<string, mixed>
+     */
+    public function settings(): array
+    {
+        return $this->store?->settings() ?? [];
     }
 
     /**
@@ -169,6 +180,7 @@ final class DesktopData
      * @return array{
      *     capabilities: list<array{name: string, version: string, type: string, author: string}>,
      *     model: array{model: string, endpoint: string},
+     *     settings: array<string, mixed>,
      *     sessions: list<array{id: string, goal: string, state: string}>,
      *     counters: array{turns: int, steps: int, tokens: int, tool_calls: int, state: string},
      *     work: list<array{title: string, status: string, origin: string}>,
@@ -180,6 +192,7 @@ final class DesktopData
         return [
             'capabilities' => $this->capabilities(),
             'model' => $this->model(),
+            'settings' => $this->settings(),
             'sessions' => $this->sessions(),
             'counters' => $this->counters(),
             'work' => $this->work(),

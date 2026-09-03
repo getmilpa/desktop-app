@@ -17,6 +17,7 @@ namespace Milpa\DesktopApp\Tests;
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\ShellEvent;
@@ -149,6 +150,26 @@ final class ShellControllerTest extends TestCase
 
         unlink($dir . '/s1.json');
         unlink($dir . '/events.log');
+        rmdir($dir);
+    }
+
+    public function testSettingsShowThePersistedEndpointAndTheWriteWiring(): void
+    {
+        // Persistence (0483): a saved endpoint comes back in the Settings field, and the write actions post.
+        $dir = sys_get_temp_dir() . '/milpa-shell-store-' . uniqid('', true);
+        mkdir($dir);
+        $store = new DesktopStore($dir . '/sessions', $dir . '/settings.json');
+        $store->saveSettings(['endpoint' => 'http://persisted.test/v1']);
+        $data = new DesktopData(new DIContainer(), null, '', $store);
+
+        $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, $data))
+            ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('http://persisted.test/v1', $body, 'the persisted endpoint');
+        self::assertStringContainsString("fetch('/desktop/settings'", $body, 'save posts');
+        self::assertStringContainsString("fetch('/desktop/sessions'", $body, 'create session posts');
+
+        unlink($dir . '/settings.json');
         rmdir($dir);
     }
 

@@ -18,7 +18,6 @@ use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\Eventing\EventDispatcher;
-use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use PHPUnit\Framework\TestCase;
@@ -35,15 +34,17 @@ final class DesktopAppPluginTest extends TestCase
         $plugin = new DesktopAppPlugin(new DIContainer());
 
         $routes = $plugin->routes();
-        self::assertCount(5, $routes);
+        self::assertCount(7, $routes);
         foreach ($routes as $route) {
             self::assertInstanceOf(Route::class, $route);
-            self::assertContains(HttpMethod::GET, $route->methods);
             self::assertNotNull($route->handler);
         }
         $paths = array_map(static fn (Route $r): string => $r->path, $routes);
         self::assertSame(
-            ['/desktop', '/desktop/events', '/desktop/assets/tokens.css', '/desktop/assets/bundle.css', '/desktop/data.json'],
+            [
+                '/desktop', '/desktop/events', '/desktop/assets/tokens.css', '/desktop/assets/bundle.css',
+                '/desktop/data.json', '/desktop/settings', '/desktop/sessions',
+            ],
             $paths,
         );
     }
@@ -76,6 +77,6 @@ final class DesktopAppPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
 
-        self::assertCount(5, $plugin->routes(), 'the shell, its feed, its assets and its data');
+        self::assertCount(7, $plugin->routes(), 'the shell, feed, assets, data, and the write endpoints');
     }
 }
