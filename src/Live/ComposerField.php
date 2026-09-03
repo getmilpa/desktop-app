@@ -16,7 +16,7 @@ namespace Milpa\DesktopApp\Live;
 
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Adapters\Alpine\AlpineRuntimeAdapter;
-use Milpa\Live\Components\Form\TextareaComponent;
+use Milpa\Live\Components\Form\InputComponent;
 use Milpa\Live\Http\LiveEndpoint;
 use Milpa\Live\Rendering\FormPrimitiveHtmlRenderer;
 use Milpa\Live\Runtime\InMemoryComponentRegistry;
@@ -45,6 +45,8 @@ final class ComposerField
     public const string ROUTE = '/desktop/live';
     public const string COMPONENT = 'textarea';
     public const string COMPONENT_ID = 'composer-message';
+    public const string STATUS_COMPONENT = 'input';
+    public const string STATUS_ID = 'composer-status';
     public const string SESSION_COOKIE = 'milpa_live_sid';
 
     /** Dispatched with a mutable {@see ComposerRender} BEFORE the render — a subscriber may change its props. */
@@ -60,7 +62,10 @@ final class ComposerField
     public function __construct(string $signingSecret, string $csrfSecret, private readonly ?MilpaEventDispatcherInterface $events = null)
     {
         $this->components = new InMemoryComponentRegistry();
-        $this->components->register(self::COMPONENT, new TextareaComponent());
+        // The message field validates on the server and re-paints the status; the status is a read-only input
+        // that the field's blur re-paints via a cross-component RenderEffect (greenhouse evidence/0491).
+        $this->components->register(self::COMPONENT, new ComposerMessageComponent($events));
+        $this->components->register(self::STATUS_COMPONENT, new InputComponent());
         $this->codec = new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner($signingSecret), null);
         $this->csrf = new HmacCsrfGuard($csrfSecret);
         $this->renderer = new FormPrimitiveHtmlRenderer(new AlpineRuntimeAdapter(), $this->codec);
@@ -76,7 +81,7 @@ final class ComposerField
         $subject = new ComposerRender(['name' => 'message', 'placeholder' => 'Write to the session…', 'rows' => 2]);
         $this->events?->dispatch(self::BEFORE_RENDER, ['composer' => $subject]);
 
-        $component = new TextareaComponent();
+        $component = new ComposerMessageComponent($this->events);
         $context = new ComponentContext(componentId: self::COMPONENT_ID, route: self::ROUTE);
         $state = $component->mount($subject->props, $context);
 
@@ -86,10 +91,27 @@ final class ComposerField
             state: $state,
             target: RenderTarget::HTML,
         ))->output;
+        // The sibling status the field re-paints on blur (initially neutral). Its id is the effect's target.
+        $subject->html .= '<div style="margin-top:var(--space-2)">' . $this->renderStatus('Ready') . '</div>';
 
         $this->events?->dispatch(self::AFTER_RENDER, ['composer' => $subject]);
 
         return $subject->html;
+    }
+
+    /** Render the read-only status input the composer field re-paints on blur (its id is the effect target). */
+    public function renderStatus(string $message): string
+    {
+        $component = new InputComponent();
+        $context = new ComponentContext(componentId: self::STATUS_ID, route: self::ROUTE);
+        $state = $component->mount(['name' => 'status', 'value' => $message, 'disabled' => true], $context);
+
+        return $this->renderer->render($component, new RenderRequest(
+            context: $context,
+            props: ['endpoint' => self::ROUTE],
+            state: $state,
+            target: RenderTarget::HTML,
+        ))->output;
     }
 
     /** The CSRF token the client presents on an interaction, bound to this session and route. */
@@ -107,8 +129,8 @@ final class ComposerField
             authorizer: new ContractInteractionAuthorizer($this->components),
             csrf: $this->csrf,
             route: self::ROUTE,
-            renderers: [self::COMPONENT => $this->renderer],
-            renderProps: [self::COMPONENT => ['endpoint' => self::ROUTE]],
+            renderers: [self::COMPONENT => $this->renderer, self::STATUS_COMPONENT => $this->renderer],
+            renderProps: [self::COMPONENT => ['endpoint' => self::ROUTE], self::STATUS_COMPONENT => ['endpoint' => self::ROUTE]],
         );
     }
 }
