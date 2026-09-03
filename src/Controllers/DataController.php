@@ -42,4 +42,25 @@ final class DataController
             json_encode($this->data->toArray(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
         );
     }
+
+    /** Download the current session as a JSON file — the autopsy/video material (greenhouse evidence/0488). */
+    public function export(ServerRequestInterface $request): ResponseInterface
+    {
+        $params = $request->getQueryParams();
+        if (isset($params['session']) && is_string($params['session'])) {
+            $this->data->select($params['session']);
+        }
+        $dump = $this->data->export();
+        $id = $dump['id'] !== '' ? $dump['id'] : 'session';
+
+        return new Response(
+            200,
+            [
+                'Content-Type' => 'application/json; charset=utf-8',
+                'Cache-Control' => 'no-store',
+                'Content-Disposition' => 'attachment; filename="milpa-session-' . $id . '.json"',
+            ],
+            json_encode($dump, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
+        );
+    }
 }

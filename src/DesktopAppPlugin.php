@@ -151,6 +151,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 handler: new HandlerReference(DataController::class, 'data'),
             ),
             new Route(
+                path: '/desktop/export',
+                methods: HttpMethod::GET,
+                name: 'desktop.export',
+                handler: new HandlerReference(DataController::class, 'export'),
+            ),
+            new Route(
                 path: '/desktop/settings',
                 methods: HttpMethod::POST,
                 name: 'desktop.settings.save',

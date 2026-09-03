@@ -92,11 +92,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(),
             ],
             $this->template(),
         );
@@ -275,6 +275,30 @@ HTML;
             htmlspecialchars($goal, ENT_QUOTES),
             htmlspecialchars($id, ENT_QUOTES),
             htmlspecialchars($mode, ENT_QUOTES),
+        );
+    }
+
+    /** The topbar's right side: the real session state, the mode, and Export session (autopsy/video material). */
+    private function topbarActions(): string
+    {
+        $state = $this->data?->counters()['state'] ?? 'idle';
+        $working = $state === 'working';
+        $id = $this->data?->currentSessionId() ?? '';
+
+        $modeLabels = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
+        $settings = $this->data?->settings() ?? [];
+        $mode = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? $modeLabels[$settings['mode']] : 'Ask before changing';
+
+        $href = '/desktop/export' . ($id !== '' ? '?session=' . rawurlencode($id) : '');
+
+        return sprintf(
+            '<span class="%s" id="milpa-topstate">%s</span>'
+            . '<span class="mui-badge">%s</span>'
+            . '<a class="mui-btn mui-btn--sm" id="milpa-export" href="%s" download>Export session</a>',
+            $working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge',
+            htmlspecialchars(ucfirst($state), ENT_QUOTES),
+            htmlspecialchars($mode, ENT_QUOTES),
+            htmlspecialchars($href, ENT_QUOTES),
         );
     }
 
@@ -462,6 +486,28 @@ HTML;
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
   .milpa-composer-box:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-subtle); }
+  /* No visible scrollbars anywhere — scrolling still works. */
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+  *::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  /* The message stream: one visual language, a distinct voice per kind. New messages arrive at the bottom
+     and the composer is docked below (sticky), so the thread reads top→down and the box never moves. */
+  #milpa-chat { display: flex; flex-direction: column; gap: var(--space-5); max-width: 88ch; }
+  .msg__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); display: block; }
+  .msg--user { display: flex; justify-content: flex-end; }
+  .msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  .msg--agent > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
+  /* Thinking: the agent reasoning aloud — dimmed and italic, clearly not final speech. */
+  .msg--thinking { color: var(--text-muted); font-style: italic; }
+  .msg--thinking > p { margin: var(--space-1) 0 0; font-size: var(--text-xs); line-height: var(--leading-relaxed); white-space: pre-wrap; }
+  /* Tool call: a compact mono card, the machinery made legible. */
+  .msg--tool > div { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); }
+  .msg--tool .msg__tool-name { color: var(--accent-text); }
+  /* System: a centered, quiet notice — the house speaking, not a participant. */
+  .msg--system { align-self: center; text-align: center; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; }
+  /* Task: a row the agent added to the plan — a leading mark, monospace title. */
+  .msg--task > div { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-subtle); }
+  .msg--task .msg__mark { color: var(--accent-text); font-weight: var(--weight-bold); }
+  .msg--task .msg__title { font-size: var(--text-sm); }
   @media (prefers-reduced-motion: reduce) { .milpa-grainmark .g { animation: none !important; opacity: 1; } * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 </style>
 </head>
@@ -501,11 +547,7 @@ HTML;
     <header class="mui-topbar" style="grid-row:1;grid-column:2;min-height:64px">
       <div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px"><!--TOPHEADER-->
       </div>
-      <div class="mui-topbar__end">
-        <span class="mui-badge mui-badge--accent mui-badge--dot" id="milpa-topstate">Working</span>
-        <span class="mui-badge">Ask before changing</span>
-        <button type="button" class="mui-btn mui-btn--sm">Interrupt turn</button>
-      </div>
+      <div class="mui-topbar__end"><!--TOPBARACTIONS--></div>
     </header>
 
     <main class="mui-shell__main mui-shell__main--wide" style="grid-row:2;grid-column:2;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
@@ -519,17 +561,13 @@ HTML;
 
       <div style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
 
-        <section class="tabpane" data-pane="chat" id="milpa-chat" style="display:flex;flex-direction:column;gap:var(--space-5);max-width:88ch">
-          <div style="display:flex;justify-content:flex-end">
-            <div style="max-width:56ch;padding:var(--space-3) var(--space-5);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)">
-              <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">you · now</span>
-              <p style="margin:var(--space-2) 0 0;font-size:var(--text-sm)">Enable the devtools capability on this app.</p>
-            </div>
-          </div>
-          <div>
-            <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">agent · local</span>
-            <p style="margin:var(--space-2) 0 0;font-size:var(--text-sm);line-height:var(--leading-relaxed);text-wrap:pretty">When an agent needs your decision, it parks a gate here — a durable question, not a modal. Approve it with your passkey, in this origin.</p>
-          </div>
+        <section class="tabpane" data-pane="chat" id="milpa-chat">
+          <div class="msg msg--system">session opened · nothing runs on open</div>
+          <div class="msg msg--user"><div><span class="msg__meta">you · now</span><p style="margin:var(--space-2) 0 0;font-size:var(--text-sm)">Enable the devtools capability on this app.</p></div></div>
+          <div class="msg msg--thinking"><span class="msg__meta">agent · thinking</span><p>Reading the app's capabilities and the parked gate before acting…</p></div>
+          <div class="msg msg--tool"><div><span class="msg__tool-name">capabilities.list</span><span>→ 6 capabilities</span></div></div>
+          <div class="msg msg--agent"><span class="msg__meta">agent · local</span><p>When an agent needs your decision, it parks a gate here — a durable question, not a modal. Approve it with your passkey, in this origin.</p></div>
+          <div class="msg msg--task"><div><span class="msg__mark">+</span><span class="msg__title">Enable devtools capability</span><span class="mui-badge" style="margin-inline-start:auto">todo</span></div></div>
 
           <!-- The consent gate: the design's mui-gate, rendered live when an agent parks one. -->
           <div class="mui-card mui-card--raised" id="milpa-gate" hidden style="border-color:var(--warning-border);background:var(--warning-bg)">
@@ -546,8 +584,6 @@ HTML;
               <p style="margin:0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Answering keeps your answer; it does not resume the session. Continuing is another verb.</p>
             </div>
           </div>
-
-          <!--COMPOSER-->
         </section>
 
         <section class="tabpane" data-pane="work" hidden>
@@ -571,6 +607,9 @@ HTML;
         </section>
 
       </div>
+      <!-- The composer is docked below the scroll, sticky at the bottom: messages flow above it and it
+           stays put. Shown only on the Conversation tab. -->
+      <div id="milpa-composer-dock" style="flex:none;padding:var(--space-3) var(--space-8) var(--space-5);border-top:1px solid var(--border-subtle);background:var(--bg)"><!--COMPOSER--></div>
       </div><!-- /view session -->
 
       <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
@@ -721,35 +760,78 @@ HTML;
         refreshSend();
       });
     }
+    // One renderer, a distinct voice per kind. The backend's stream routes into this by event type; the
+    // user's own message uses it too. (Persisting and running the turn is the agent runtime, decisions/0254.)
+    function appendMessage(kind, opts) {
+      if (!chat) { return; }
+      opts = opts || {};
+      var el = document.createElement('div');
+      el.className = 'msg msg--' + kind;
+      function meta(t) { var s = document.createElement('span'); s.className = 'msg__meta'; s.textContent = t; return s; }
+      function para(t, cls) { var p = document.createElement('p'); if (cls) { p.className = cls; } p.textContent = t; return p; }
+      if (kind === 'user') {
+        var box = document.createElement('div');
+        box.appendChild(meta('you · now'));
+        var p = para(opts.text || ''); p.style.cssText = 'margin:var(--space-2) 0 0;font-size:var(--text-sm);white-space:pre-wrap';
+        box.appendChild(p); el.appendChild(box);
+      } else if (kind === 'agent' || kind === 'thinking') {
+        el.appendChild(meta(kind === 'thinking' ? 'agent · thinking' : 'agent · local'));
+        el.appendChild(para(opts.text || ''));
+      } else if (kind === 'tool') {
+        var d = document.createElement('div');
+        var n = document.createElement('span'); n.className = 'msg__tool-name'; n.textContent = opts.name || 'tool';
+        var r = document.createElement('span'); r.textContent = '→ ' + (opts.result || '');
+        d.appendChild(n); d.appendChild(r); el.appendChild(d);
+      } else if (kind === 'task') {
+        var td = document.createElement('div');
+        var mk = document.createElement('span'); mk.className = 'msg__mark'; mk.textContent = '+';
+        var ti = document.createElement('span'); ti.className = 'msg__title'; ti.textContent = opts.title || '';
+        var bd = document.createElement('span'); bd.className = 'mui-badge'; bd.style.marginInlineStart = 'auto'; bd.textContent = opts.status || 'todo';
+        td.appendChild(mk); td.appendChild(ti); td.appendChild(bd); el.appendChild(td);
+      } else { // system
+        el.textContent = opts.text || '';
+      }
+      chat.appendChild(el);
+      el.scrollIntoView({ block: 'end' });
+      return el;
+    }
     function send() {
-      if (!composerInput || !chat) { return; }
+      if (!composerInput) { return; }
       var text = composerInput.value.trim();
       if (text === '') { return; }
-      // Show the message in the thread immediately. Persisting it and running the agent's turn is the
-      // server-side agent runtime (the parked-turn resume, greenhouse decisions/0254) — the Desktop is
-      // the human↔agent surface, not the executor.
-      var bubble = document.createElement('div');
-      bubble.style.cssText = 'display:flex;justify-content:flex-end';
-      var inner = document.createElement('div');
-      inner.style.cssText = 'max-width:56ch;padding:var(--space-3) var(--space-5);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)';
-      var meta = document.createElement('span');
-      meta.style.cssText = 'font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)';
-      meta.textContent = 'you · now';
-      var body = document.createElement('p');
-      body.style.cssText = 'margin:var(--space-2) 0 0;font-size:var(--text-sm);white-space:pre-wrap';
-      body.textContent = text;
-      inner.appendChild(meta); inner.appendChild(body); bubble.appendChild(inner);
-      chat.appendChild(bubble);
-      bubble.scrollIntoView({ block: 'end' });
+      appendMessage('user', { text: text });
       composerInput.value = '';
       refreshSend();
       composerInput.focus();
     }
-    if (sendBtn) { sendBtn.addEventListener('click', send); }
+    // While the agent works, the send button becomes Stop; the topbar state follows. "Working" is the
+    // backend's to declare (it arrives as a `session.state` event) — the Desktop reflects and signals, it
+    // does not run the turn. Stop signals an interrupt; honoring it is the agent runtime's (decisions/0254).
+    var working = false;
+    function setWorking(on) {
+      working = !!on;
+      if (sendBtn) {
+        sendBtn.textContent = working ? '■' : '↑';
+        sendBtn.setAttribute('aria-label', working ? 'stop the turn' : 'continue session');
+        sendBtn.disabled = working ? false : (!composerInput || composerInput.value.trim() === '');
+      }
+      var top = document.getElementById('milpa-topstate');
+      if (top) {
+        top.textContent = working ? 'Working' : 'Idle';
+        top.className = working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge';
+      }
+    }
+    if (sendBtn) {
+      sendBtn.addEventListener('click', function () {
+        if (working) { setWorking(false); appendMessage('system', { text: 'stop requested' }); return; }
+        send();
+      });
+      setWorking(document.getElementById('milpa-topstate') && document.getElementById('milpa-topstate').textContent.trim() === 'Working');
+    }
     if (composerInput) {
       // Enter sends; Shift+Enter keeps the newline.
       composerInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+        if (e.key === 'Enter' && !e.shiftKey && !working) { e.preventDefault(); send(); }
       });
     }
 
@@ -790,16 +872,21 @@ HTML;
 
     // Tabs.
     var tabs = document.querySelectorAll('.mui-tabs__tab');
+    var dock = document.getElementById('milpa-composer-dock');
+    // The composer belongs to the conversation only — dock it there, hide it on the other tabs.
+    function syncDock(name) { if (dock) { dock.hidden = name !== 'chat'; } }
     tabs.forEach(function (tab) {
       tab.addEventListener('click', function () {
         tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
         var name = tab.getAttribute('data-tab');
         document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
+        syncDock(name);
       });
     });
     function showTab(name) {
       tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.getAttribute('data-tab') === name)); });
       document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
+      syncDock(name);
     }
 
     // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
@@ -908,6 +995,14 @@ HTML;
       if (state === 'live') { conn.textContent = '◉ live'; conn.style.color = 'var(--accent-text)'; }
       else { conn.textContent = '○ offline'; conn.style.color = 'var(--text-muted)'; }
     });
+
+    // The conversation stream: the backend's turn arrives as typed events, each rendered in its own voice.
+    window.MilpaShell.on('agent.message', function (d) { appendMessage('agent', { text: (d && d.text) || '' }); });
+    window.MilpaShell.on('agent.thinking', function (d) { appendMessage('thinking', { text: (d && d.text) || '' }); });
+    window.MilpaShell.on('tool.call', function (d) { appendMessage('tool', { name: (d && d.name) || 'tool', result: (d && d.result) || '' }); });
+    window.MilpaShell.on('task.added', function (d) { appendMessage('task', { title: (d && d.title) || '', status: (d && d.status) || 'todo' }); });
+    window.MilpaShell.on('system.notice', function (d) { appendMessage('system', { text: (d && d.text) || '' }); });
+    window.MilpaShell.on('session.state', function (d) { setWorking(d && d.state === 'working'); });
 
     // Activity / audit stream: prepend each live fact as a mui-replay event.
     var list = document.getElementById('milpa-activity');
