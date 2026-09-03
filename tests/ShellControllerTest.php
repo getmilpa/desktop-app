@@ -63,6 +63,18 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('id="milpa-activity"', $body);
     }
 
+    public function testTheConsentGateComponentIsServedHiddenAndWiredToTheCeremony(): void
+    {
+        // The gate is the Desktop's reason to exist (0477): a real reactive panel that renders a parked gate
+        // live and points approval at the app's own same-origin passkey ceremony.
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('id="milpa-gate"', $body);
+        self::assertStringContainsString("MilpaShell.on('gate.opened'", $body);
+        // Approval is built as a link to the same-origin intent ceremony from the event's operation.
+        self::assertStringContainsString("'/webauthn/intent?operation='", $body);
+    }
+
     public function testWithoutAHubTheShellCarriesNoConnectionOrCookie(): void
     {
         $res = $this->controller()->shell(new ServerRequest('GET', '/desktop'));

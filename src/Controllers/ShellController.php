@@ -78,10 +78,52 @@ final class ShellController
         }
 
         return str_replace(
-            ['<!--RUNTIME-->', '<!--EXTENSIONS-->', '<!--LIVE-->'],
-            [$this->runtimeScript(), $extensions, $this->connectScript()],
+            ['<!--RUNTIME-->', '<!--GATE-->', '<!--EXTENSIONS-->', '<!--LIVE-->'],
+            [$this->runtimeScript(), $this->gateComponent(), $extensions, $this->connectScript()],
             $this->template(),
         );
+    }
+
+    /**
+     * The consent-gate component (greenhouse decisions/0476, 0477) — the Desktop's reason to exist.
+     *
+     * A real reactive panel built on {@see runtimeScript()}: when an agent parks a gate it publishes a
+     * `gate.opened` event carrying the operation, its arguments and the session; this component renders that
+     * live and points "Approve with passkey" at the app's own same-origin ceremony (`/webauthn/intent`,
+     * evidence/0465-0467), so the human sees exactly what is being asked and answers with their key. Minting
+     * the grant and resuming the agent's parked turn are the server-side D-01 residue; this closes the loop
+     * from "agent asks" to "human approves at a real origin".
+     */
+    private function gateComponent(): string
+    {
+        return <<<'HTML'
+<div class="card gate" id="milpa-gate" hidden>
+  <h2>An agent is asking to act</h2>
+  <p>Operation: <code data-gate-op></code></p>
+  <p>Arguments: <code data-gate-args></code></p>
+  <p>
+    <a class="btn" data-gate-approve href="#">Approve with passkey</a>
+    &nbsp;
+    <button type="button" class="btn" data-gate-dismiss>Dismiss</button>
+  </p>
+</div>
+<script>
+  (function () {
+    var el = document.getElementById('milpa-gate');
+    window.MilpaShell.on('gate.opened', function (gate) {
+      var args = (gate && gate.arguments) || {};
+      var href = '/webauthn/intent?operation=' + encodeURIComponent(gate.operation)
+        + '&arguments=' + encodeURIComponent(JSON.stringify(args))
+        + '&session=' + encodeURIComponent(gate.session || '');
+      el.querySelector('[data-gate-op]').textContent = gate.operation || '';
+      el.querySelector('[data-gate-args]').textContent = JSON.stringify(args);
+      el.querySelector('[data-gate-approve]').setAttribute('href', href);
+      el.hidden = false;
+    });
+    el.querySelector('[data-gate-dismiss]').addEventListener('click', function () { el.hidden = true; });
+  })();
+</script>
+HTML;
     }
 
     /**
@@ -153,6 +195,9 @@ HTML;
   ul.feed { list-style: none; margin: 0; padding: 0; font: 13px/1.5 ui-monospace, monospace; }
   ul.feed li { padding: .25rem .5rem; border-radius: 6px; background: color-mix(in oklab, currentColor 6%, transparent); margin: .2rem 0; }
   .muted { opacity: .55; }
+  .card.gate { border-color: color-mix(in oklab, currentColor 45%, transparent); border-width: 2px; }
+  .card.gate h2 { opacity: 1; }
+  button.btn { background: none; color: inherit; cursor: pointer; }
 </style>
 <!--RUNTIME-->
 <h1>Milpa Desktop</h1>
@@ -175,6 +220,9 @@ HTML;
     <a class="btn" href="/webauthn/intent?operation=capabilities.enable&amp;arguments=%7B%22name%22%3A%22a2a%22%7D&amp;session=ses-A">Approve an operation</a>
   </p>
 </div>
+
+<!-- The consent gate: hidden until an agent parks one, then rendered live from a gate.opened event. -->
+<!--GATE-->
 
 <!-- Sections other plugins contribute through desktop.shell.compose are rendered here. -->
 <!--EXTENSIONS-->
