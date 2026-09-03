@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.28.0](https://github.com/getmilpa/desktop-app/compare/v0.27.0...v0.28.0) (2026-09-03)
+
+
+### Features
+
+* the Activity tab is a pure Milpa Component ([#42](https://github.com/getmilpa/desktop-app/issues/42)) ([aad14fa](https://github.com/getmilpa/desktop-app/commit/aad14fa78619134b5ab6afb3b4c9f1b2621b43b9))
+
 ## [0.27.0](https://github.com/getmilpa/desktop-app/compare/v0.26.0...v0.27.0) (2026-09-03)
 
 
