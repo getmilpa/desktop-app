@@ -178,6 +178,28 @@ final class ShellControllerTest extends TestCase
         rmdir($dir);
     }
 
+    public function testTheComposerCarriesFloatingContextAndSessionPanels(): void
+    {
+        // Wireframe 3a: clean floating panels over the composer, opened by their figures, fed by real data.
+        $dir = sys_get_temp_dir() . '/milpa-composer-' . uniqid('', true);
+        mkdir($dir);
+        file_put_contents($dir . '/s.json', json_encode(['tokens' => 8192, 'turns' => 2, 'tool_calls' => 41], JSON_THROW_ON_ERROR));
+        $data = new DesktopData(new DIContainer(), null, $dir);
+
+        $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, $data))
+            ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('id="composer-input"', $body);
+        self::assertStringContainsString('composer-panel" data-panel-for="context"', $body);
+        self::assertStringContainsString('composer-panel" data-panel-for="session"', $body);
+        self::assertStringContainsString('data-open-panel="context"', $body);
+        self::assertStringContainsString('8.19K', $body, 'real token count');
+        self::assertStringContainsString('mui-progress__bar', $body);
+
+        unlink($dir . '/s.json');
+        rmdir($dir);
+    }
+
     public function testEmptyDataShowsEmptyStatesAcrossScreens(): void
     {
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();

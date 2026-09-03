@@ -136,4 +136,26 @@ final class DesktopDataTest extends TestCase
         self::assertSame(0, $data->counters()['turns']);
         self::assertSame('', $data->currentSessionId());
     }
+
+    public function testContextWindowUsageFromTheSessionAndConfig(): void
+    {
+        $dir = sys_get_temp_dir() . '/milpa-ctx-' . uniqid('', true);
+        mkdir($dir);
+        file_put_contents($dir . '/s.json', json_encode(['tokens' => 8192], JSON_THROW_ON_ERROR));
+        $kernel = Kernel::boot([
+            'root' => sys_get_temp_dir(), 'plugins' => [],
+            'config' => ['agent' => ['context_window' => 32768]],
+        ]);
+        $kernel->container()->registerService(Kernel::class, $kernel);
+
+        $ctx = (new DesktopData($kernel->container(), null, $dir))->context();
+
+        self::assertSame(8192, $ctx['tokens']);
+        self::assertSame(32768, $ctx['window']);
+        self::assertSame(25, $ctx['used_pct']);
+        self::assertSame(24576, $ctx['free']);
+
+        unlink($dir . '/s.json');
+        rmdir($dir);
+    }
 }

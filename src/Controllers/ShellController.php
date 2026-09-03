@@ -85,11 +85,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--AUTHMODEL-->', '<!--LIVE-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->authModelLabel(), $this->connectScript(),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(),
             ],
             $this->template(),
         );
@@ -125,6 +125,67 @@ final class ShellController
         $endpoint = is_string($saved) && $saved !== '' ? $saved : ($this->data?->model()['endpoint'] ?? 'http://llama.local:11438');
 
         return htmlspecialchars($endpoint, ENT_QUOTES);
+    }
+
+    /** Format a token count as "9.25K". */
+    private function kfmt(int $n): string
+    {
+        return number_format($n / 1000, 2) . 'K';
+    }
+
+    /**
+     * The composer with floating Context and Session panels (wireframe 3a) — clean data over the tight bar.
+     *
+     * The panels open when their figures in the composer are clicked and close when the user types; the
+     * bottom status bar drops to one line. Every number is real: the context window and its usage from
+     * {@see DesktopData::context()}, the session counters from {@see DesktopData::counters()}.
+     */
+    private function composer(): string
+    {
+        $ctx = $this->data?->context() ?? ['tokens' => 0, 'window' => 32768, 'used_pct' => 0, 'free' => 32768];
+        $c = $this->data?->counters() ?? ['turns' => 0, 'steps' => 0, 'tokens' => 0, 'tool_calls' => 0, 'state' => 'idle'];
+        $model = htmlspecialchars($this->data?->model()['model'] ?? 'qwen3.8-27b', ENT_QUOTES);
+        $tokens = $this->kfmt($ctx['tokens']);
+        $window = $this->kfmt($ctx['window']);
+        $free = $this->kfmt($ctx['free']);
+        $pct = $ctx['used_pct'];
+        $barColor = $pct < 70 ? 'var(--success)' : ($pct < 90 ? 'var(--warning)' : 'var(--danger)');
+
+        return <<<HTML
+<div class="composer-wrap" style="position:relative;margin-top:var(--space-2)">
+  <div class="composer-panels" style="position:absolute;right:0;bottom:calc(100% + var(--space-3));display:flex;gap:var(--space-4);align-items:flex-end">
+
+    <div class="composer-panel" data-panel-for="session" hidden style="width:260px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--shadow-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);font-family:var(--font-mono)">
+      <p style="margin:0;font-size:var(--text-sm)">Session <span style="color:var(--text-muted)">· {$c['turns']} turns</span></p>
+      <div style="height:1px;background:var(--border-subtle)"></div>
+      <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs)"><span style="color:var(--text-secondary)">Steps</span><span>{$c['steps']}</span></p>
+      <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs)"><span style="color:var(--text-secondary)">Tool calls</span><span>{$c['tool_calls']}</span></p>
+      <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs)"><span style="color:var(--text-secondary)">State</span><span style="color:var(--accent-text)">{$c['state']}</span></p>
+    </div>
+
+    <div class="composer-panel" data-panel-for="context" hidden style="width:300px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--shadow-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);font-family:var(--font-mono)">
+      <p style="margin:0;font-size:var(--text-sm)">Context <span style="color:var(--text-muted)">· {$tokens} / {$window}</span></p>
+      <div class="mui-progress" role="progressbar" aria-valuenow="{$pct}" aria-valuemin="0" aria-valuemax="100" style="width:100%"><span class="mui-progress__bar" style="width:{$pct}%;background:{$barColor}"></span></div>
+      <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs);color:var(--text-secondary)"><span>{$pct}% used</span><span>{$free} free</span></p>
+    </div>
+
+  </div>
+
+  <div style="border:1px solid var(--border);border-radius:22px;background:var(--surface-raised);box-shadow:var(--shadow-md);padding:var(--space-4) var(--space-5) var(--space-3)">
+    <textarea id="composer-input" class="mui-textarea" rows="2" placeholder="Write to the session…" style="border:0;background:transparent;min-height:3rem;padding:0;font-size:var(--text-sm);font-family:var(--font-mono);width:100%;resize:none"></textarea>
+    <div style="display:flex;align-items:center;gap:var(--space-3);margin-top:var(--space-2)">
+      <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--icon" aria-label="attach" style="border-radius:var(--radius-full)">＋</button>
+      <span class="mui-badge">Ask before changing</span>
+      <span style="margin-inline-start:auto;display:flex;align-items:center;gap:var(--space-2);font-family:var(--font-mono);font-size:var(--text-2xs)">
+        <button type="button" class="composer-chip" data-open-panel="session" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ {$c['turns']} turns · {$c['tool_calls']} tools</button>
+        <button type="button" class="composer-chip" data-open-panel="context" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ {$tokens}/{$window}</button>
+        <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" aria-label="continue session" style="border-radius:var(--radius-full)">↑</button>
+      </span>
+    </div>
+  </div>
+  <p style="margin:var(--space-2) 0 0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Model: {$model} · panels open on their figures, close as you type.</p>
+</div>
+HTML;
     }
 
     /** The real model label for the Auth provider option: "Local model · <model> (<endpoint>)". */
@@ -410,14 +471,7 @@ HTML;
             </div>
           </div>
 
-          <div style="margin-top:var(--space-2);border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface);padding:var(--space-4) var(--space-5)">
-            <textarea class="mui-textarea" rows="2" placeholder="Write to the session — Continue drives it" style="border:0;background:transparent;min-height:3.5rem;padding:0;font-size:var(--text-sm)"></textarea>
-            <div class="mui-cluster mui-cluster--sm" style="margin-top:var(--space-3)">
-              <span class="mui-badge">Ask before changing</span>
-              <span style="margin-inline-start:auto;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">qwen3.8-27b · local</span>
-              <button type="button" class="mui-btn mui-btn--primary">Continue session</button>
-            </div>
-          </div>
+          <!--COMPOSER-->
         </section>
 
         <section class="tabpane" data-pane="work" hidden>
@@ -561,6 +615,23 @@ HTML;
     }
     var discardBtn = document.getElementById('milpa-discard');
     if (discardBtn) { discardBtn.addEventListener('click', function () { location.reload(); }); }
+
+    // Composer floating panels (wireframe 3a): open on their figures, close as you type.
+    var composerPanels = document.querySelectorAll('.composer-panel');
+    document.querySelectorAll('.composer-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var target = chip.getAttribute('data-open-panel');
+        composerPanels.forEach(function (p) {
+          p.hidden = p.getAttribute('data-panel-for') === target ? !p.hidden : true;
+        });
+      });
+    });
+    var composerInput = document.getElementById('composer-input');
+    if (composerInput) {
+      composerInput.addEventListener('input', function () {
+        composerPanels.forEach(function (p) { p.hidden = true; });
+      });
+    }
 
     // Work board drag-drop: moving a card to another column PERSISTS its new status (0484).
     var board = document.querySelector('.work-board');

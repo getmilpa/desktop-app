@@ -141,6 +141,26 @@ final class DesktopData
     }
 
     /**
+     * The context window usage (wireframe 3a): tokens used, the window size, and derived percent/free.
+     *
+     * @return array{tokens: int, window: int, used_pct: int, free: int}
+     */
+    public function context(): array
+    {
+        $tokens = $this->counters()['tokens'];
+        $config = $this->container->has(Config::class) ? $this->container->get(Config::class) : null;
+        $configured = $config instanceof Config ? $config->get('agent.context_window') : null;
+        $window = is_int($configured) && $configured > 0 ? $configured : 32768;
+
+        return [
+            'tokens' => $tokens,
+            'window' => $window,
+            'used_pct' => min(100, (int) round($tokens / $window * 100)),
+            'free' => max(0, $window - $tokens),
+        ];
+    }
+
+    /**
      * The current session's work board items.
      *
      * @return list<array{title: string, status: string, origin: string}>
@@ -195,6 +215,7 @@ final class DesktopData
      *     settings: array<string, mixed>,
      *     sessions: list<array{id: string, goal: string, state: string}>,
      *     counters: array{turns: int, steps: int, tokens: int, tool_calls: int, state: string},
+     *     context: array{tokens: int, window: int, used_pct: int, free: int},
      *     work: list<array{title: string, status: string, origin: string}>,
      *     audit: list<array{seq: int, type: string, data: string}>
      * }
@@ -207,6 +228,7 @@ final class DesktopData
             'settings' => $this->settings(),
             'sessions' => $this->sessions(),
             'counters' => $this->counters(),
+            'context' => $this->context(),
             'work' => $this->work(),
             'audit' => $this->audit(),
         ];
