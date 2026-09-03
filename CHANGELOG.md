@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.30.0](https://github.com/getmilpa/desktop-app/compare/v0.29.0...v0.30.0) (2026-09-03)
+
+
+### Features
+
+* the consent gate is a pure Milpa Component (shell migration complete) ([#46](https://github.com/getmilpa/desktop-app/issues/46)) ([2f8db42](https://github.com/getmilpa/desktop-app/commit/2f8db4210d513f396e1df9f1a43842b6bef38d94))
+
 ## [0.29.0](https://github.com/getmilpa/desktop-app/compare/v0.28.0...v0.29.0) (2026-09-03)
 
 
