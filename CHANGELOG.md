@@ -3,6 +3,18 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## 0.1.0 (2026-09-03)
+
+
+### Features
+
+* milpa/desktop-app — a Milpa app serves its own shell (decisions/0188) ([4fb0e78](https://github.com/getmilpa/desktop-app/commit/4fb0e78c0447be35c466a4fa3722dc7d1d4c04c4))
+
+
+### Miscellaneous Chores
+
+* release milpa/desktop-app as 0.1.0 ([12a3598](https://github.com/getmilpa/desktop-app/commit/12a35986847c5a2bebc08595fe81ad97723df63d))
+
 ## [Unreleased]
 
 ### Added
