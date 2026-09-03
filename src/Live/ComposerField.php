@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Live;
 
+use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Adapters\Alpine\AlpineRuntimeAdapter;
 use Milpa\Live\Components\Form\TextareaComponent;
 use Milpa\Live\Http\LiveEndpoint;
@@ -46,12 +47,17 @@ final class ComposerField
     public const string COMPONENT_ID = 'composer-message';
     public const string SESSION_COOKIE = 'milpa_live_sid';
 
+    /** Dispatched with a mutable {@see ComposerRender} BEFORE the render — a subscriber may change its props. */
+    public const string BEFORE_RENDER = 'desktop.composer.before_render';
+    /** Dispatched with a mutable {@see ComposerRender} AFTER the render — a subscriber may change its html. */
+    public const string AFTER_RENDER = 'desktop.composer.after_render';
+
     private readonly InMemoryComponentRegistry $components;
     private readonly SignedXhtmlStateTransferCodec $codec;
     private readonly HmacCsrfGuard $csrf;
     private readonly FormPrimitiveHtmlRenderer $renderer;
 
-    public function __construct(string $signingSecret, string $csrfSecret)
+    public function __construct(string $signingSecret, string $csrfSecret, private readonly ?MilpaEventDispatcherInterface $events = null)
     {
         $this->components = new InMemoryComponentRegistry();
         $this->components->register(self::COMPONENT, new TextareaComponent());
@@ -60,19 +66,30 @@ final class ComposerField
         $this->renderer = new FormPrimitiveHtmlRenderer(new AlpineRuntimeAdapter(), $this->codec);
     }
 
-    /** The initial server-rendered HTML of the composer field: Alpine-bound, carrying its signed state envelope. */
+    /**
+     * The initial server-rendered HTML of the composer field: Alpine-bound, carrying its signed state
+     * envelope. The render emits {@see self::BEFORE_RENDER} and {@see self::AFTER_RENDER} — Milpa is
+     * event-driven, so another plugin can subscribe to extend the component (change its props, or its HTML).
+     */
     public function render(): string
     {
+        $subject = new ComposerRender(['name' => 'message', 'placeholder' => 'Write to the session…', 'rows' => 2]);
+        $this->events?->dispatch(self::BEFORE_RENDER, ['composer' => $subject]);
+
         $component = new TextareaComponent();
         $context = new ComponentContext(componentId: self::COMPONENT_ID, route: self::ROUTE);
-        $state = $component->mount(['name' => 'message', 'placeholder' => 'Write to the session…', 'rows' => 2], $context);
+        $state = $component->mount($subject->props, $context);
 
-        return $this->renderer->render($component, new RenderRequest(
+        $subject->html = $this->renderer->render($component, new RenderRequest(
             context: $context,
             props: ['endpoint' => self::ROUTE],
             state: $state,
             target: RenderTarget::HTML,
         ))->output;
+
+        $this->events?->dispatch(self::AFTER_RENDER, ['composer' => $subject]);
+
+        return $subject->html;
     }
 
     /** The CSRF token the client presents on an interaction, bound to this session and route. */

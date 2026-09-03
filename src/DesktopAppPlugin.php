@@ -103,7 +103,7 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         // milpa/live — the framework's official UI system — powers the composer field as a real component
         // (greenhouse decisions/0189). The registry is extensible: an agent or a human registers new
         // primitives the same way ComposerField registers the textarea.
-        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'));
+        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'), $events);
         $this->container->registerService(ComposerField::class, $composerField);
         $this->container->registerService(LiveController::class, new LiveController($composerField->endpoint()));
 

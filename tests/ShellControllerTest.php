@@ -238,6 +238,24 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('/desktop/assets/milpa-live.js', $body);
     }
 
+    public function testTheComposerFieldEmitsRenderEventsSoPluginsCanExtendIt(): void
+    {
+        // Milpa is event-driven: a component emits lifecycle events so other plugins can subscribe and
+        // extend it (greenhouse decisions/0189). before_render mutates the props, after_render the HTML.
+        $events = new EventDispatcher(new NullLogger());
+        $events->subscribe(\Milpa\DesktopApp\Live\ComposerField::BEFORE_RENDER, static function (string $n, array $p): void {
+            $p['composer']->props['placeholder'] = 'Extended by a plugin';
+        });
+        $events->subscribe(\Milpa\DesktopApp\Live\ComposerField::AFTER_RENDER, static function (string $n, array $p): void {
+            $p['composer']->html .= '<!-- plugin appended -->';
+        });
+
+        $html = (new \Milpa\DesktopApp\Live\ComposerField('sign', 'csrf', $events))->render();
+
+        self::assertStringContainsString('Extended by a plugin', $html, 'the before_render subscriber changed the props');
+        self::assertStringContainsString('plugin appended', $html, 'the after_render subscriber changed the html');
+    }
+
     public function testTheComposerCarriesFloatingContextAndSessionPanels(): void
     {
         // Wireframe 3a: clean floating panels over the composer, opened by their figures, fed by real data.
