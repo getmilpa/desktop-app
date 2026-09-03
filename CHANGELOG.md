@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.0](https://github.com/getmilpa/desktop-app/compare/v0.9.0...v0.10.0) (2026-09-03)
+
+
+### Features
+
+* the Settings screen — same shell, mui components (wireframe 2c, evidence/0480) ([a96f41f](https://github.com/getmilpa/desktop-app/commit/a96f41f4b2ff2f7a0bbc77ebe718bf10e6eb23e6))
+
 ## [0.9.0](https://github.com/getmilpa/desktop-app/compare/v0.8.0...v0.9.0) (2026-09-03)
 
 
