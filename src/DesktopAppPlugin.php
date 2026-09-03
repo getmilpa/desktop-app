@@ -132,7 +132,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $activity = new \Milpa\DesktopApp\Live\Activity($this->liveSecret('signing'), $data, $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Activity::class, $activity);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity));
+        // The Context tab is the shell's sixth pure-Milpa-Components surface (greenhouse decisions/0189): the
+        // container of plugin-contributed panels, as a signed component with lifecycle events.
+        $context = new \Milpa\DesktopApp\Live\Context($this->liveSecret('signing'), $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Context::class, $context);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
