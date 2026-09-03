@@ -178,6 +178,48 @@ final class ShellControllerTest extends TestCase
         rmdir($dir);
     }
 
+    public function testTheShellWiresItsNavigationChromeAndBrand(): void
+    {
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        // Brand: the Grano mark (13 kernels) replaces the placeholder glyph.
+        self::assertSame(13, substr_count($body, 'class="g"'), 'the grain mark has 13 kernels');
+        self::assertStringContainsString('milpa-grainmark', $body);
+        // Search is a real input, not a dead trigger span.
+        self::assertStringContainsString('id="milpa-search"', $body);
+        self::assertStringContainsString('type="search"', $body);
+        // New session is wired; the passkey link is addressable so it can degrade instead of 404-ing.
+        self::assertStringContainsString('id="milpa-new-session"', $body);
+        self::assertStringContainsString('id="milpa-enroll-link"', $body);
+        // Decisions is its own view (no longer aliased to the session view).
+        self::assertStringContainsString('data-view="decisions"', $body);
+        // The composer mode chip opens a menu of the three modes.
+        self::assertStringContainsString('id="milpa-mode-menu"', $body);
+        self::assertStringContainsString('data-mode="auto"', $body);
+    }
+
+    public function testSelectingASessionLoadsItIntoTheHeaderAndMarksItActive(): void
+    {
+        $dir = sys_get_temp_dir() . '/milpa-select-' . uniqid('', true);
+        mkdir($dir);
+        file_put_contents($dir . '/aaa11111.json', json_encode(['goal' => 'First goal'], JSON_THROW_ON_ERROR));
+        file_put_contents($dir . '/bbb22222.json', json_encode(['goal' => 'Second goal'], JSON_THROW_ON_ERROR));
+        $data = new DesktopData(new DIContainer(), null, $dir);
+
+        $request = (new ServerRequest('GET', '/desktop'))->withQueryParams(['session' => 'bbb22222']);
+        $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, $data))->shell($request)->getBody();
+
+        // The sidebar links are clickable and post the id back; the selected one is marked active.
+        self::assertStringContainsString('data-session-id="bbb22222" href="?session=bbb22222" aria-current="page"', $body);
+        // The topbar header names the selected session, not the newest by default.
+        self::assertStringContainsString('session bbb22222', $body);
+        self::assertStringContainsString('Second goal', $body);
+
+        unlink($dir . '/aaa11111.json');
+        unlink($dir . '/bbb22222.json');
+        rmdir($dir);
+    }
+
     public function testTheComposerCarriesFloatingContextAndSessionPanels(): void
     {
         // Wireframe 3a: clean floating panels over the composer, opened by their figures, fed by real data.
@@ -208,6 +250,20 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('No work board yet', $body);
         self::assertStringContainsString('no facts recorded yet', $body);
         self::assertStringContainsString('0 turns', $body);
+    }
+
+    public function testTheHiddenAttributeWinsOverInlineDisplay(): void
+    {
+        // The auth overlay, the composer's floating panels and the replay views all carry BOTH the
+        // `hidden` attribute AND an inline `display:` — and inline display outranks a plain
+        // `[hidden]{display:none}`, so without `!important` `hidden` is inert and the overlay covers
+        // the dashboard forever ("Open workspace" never reveals it). This pins the rule that makes
+        // `hidden` authoritative (greenhouse evidence/0488); the computed-display proof is in the browser.
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('[hidden] { display: none !important; }', $body);
+        // The overlay still declares its own display AND hidden — the rule above is what reconciles them.
+        self::assertMatchesRegularExpression('/id="milpa-auth"[^>]*hidden[^>]*display:grid/', $body);
     }
 
     public function testTheConsentGateComponentIsServedHiddenAndWiredToTheCeremony(): void

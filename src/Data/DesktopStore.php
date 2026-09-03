@@ -55,7 +55,10 @@ final class DesktopStore
         if (!is_dir($dir)) {
             mkdir($dir, 0o775, true);
         }
-        file_put_contents($this->settingsPath, json_encode($settings, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), LOCK_EX);
+        // Merge over what is stored so a partial post (e.g. the composer's mode chip sending only `mode`)
+        // updates its own field without dropping the rest of the settings.
+        $merged = array_merge($this->settings(), $settings);
+        file_put_contents($this->settingsPath, json_encode($merged, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), LOCK_EX);
     }
 
     /**

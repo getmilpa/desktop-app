@@ -110,13 +110,34 @@ final class DesktopData
         return $out;
     }
 
+    /** The session the UI selected (a sidebar click posts `?session=<id>`), when it names a real one. */
+    private ?string $selectedId = null;
+
+    /** Select the active session by id; ignored unless it is a well-formed id of a session that exists. */
+    public function select(string $id): void
+    {
+        if (preg_match('/^[0-9A-Za-z_-]{1,64}$/', $id) !== 1) {
+            return;
+        }
+        foreach ($this->sessionFiles() as $file) {
+            if (basename($file, '.json') === $id) {
+                $this->selectedId = $id;
+
+                return;
+            }
+        }
+    }
+
     /**
-     * The current session's addressable id — its file name (the first in the store), or '' when there is
-     * none. The file name is what the write side addresses ({@see DesktopStore::updateWorkStatus()}), so it is
-     * the id the UI must post back, not the display id in the JSON body.
+     * The current session's addressable id — the selected one when a sidebar click chose it, else the first
+     * in the store, or '' when there is none. The file name is what the write side addresses
+     * ({@see DesktopStore::updateWorkStatus()}), so it is the id the UI posts back, not the display id.
      */
     public function currentSessionId(): string
     {
+        if ($this->selectedId !== null) {
+            return $this->selectedId;
+        }
         $files = $this->sessionFiles();
 
         return $files === [] ? '' : basename($files[0], '.json');
@@ -250,8 +271,17 @@ final class DesktopData
     private function currentSession(): array
     {
         $files = $this->sessionFiles();
+        if ($files === []) {
+            return [];
+        }
+        $id = $this->currentSessionId();
+        foreach ($files as $file) {
+            if (basename($file, '.json') === $id) {
+                return $this->readJson($file);
+            }
+        }
 
-        return $files === [] ? [] : $this->readJson($files[0]);
+        return $this->readJson($files[0]);
     }
 
     /** @return array<string, mixed> */
