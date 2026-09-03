@@ -51,6 +51,13 @@ final class ShellController
     /** Serve the dashboard, composed with every plugin's contributed panels. */
     public function shell(ServerRequestInterface $request): ResponseInterface
     {
+        // A sidebar click selects a session via `?session=<id>`; the data seam loads that one's counters,
+        // context and conversation (an unknown or malformed id is ignored — the newest session stands).
+        $params = $request->getQueryParams();
+        if (isset($params['session']) && is_string($params['session'])) {
+            $this->data?->select($params['session']);
+        }
+
         $composition = new ShellComposition();
         $this->events->dispatch(self::COMPOSE_EVENT, ['composition' => $composition]);
 
@@ -85,11 +92,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(),
             ],
             $this->template(),
         );
@@ -147,6 +154,23 @@ final class ShellController
         $model = htmlspecialchars($this->data?->model()['model'] ?? 'qwen3.8-27b', ENT_QUOTES);
         $tokens = $this->kfmt($ctx['tokens']);
         $window = $this->kfmt($ctx['window']);
+
+        // The permission mode the composer chip shows and its menu marks as current, from settings.
+        $modeLabels = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
+        $settings = $this->data?->settings() ?? [];
+        $modeKey = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? (string) $settings['mode'] : 'ask';
+        $modeLabel = $modeLabels[$modeKey];
+        $modeMenu = '';
+        foreach ($modeLabels as $key => $label) {
+            $modeMenu .= sprintf(
+                '<button type="button" role="menuitem" class="milpa-mode-opt mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" data-mode="%s" data-label="%s"%s style="justify-content:flex-start;text-align:start">%s<span class="mui-badge" style="margin-inline-start:auto">%s</span></button>',
+                $key,
+                htmlspecialchars($label, ENT_QUOTES),
+                $key === $modeKey ? ' aria-current="true"' : '',
+                htmlspecialchars($label, ENT_QUOTES),
+                $key,
+            );
+        }
         $free = $this->kfmt($ctx['free']);
         $pct = $ctx['used_pct'];
         $barColor = $pct < 70 ? 'var(--success)' : ($pct < 90 ? 'var(--warning)' : 'var(--danger)');
@@ -171,15 +195,18 @@ final class ShellController
 
   </div>
 
-  <div style="border:1px solid var(--border);border-radius:22px;background:var(--surface-raised);box-shadow:var(--shadow-md);padding:var(--space-4) var(--space-5) var(--space-3)">
-    <textarea id="composer-input" class="mui-textarea" rows="2" placeholder="Write to the session…" style="border:0;background:transparent;min-height:3rem;padding:0;font-size:var(--text-sm);font-family:var(--font-mono);width:100%;resize:none"></textarea>
+  <div class="milpa-composer-box" style="border:1px solid var(--border);border-radius:22px;background:var(--surface-raised);box-shadow:var(--shadow-md);padding:var(--space-4) var(--space-5) var(--space-3)">
+    <textarea id="composer-input" class="mui-textarea" rows="2" placeholder="Write to the session…" style="border:0;outline:0;background:transparent;min-height:3rem;padding:0;font-size:var(--text-sm);font-family:var(--font-mono);width:100%;resize:none"></textarea>
     <div style="display:flex;align-items:center;gap:var(--space-3);margin-top:var(--space-2)">
       <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--icon" aria-label="attach" style="border-radius:var(--radius-full)">＋</button>
-      <span class="mui-badge">Ask before changing</span>
+      <span style="position:relative;display:inline-flex">
+        <button type="button" class="mui-badge" id="milpa-mode-chip" aria-haspopup="true" aria-expanded="false" style="cursor:pointer;border:1px solid var(--border);font:inherit;display:inline-flex;align-items:center;gap:6px"><span id="milpa-mode-label">{$modeLabel}</span><span aria-hidden="true" style="opacity:.6">▾</span></button>
+        <div id="milpa-mode-menu" hidden role="menu" style="position:absolute;bottom:calc(100% + 8px);left:0;z-index:60;min-width:15rem;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:4px">{$modeMenu}</div>
+      </span>
       <span style="margin-inline-start:auto;display:flex;align-items:center;gap:var(--space-2);font-family:var(--font-mono);font-size:var(--text-2xs)">
         <button type="button" class="composer-chip" data-open-panel="session" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ {$c['turns']} turns · {$c['tool_calls']} tools</button>
         <button type="button" class="composer-chip" data-open-panel="context" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ {$tokens}/{$window}</button>
-        <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" aria-label="continue session" style="border-radius:var(--radius-full)">↑</button>
+        <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" id="milpa-send" aria-label="continue session" disabled style="border-radius:var(--radius-full)">↑</button>
       </span>
     </div>
   </div>
@@ -204,16 +231,51 @@ HTML;
             return '<p class="mui-empty" style="padding:0 var(--space-4)">No sessions yet. Open a workspace to start one.</p>';
         }
 
+        $current = $this->data->currentSessionId();
         $out = '';
         foreach ($sessions as $s) {
+            $id = (string) $s['id'];
+            $active = $id === $current;
             $out .= sprintf(
-                '<a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span style="font-size:var(--text-sm)">%s</span><span class="mui-badge">%s</span></a>',
+                '<a class="mui-sidebar__item milpa-session-item" data-session-id="%s" href="?session=%s"%s style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span class="milpa-session-goal" style="font-size:var(--text-sm)">%s</span><span class="mui-badge">%s</span></a>',
+                htmlspecialchars($id, ENT_QUOTES),
+                rawurlencode($id),
+                $active ? ' aria-current="page"' : '',
                 htmlspecialchars($s['goal'], ENT_QUOTES),
                 htmlspecialchars($s['state'], ENT_QUOTES),
             );
         }
 
         return $out;
+    }
+
+    /** The topbar's session header — the active session's goal, id and mode, or an empty-workspace note. */
+    private function topbarHeader(): string
+    {
+        $id = $this->data?->currentSessionId() ?? '';
+        if ($id === '') {
+            return '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">No session open</span>'
+                . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Open a workspace to start one</span>';
+        }
+
+        $goal = '(no goal recorded)';
+        foreach ($this->data?->sessions() ?? [] as $s) {
+            if ((string) $s['id'] === $id) {
+                $goal = (string) $s['goal'];
+
+                break;
+            }
+        }
+        $settings = $this->data?->settings() ?? [];
+        $mode = \is_string($settings['mode'] ?? null) && $settings['mode'] !== '' ? (string) $settings['mode'] : 'ask';
+
+        return sprintf(
+            '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">%s</span>'
+            . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session %s · %s mode</span>',
+            htmlspecialchars($goal, ENT_QUOTES),
+            htmlspecialchars($id, ENT_QUOTES),
+            htmlspecialchars($mode, ENT_QUOTES),
+        );
     }
 
     /** The status bar's counters, from the current session (greenhouse decisions/0482). */
@@ -379,12 +441,28 @@ HTML;
   .lights { display: flex; gap: 8px; }
   .lights span { width: 12px; height: 12px; border-radius: 99px; }
   .statusbar { flex: none; display: flex; align-items: center; gap: var(--space-5); height: 40px; padding: 0 var(--space-4); border-top: 1px solid var(--border-subtle); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+  /* The `hidden` attribute must win over an element's own inline `display:` — the auth overlay, the
+     composer's floating panels and the replay views all carry both, so without !important they can
+     never actually hide (the inline display outranks a plain [hidden] rule). This is what makes
+     "Open workspace" reveal the dashboard and the composer panels close as you type. */
+  [hidden] { display: none !important; }
   .tabpane[hidden] { display: none; }
   ul.feed { list-style: none; margin: 0; padding: 0; font: var(--text-xs)/1.5 var(--font-mono); overflow: auto; }
   ul.feed li { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); margin: var(--space-2) 0; word-break: break-word; }
   .mui-empty { color: var(--text-muted); font-size: var(--text-sm); }
   .panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: var(--space-4); }
-  @media (prefers-reduced-motion: reduce) { * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+  /* The Grano mark: the 13 kernels form the M, each scaling into place in a staggered sweep (the two
+     pillars, then the inner V). The grain is oro-300 constant — the logo is brand, not UI, and does not
+     theme (per the kit). Hover replays the forming. */
+  .milpa-grainmark .g { transform-box: fill-box; transform-origin: center; animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
+  .milpa-grainmark:hover .g { animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
+  @keyframes milpa-grain-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  .milpa-search-hit { display: none !important; }
+  .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
+  /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
+     the rounded container with its padding as breathing room, instead of hugging the typed text. */
+  .milpa-composer-box:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-subtle); }
+  @media (prefers-reduced-motion: reduce) { .milpa-grainmark .g { animation: none !important; opacity: 1; } * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 </style>
 </head>
 <body>
@@ -393,7 +471,7 @@ HTML;
 
   <div class="chrome">
     <span class="lights"><span style="background:var(--danger)"></span><span style="background:var(--warning)"></span><span style="background:var(--success)"></span></span>
-    <span class="mui-search-trigger" style="max-width:280px;margin-inline-start:var(--space-4)"><span class="mui-search-trigger__icon" aria-hidden="true">⌕</span>Search sessions<span class="mui-kbd" style="margin-inline-start:auto">⌘K</span></span>
+    <input id="milpa-search" type="search" placeholder="Search sessions…" aria-label="Search sessions" autocomplete="off" class="mui-input mui-input--sm" style="max-width:280px;margin-inline-start:var(--space-4);font-family:var(--font-mono);font-size:var(--text-xs)">
     <span style="margin-inline:auto;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">served by Milpa · one origin</span>
     <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm" id="milpa-auth-open">Open workspace</button>
     <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm" id="milpa-theme" aria-label="toggle theme">◐ Theme</button>
@@ -401,7 +479,7 @@ HTML;
 
   <div class="mui-shell" style="flex:1;min-height:0;--_sidebar-w:17.5rem;overflow:hidden;display:grid;grid-template-columns:var(--_sidebar-w) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)">
     <nav class="mui-sidebar" aria-label="main" style="grid-row:1 / span 2;grid-column:1;position:static;height:auto;min-height:0">
-      <span class="mui-sidebar__brand"><span style="display:inline-flex;width:26px;height:26px;border-radius:99px;align-items:center;justify-content:center;background:var(--accent-subtle);color:var(--accent)">◇</span><span class="mui-sidebar__wordmark">Milpa</span></span>
+      <span class="mui-sidebar__brand" style="display:inline-flex;align-items:center;gap:10px;cursor:default"><svg class="milpa-grainmark" viewBox="0 0 60 60" width="26" height="26" role="img" aria-label="Milpa" style="flex:none"><g fill="#E8B14C"><rect class="g" x="0" y="0" width="10" height="10" rx="2.5" style="animation-delay:0s"/><rect class="g" x="0" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.045s"/><rect class="g" x="0" y="25" width="10" height="10" rx="2.5" style="animation-delay:.09s"/><rect class="g" x="0" y="37.5" width="10" height="10" rx="2.5" style="animation-delay:.135s"/><rect class="g" x="0" y="50" width="10" height="10" rx="2.5" style="animation-delay:.18s"/><rect class="g" x="50" y="0" width="10" height="10" rx="2.5" style="animation-delay:.225s"/><rect class="g" x="50" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.27s"/><rect class="g" x="50" y="25" width="10" height="10" rx="2.5" style="animation-delay:.315s"/><rect class="g" x="50" y="37.5" width="10" height="10" rx="2.5" style="animation-delay:.36s"/><rect class="g" x="50" y="50" width="10" height="10" rx="2.5" style="animation-delay:.405s"/><rect class="g" x="12.5" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.45s"/><rect class="g" x="37.5" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.495s"/><rect class="g" x="25" y="25" width="10" height="10" rx="2.5" style="animation-delay:.54s"/></g></svg><span class="mui-sidebar__wordmark">Milpa</span></span>
       <div class="mui-sidebar__nav">
         <div class="mui-sidebar__section">
           <a class="mui-sidebar__item" href="#" data-nav="sessions" aria-current="page"><span class="mui-sidebar__item-icon">▤</span><span class="mui-sidebar__item-label">Sessions</span></a>
@@ -415,15 +493,13 @@ HTML;
         </div>
       </div>
       <div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">
-        <button type="button" class="mui-btn mui-btn--subtle mui-btn--full">New session</button>
-        <a class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" href="/webauthn/enroll">Register a passkey</a>
+        <button type="button" class="mui-btn mui-btn--subtle mui-btn--full" id="milpa-new-session">New session</button>
+        <a class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" id="milpa-enroll-link" href="/webauthn/enroll">Register a passkey</a>
       </div>
     </nav>
 
     <header class="mui-topbar" style="grid-row:1;grid-column:2;min-height:64px">
-      <div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px">
-        <span style="font-size:var(--text-base);font-weight:var(--weight-medium)">Publish the official site with visual validation</span>
-        <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session 3f9c · ask mode</span>
+      <div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px"><!--TOPHEADER-->
       </div>
       <div class="mui-topbar__end">
         <span class="mui-badge mui-badge--accent mui-badge--dot" id="milpa-topstate">Working</span>
@@ -443,7 +519,7 @@ HTML;
 
       <div style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
 
-        <section class="tabpane" data-pane="chat" style="display:flex;flex-direction:column;gap:var(--space-5);max-width:88ch">
+        <section class="tabpane" data-pane="chat" id="milpa-chat" style="display:flex;flex-direction:column;gap:var(--space-5);max-width:88ch">
           <div style="display:flex;justify-content:flex-end">
             <div style="max-width:56ch;padding:var(--space-3) var(--space-5);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)">
               <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">you · now</span>
@@ -550,6 +626,12 @@ HTML;
         </div>
       </div>
 
+      <div class="view" data-view="decisions" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Decisions an agent has parked for you — durable questions, not modals. Each is approved with your passkey, in this origin.</p>
+        <ol class="mui-replay__stream" id="milpa-decisions-list" aria-live="polite"></ol>
+        <p class="mui-empty" id="milpa-decisions-empty" style="color:var(--text-muted)">No decisions to make. When an agent parks a gate, it appears here for you to approve or refuse.</p>
+      </div>
+
     </main>
   </div>
 
@@ -627,9 +709,47 @@ HTML;
       });
     });
     var composerInput = document.getElementById('composer-input');
+    var sendBtn = document.getElementById('milpa-send');
+    var chat = document.getElementById('milpa-chat');
+    // The send button is enabled only when there is something to send (text today; attachments later).
+    function refreshSend() {
+      if (sendBtn) { sendBtn.disabled = !composerInput || composerInput.value.trim() === ''; }
+    }
     if (composerInput) {
       composerInput.addEventListener('input', function () {
         composerPanels.forEach(function (p) { p.hidden = true; });
+        refreshSend();
+      });
+    }
+    function send() {
+      if (!composerInput || !chat) { return; }
+      var text = composerInput.value.trim();
+      if (text === '') { return; }
+      // Show the message in the thread immediately. Persisting it and running the agent's turn is the
+      // server-side agent runtime (the parked-turn resume, greenhouse decisions/0254) — the Desktop is
+      // the human↔agent surface, not the executor.
+      var bubble = document.createElement('div');
+      bubble.style.cssText = 'display:flex;justify-content:flex-end';
+      var inner = document.createElement('div');
+      inner.style.cssText = 'max-width:56ch;padding:var(--space-3) var(--space-5);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)';
+      var meta = document.createElement('span');
+      meta.style.cssText = 'font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)';
+      meta.textContent = 'you · now';
+      var body = document.createElement('p');
+      body.style.cssText = 'margin:var(--space-2) 0 0;font-size:var(--text-sm);white-space:pre-wrap';
+      body.textContent = text;
+      inner.appendChild(meta); inner.appendChild(body); bubble.appendChild(inner);
+      chat.appendChild(bubble);
+      bubble.scrollIntoView({ block: 'end' });
+      composerInput.value = '';
+      refreshSend();
+      composerInput.focus();
+    }
+    if (sendBtn) { sendBtn.addEventListener('click', send); }
+    if (composerInput) {
+      // Enter sends; Shift+Enter keeps the newline.
+      composerInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
       });
     }
 
@@ -684,23 +804,90 @@ HTML;
 
     // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
     var navItems = document.querySelectorAll('.mui-sidebar__item[data-nav]');
+    var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', settings: 'settings' };
     function showView(view) {
-      document.querySelectorAll('.view').forEach(function (v) { v.hidden = v.getAttribute('data-view') !== view; });
+      // Swap the whole main between its views — same shell, not a window. The auth overlay is a `.view`
+      // too but is opened on demand, so it is never toggled by navigation.
+      document.querySelectorAll('.view').forEach(function (v) {
+        if (v.getAttribute('data-view') !== 'auth') { v.hidden = v.getAttribute('data-view') !== view; }
+      });
       navItems.forEach(function (n) {
-        var on = n.getAttribute('data-nav') === view || (view === 'session' && (n.getAttribute('data-nav') === 'sessions' || n.getAttribute('data-nav') === 'decisions'));
+        var on = navToView[n.getAttribute('data-nav')] === view;
         if (on) { n.setAttribute('aria-current', 'page'); } else { n.removeAttribute('aria-current'); }
       });
     }
     navItems.forEach(function (n) {
       n.addEventListener('click', function (e) {
         e.preventDefault();
-        var nav = n.getAttribute('data-nav');
-        if (nav === 'settings') { showView('settings'); }
-        else if (nav === 'capabilities') { showView('capabilities'); }
-        else if (nav === 'decisions') { showView('session'); showTab('chat'); }
-        else if (nav === 'sessions') { showView('session'); }
+        showView(navToView[n.getAttribute('data-nav')] || 'session');
       });
     });
+
+    // New session: open the entry overlay to configure and confirm a new session.
+    var newBtn = document.getElementById('milpa-new-session');
+    if (newBtn) { newBtn.addEventListener('click', function () { auth.hidden = false; }); }
+
+    // Search: filter the sidebar session list by goal text (client-side over the rendered list).
+    var search = document.getElementById('milpa-search');
+    if (search) {
+      search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        document.querySelectorAll('.milpa-session-item').forEach(function (item) {
+          var goalEl = item.querySelector('.milpa-session-goal');
+          var goal = goalEl ? goalEl.textContent.toLowerCase() : '';
+          item.classList.toggle('milpa-search-hit', q !== '' && goal.indexOf(q) === -1);
+        });
+      });
+    }
+
+    // Composer mode chip: open a menu to switch ask / acknowledge / auto quickly; the choice persists
+    // (a partial settings post that merges — greenhouse decisions/0483).
+    var modeChip = document.getElementById('milpa-mode-chip');
+    var modeMenu = document.getElementById('milpa-mode-menu');
+    if (modeChip && modeMenu) {
+      modeChip.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var willOpen = modeMenu.hidden;
+        modeMenu.hidden = !willOpen;
+        modeChip.setAttribute('aria-expanded', String(willOpen));
+      });
+      modeMenu.addEventListener('click', function (e) { e.stopPropagation(); });
+      document.addEventListener('click', function () {
+        modeMenu.hidden = true;
+        modeChip.setAttribute('aria-expanded', 'false');
+      });
+      modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (opt) {
+        opt.addEventListener('click', function () {
+          document.getElementById('milpa-mode-label').textContent = opt.getAttribute('data-label');
+          modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (o) { o.removeAttribute('aria-current'); });
+          opt.setAttribute('aria-current', 'true');
+          modeMenu.hidden = true;
+          modeChip.setAttribute('aria-expanded', 'false');
+          fetch('/desktop/settings', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: opt.getAttribute('data-mode') })
+          });
+        });
+      });
+    }
+
+    // Register a passkey: only navigate if this app actually mounts the passkey door; otherwise say so
+    // in place instead of replacing the whole app with a 404 (the door is the app's to configure).
+    var enroll = document.getElementById('milpa-enroll-link');
+    if (enroll) {
+      enroll.addEventListener('click', function (e) {
+        e.preventDefault();
+        fetch('/webauthn/enroll', { method: 'GET' }).then(function (r) {
+          if (r.ok) { location.href = '/webauthn/enroll'; return; }
+          enroll.textContent = 'No passkey door in this app';
+          enroll.setAttribute('aria-disabled', 'true');
+          enroll.style.opacity = '.6';
+        }).catch(function () {
+          enroll.textContent = 'No passkey door in this app';
+          enroll.style.opacity = '.6';
+        });
+      });
+    }
 
     // Appearance theme buttons in Settings (dark / light / system).
     document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
