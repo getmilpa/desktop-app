@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.6.0](https://github.com/getmilpa/desktop-app/compare/v0.5.0...v0.6.0) (2026-09-03)
+
+
+### Features
+
+* the shell is a reactive renderer — a client component runtime driven by the live feed (evidence/0476) ([a302db6](https://github.com/getmilpa/desktop-app/commit/a302db68bb9f2de7ece5d633ee2516c901c66d77))
+
 ## [0.5.0](https://github.com/getmilpa/desktop-app/compare/v0.4.0...v0.5.0) (2026-09-03)
 
 
