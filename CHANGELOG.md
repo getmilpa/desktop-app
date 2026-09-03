@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.0](https://github.com/getmilpa/desktop-app/compare/v0.8.0...v0.9.0) (2026-09-03)
+
+
+### Features
+
+* implement the canonical Desktop wireframes with the real @milpa/design system (evidence/0479) ([5ed5120](https://github.com/getmilpa/desktop-app/commit/5ed5120b8f150ff6e6ae0b2217c4460682016226))
+
 ## [0.8.0](https://github.com/getmilpa/desktop-app/compare/v0.7.0...v0.8.0) (2026-09-03)
 
 
