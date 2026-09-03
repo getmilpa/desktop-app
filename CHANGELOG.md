@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.0](https://github.com/getmilpa/desktop-app/compare/v0.7.0...v0.8.0) (2026-09-03)
+
+
+### Features
+
+* the Milpa Desktop dashboard — the whole UI as reactive Milpa components (evidence/0478) ([e6312ff](https://github.com/getmilpa/desktop-app/commit/e6312ff46b98feee31dae77f0bc296ded2fbeff5))
+
 ## [0.7.0](https://github.com/getmilpa/desktop-app/compare/v0.6.0...v0.7.0) (2026-09-03)
 
 
