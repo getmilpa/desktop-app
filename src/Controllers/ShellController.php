@@ -52,6 +52,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\WorkBoard $workBoard = null,
         private readonly ?\Milpa\DesktopApp\Live\Activity $activity = null,
         private readonly ?\Milpa\DesktopApp\Live\Context $context = null,
+        private readonly ?\Milpa\DesktopApp\Live\Gate $gate = null,
     ) {
     }
 
@@ -101,11 +102,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -273,6 +274,7 @@ HTML;
             'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
             'desktop.nav' => 'sessions',
             'desktop.tab' => 'chat',
+            'desktop.gate.open' => false,
         ], \JSON_UNESCAPED_SLASHES);
     }
 
@@ -309,6 +311,13 @@ HTML;
     private function contextHtml(ShellComposition $composition): string
     {
         return ($this->context ?? new \Milpa\DesktopApp\Live\Context('desktop-context-fallback', $this->events))->render($composition->sections());
+    }
+
+    /** The consent gate, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's seventh
+     *  pure-component surface. Its visibility is the `desktop.gate.open` signal; live gate.opened fills it. */
+    private function gateHtml(): string
+    {
+        return ($this->gate ?? new \Milpa\DesktopApp\Live\Gate('desktop-gate-fallback', $this->events))->render();
     }
 
     /**
@@ -461,21 +470,9 @@ HTML;
           <div class="msg msg--agent"><span class="msg__meta">agent · local</span><p>When an agent needs your decision, it parks a gate here — a durable question, not a modal. Approve it with your passkey, in this origin.</p></div>
           <div class="msg msg--task"><div><span class="msg__mark">+</span><span class="msg__title">Enable devtools capability</span><span class="mui-badge" style="margin-inline-start:auto">todo</span></div></div>
 
-          <!-- The consent gate: the design's mui-gate, rendered live when an agent parks one. -->
-          <div class="mui-card mui-card--raised" id="milpa-gate" hidden style="border-color:var(--warning-border);background:var(--warning-bg)">
-            <div class="mui-card__body mui-gate">
-              <div class="mui-gate__request">
-                <p class="mui-gate__actor" style="margin:0">an agent stopped its turn · a durable question, not a modal</p>
-                <p class="mui-gate__action" style="margin:var(--space-2) 0;font-size:var(--text-base)" data-gate-action>An agent is asking to act.</p>
-                <p class="mui-gate__facts" style="margin:0">operation <strong data-gate-op></strong> · arguments <code data-gate-args></code></p>
-              </div>
-              <div class="mui-gate__decisions">
-                <a class="mui-btn mui-btn--primary" data-gate-approve href="#">Approve with passkey</a>
-                <button type="button" class="mui-btn" data-gate-dismiss>Dismiss</button>
-              </div>
-              <p style="margin:0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Answering keeps your answer; it does not resume the session. Continuing is another verb.</p>
-            </div>
-          </div>
+          <!-- The consent gate is the `desktop-gate` component (greenhouse decisions/0189): hidden until an
+               agent parks a question; its visibility is the shared `desktop.gate.open` signal. -->
+          <!--GATE-->
         </section>
 
         <section class="tabpane" data-pane="work" hidden :hidden="$store.milpa['desktop.tab'] !== 'work'">
@@ -894,9 +891,14 @@ HTML;
       list.insertBefore(li, list.firstChild);
     });
 
-    // The consent gate.
+    // The consent gate is the `desktop-gate` component (greenhouse decisions/0189): its VISIBILITY is the
+    // shared `desktop.gate.open` signal (the card binds :hidden to it; Dismiss sets it via @click). The live
+    // gate.opened event fills the dynamic fields and opens the signal — the content transport is unchanged.
     var gate = document.getElementById('milpa-gate');
     var badge = document.getElementById('milpa-decisions-badge');
+    function setGateOpen(v) {
+      if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal('desktop.gate.open', v); } else if (gate) { gate.hidden = !v; }
+    }
     window.MilpaShell.on('gate.opened', function (g) {
       var args = (g && g.arguments) || {};
       var href = '/webauthn/intent?operation=' + encodeURIComponent(g.operation)
@@ -906,11 +908,12 @@ HTML;
       gate.querySelector('[data-gate-args]').textContent = JSON.stringify(args);
       gate.querySelector('[data-gate-action]').textContent = 'An agent is asking to run ' + (g.operation || '') + '.';
       gate.querySelector('[data-gate-approve]').setAttribute('href', href);
-      gate.hidden = false;
+      setGateOpen(true);
       badge.hidden = false;
       showTab('chat');
     });
-    gate.querySelector('[data-gate-dismiss]').addEventListener('click', function () { gate.hidden = true; badge.hidden = true; });
+    // Dismiss closes the signal (via @click in the markup); mirror the decisions badge here.
+    gate.querySelector('[data-gate-dismiss]').addEventListener('click', function () { badge.hidden = true; });
   })();
 </script>
 <!-- The connection to the Mercure hub is rendered here when a hub is wired; it feeds MilpaShell. -->

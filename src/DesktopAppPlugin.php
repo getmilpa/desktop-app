@@ -137,7 +137,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $context = new \Milpa\DesktopApp\Live\Context($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Context::class, $context);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context));
+        // The consent gate is the shell's seventh and last pure-Milpa-Components surface (greenhouse
+        // decisions/0189): the durable question, a signed component whose visibility is a shared signal.
+        $gate = new \Milpa\DesktopApp\Live\Gate($this->liveSecret('signing'), $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Gate::class, $gate);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
