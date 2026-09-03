@@ -107,7 +107,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $this->container->registerService(ComposerField::class, $composerField);
         $this->container->registerService(LiveController::class, new LiveController($composerField->endpoint()));
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField));
+        // The sidebar is the shell's first pure-Milpa-Components surface (greenhouse decisions/0189): a
+        // declared component with a signed envelope, lifecycle events and a signal-driven active nav.
+        $sidebar = new \Milpa\DesktopApp\Live\Sidebar($this->liveSecret('signing'), $data, $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Sidebar::class, $sidebar);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 

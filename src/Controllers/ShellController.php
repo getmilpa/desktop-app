@@ -46,6 +46,7 @@ final class ShellController
         private readonly ?MercureConfig $mercure = null,
         private readonly ?DesktopData $data = null,
         private readonly ?\Milpa\DesktopApp\Live\ComposerField $composerField = null,
+        private readonly ?\Milpa\DesktopApp\Live\Sidebar $sidebar = null,
     ) {
     }
 
@@ -112,11 +113,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -249,30 +250,11 @@ HTML;
         return htmlspecialchars('Local model · ' . $m['model'] . ' (' . $m['endpoint'] . ')', ENT_QUOTES);
     }
 
-    /** The sidebar session list, from the real session store (greenhouse decisions/0482). */
-    private function sessionsList(): string
+    /** The sidebar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's first
+     *  pure-component surface. A fallback Sidebar is built from the same data when none was injected. */
+    private function sidebarHtml(): string
     {
-        $sessions = $this->data?->sessions() ?? [];
-        if ($sessions === []) {
-            return '<p class="mui-empty" style="padding:0 var(--space-4)">No sessions yet. Open a workspace to start one.</p>';
-        }
-
-        $current = $this->data->currentSessionId();
-        $out = '';
-        foreach ($sessions as $s) {
-            $id = (string) $s['id'];
-            $active = $id === $current;
-            $out .= sprintf(
-                '<a class="mui-sidebar__item milpa-session-item" data-session-id="%s" href="?session=%s"%s style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span class="milpa-session-goal" style="font-size:var(--text-sm)">%s</span><span class="mui-badge">%s</span></a>',
-                htmlspecialchars($id, ENT_QUOTES),
-                rawurlencode($id),
-                $active ? ' aria-current="page"' : '',
-                htmlspecialchars($s['goal'], ENT_QUOTES),
-                htmlspecialchars($s['state'], ENT_QUOTES),
-            );
-        }
-
-        return $out;
+        return ($this->sidebar ?? new \Milpa\DesktopApp\Live\Sidebar('desktop-sidebar-fallback', $this->data, $this->events))->render();
     }
 
     /** The topbar's session header — the active session's goal, id and mode, or an empty-workspace note. */
@@ -317,6 +299,7 @@ HTML;
             'composer.mode.label' => $mode,
             'session.state.label' => ucfirst(\is_array($counters) ? (string) $counters['state'] : 'idle'),
             'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
+            'desktop.nav' => 'sessions',
         ], \JSON_UNESCAPED_SLASHES);
     }
 
@@ -569,25 +552,7 @@ HTML;
   </div>
 
   <div class="mui-shell" style="flex:1;min-height:0;--_sidebar-w:17.5rem;overflow:hidden;display:grid;grid-template-columns:var(--_sidebar-w) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)">
-    <nav class="mui-sidebar" aria-label="main" style="grid-row:1 / span 2;grid-column:1;position:static;height:auto;min-height:0">
-      <span class="mui-sidebar__brand" style="display:inline-flex;align-items:center;gap:10px;cursor:default"><svg class="milpa-grainmark" viewBox="0 0 60 60" width="26" height="26" role="img" aria-label="Milpa" style="flex:none"><g fill="#E8B14C"><rect class="g" x="0" y="0" width="10" height="10" rx="2.5" style="animation-delay:0s"/><rect class="g" x="0" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.045s"/><rect class="g" x="0" y="25" width="10" height="10" rx="2.5" style="animation-delay:.09s"/><rect class="g" x="0" y="37.5" width="10" height="10" rx="2.5" style="animation-delay:.135s"/><rect class="g" x="0" y="50" width="10" height="10" rx="2.5" style="animation-delay:.18s"/><rect class="g" x="50" y="0" width="10" height="10" rx="2.5" style="animation-delay:.225s"/><rect class="g" x="50" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.27s"/><rect class="g" x="50" y="25" width="10" height="10" rx="2.5" style="animation-delay:.315s"/><rect class="g" x="50" y="37.5" width="10" height="10" rx="2.5" style="animation-delay:.36s"/><rect class="g" x="50" y="50" width="10" height="10" rx="2.5" style="animation-delay:.405s"/><rect class="g" x="12.5" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.45s"/><rect class="g" x="37.5" y="12.5" width="10" height="10" rx="2.5" style="animation-delay:.495s"/><rect class="g" x="25" y="25" width="10" height="10" rx="2.5" style="animation-delay:.54s"/></g></svg><span class="mui-sidebar__wordmark">Milpa</span></span>
-      <div class="mui-sidebar__nav">
-        <div class="mui-sidebar__section">
-          <a class="mui-sidebar__item" href="#" data-nav="sessions" aria-current="page"><span class="mui-sidebar__item-icon">▤</span><span class="mui-sidebar__item-label">Sessions</span></a>
-          <a class="mui-sidebar__item" href="#" data-nav="decisions"><span class="mui-sidebar__item-icon">◈</span><span class="mui-sidebar__item-label">Decisions</span><span class="mui-sidebar__item-badge mui-badge mui-badge--warning" id="milpa-decisions-badge" hidden>1</span></a>
-          <a class="mui-sidebar__item" href="#" data-nav="capabilities"><span class="mui-sidebar__item-icon">▩</span><span class="mui-sidebar__item-label">Capabilities</span></a>
-          <a class="mui-sidebar__item" href="#" data-nav="settings"><span class="mui-sidebar__item-icon">⚙</span><span class="mui-sidebar__item-label">Settings</span></a>
-        </div>
-        <div class="mui-sidebar__section" id="milpa-sessions">
-          <span class="mui-sidebar__section-label">sessions · goal and state</span>
-          <!--SESSIONS-->
-        </div>
-      </div>
-      <div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">
-        <button type="button" class="mui-btn mui-btn--subtle mui-btn--full" id="milpa-new-session">New session</button>
-        <a class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" id="milpa-enroll-link" href="/webauthn/enroll">Register a passkey</a>
-      </div>
-    </nav>
+    <!--SIDEBAR-->
 
     <header class="mui-topbar" style="grid-row:1;grid-column:2;min-height:64px">
       <div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px"><!--TOPHEADER-->
@@ -941,13 +906,10 @@ HTML;
     var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', settings: 'settings' };
     function showView(view) {
       // Swap the whole main between its views — same shell, not a window. The auth overlay is a `.view`
-      // too but is opened on demand, so it is never toggled by navigation.
+      // too but is opened on demand, so it is never toggled by navigation. The sidebar's active-nav highlight
+      // is the `desktop.nav` signal (Alpine binds aria-current to it), so this only switches the view.
       document.querySelectorAll('.view').forEach(function (v) {
         if (v.getAttribute('data-view') !== 'auth') { v.hidden = v.getAttribute('data-view') !== view; }
-      });
-      navItems.forEach(function (n) {
-        var on = navToView[n.getAttribute('data-nav')] === view;
-        if (on) { n.setAttribute('aria-current', 'page'); } else { n.removeAttribute('aria-current'); }
       });
     }
     navItems.forEach(function (n) {
