@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.27.0](https://github.com/getmilpa/desktop-app/compare/v0.26.0...v0.27.0) (2026-09-03)
+
+
+### Features
+
+* the Work board is a pure Milpa Component ([#40](https://github.com/getmilpa/desktop-app/issues/40)) ([886b5ca](https://github.com/getmilpa/desktop-app/commit/886b5ca4da8a8e2a13395e69ed8e7f253dd33cb3))
+
 ## [0.26.0](https://github.com/getmilpa/desktop-app/compare/v0.25.0...v0.26.0) (2026-09-03)
 
 
