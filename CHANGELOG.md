@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.12.0](https://github.com/getmilpa/desktop-app/compare/v0.11.0...v0.12.0) (2026-09-03)
+
+
+### Features
+
+* all wireframe screens on real data — Auth, Work board, Audit, sessions, counters (evidence/0482) ([c1e8519](https://github.com/getmilpa/desktop-app/commit/c1e85190fb2159c25127d5d5c6a010f7285155c6))
+
 ## [0.11.0](https://github.com/getmilpa/desktop-app/compare/v0.10.0...v0.11.0) (2026-09-03)
 
 
