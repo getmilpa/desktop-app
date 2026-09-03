@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.20.0](https://github.com/getmilpa/desktop-app/compare/v0.19.0...v0.20.0) (2026-09-03)
+
+
+### Features
+
+* **live:** wire the composer to the live endpoint — blur validates and re-paints a sibling (end to end) ([#26](https://github.com/getmilpa/desktop-app/issues/26)) ([39103bb](https://github.com/getmilpa/desktop-app/commit/39103bb76e3c1233c1638b4fed7b897ed31422fd))
+
 ## [0.19.0](https://github.com/getmilpa/desktop-app/compare/v0.18.0...v0.19.0) (2026-09-03)
 
 
