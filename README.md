@@ -32,14 +32,47 @@ simply has no desktop shell.
 
 ## What it serves
 
-- `GET /desktop` — the app's own shell UI, served over HTTP. Point an Electron `loadURL` (or a
-  browser) at it.
+- `GET /desktop` — the Milpa Desktop dashboard, served over HTTP. Point an Electron `loadURL` (or a
+  browser) at it. Built-in panels: the consent gate, the activity stream, and the passkey doors.
+- `GET /desktop/events` — the shell's live event feed (SSE), the transport when no hub is wired.
+
+## Add a dashboard panel (the DX)
+
+Every panel is a Milpa component: server-rendered, then reactive on the client. A plugin adds one by
+subscribing to the compose event and calling `addPanel()`, then driving it live from the client runtime.
+
+```php
+// In your plugin's boot():
+$events->subscribe(ShellController::COMPOSE_EVENT, [$this, 'onCompose']);
+
+public function onCompose(string $eventName, array $payload): void
+{
+    $payload['composition']->addPanel('sessions', 'Sessions', <<<'H'
+      <p class="mono"><span data-count>0</span> active</p>
+      <script>
+        MilpaShell.on('session.count', function (d) {
+          MilpaShell.panel('sessions').querySelector('[data-count]').textContent = d.count;
+        });
+      </script>
+    H);
+}
+```
+
+The client runtime `MilpaShell`: `on(type, cb)` / `onAny(cb)` react to events, `panel(id)` returns your
+panel's body element, `onStatus(cb)` tracks the live connection. Events reach the browser through a Mercure
+hub when one is configured (`desktop.mercure.*`), else through the `/desktop/events` feed.
+
+## Live updates over a Mercure hub
+
+Configure `desktop.mercure.{hub_url,public_url,publisher_key,subscriber_key}` and the app publishes shell
+changes to the hub (via `milpa/mercure`) while the dashboard subscribes to it — the grid updates with no
+poll. Without a hub, the app runs on the shared-log feed.
 
 ## The arc
 
-This first slice serves the shell and proves the seam. Named next (`decisions/0188`): the full
-renderer as Milpa components, the reactive event bus (websockets / `milpa/mercure`), and the UI
-events other plugins hook to change the shell — so *everything is built from Milpa components*.
+The Desktop is a Milpa plugin: the app hosts its own dashboard, built from Milpa components, at a real
+origin — so the passkey ceremony is same-origin and every panel is a reactive component
+(`decisions/0188`). *Everything is built from Milpa components.*
 
 ## License
 

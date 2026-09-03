@@ -63,6 +63,23 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('id="milpa-activity"', $body);
     }
 
+    public function testAPluginPanelRendersWithItsTitleAndCardChrome(): void
+    {
+        // The DX (0478): a plugin declares a dashboard panel with one addPanel() call; the shell wraps it in
+        // consistent card chrome with the title, and it becomes a component the plugin can drive via panel().
+        $dispatcher = new EventDispatcher(new NullLogger());
+        $dispatcher->subscribe(ShellController::COMPOSE_EVENT, static function (string $eventName, array $payload): void {
+            $payload['composition']->addPanel('sessions', 'Sessions', '<p class="mono" data-count>0</p>');
+        });
+
+        $body = (string) (new ShellController($dispatcher))->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('data-panel="sessions"', $body);
+        self::assertStringContainsString('<h2>Sessions</h2>', $body);
+        self::assertStringContainsString('data-panel-body', $body);
+        self::assertStringContainsString('data-count', $body);
+    }
+
     public function testTheConsentGateComponentIsServedHiddenAndWiredToTheCeremony(): void
     {
         // The gate is the Desktop's reason to exist (0477): a real reactive panel that renders a parked gate
