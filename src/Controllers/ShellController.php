@@ -112,11 +112,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVEBOOT-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), str_replace('</', '<\/', $liveBoot),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -226,7 +226,7 @@ final class ShellController
     <div style="display:flex;align-items:center;gap:var(--space-3);margin-top:var(--space-2)">
       <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--icon" aria-label="attach" style="border-radius:var(--radius-full)">＋</button>
       <span style="position:relative;display:inline-flex">
-        <button type="button" class="mui-badge" id="milpa-mode-chip" aria-haspopup="true" aria-expanded="false" style="cursor:pointer;border:1px solid var(--border);font:inherit;display:inline-flex;align-items:center;gap:6px"><span id="milpa-mode-label">{$modeLabel}</span><span aria-hidden="true" style="opacity:.6">▾</span></button>
+        <button type="button" class="mui-badge" id="milpa-mode-chip" aria-haspopup="true" aria-expanded="false" style="cursor:pointer;border:1px solid var(--border);font:inherit;display:inline-flex;align-items:center;gap:6px"><span id="milpa-mode-label" x-data x-text="\$store.milpa['composer.mode.label']">{$modeLabel}</span><span aria-hidden="true" style="opacity:.6">▾</span></button>
         <div id="milpa-mode-menu" hidden role="menu" style="position:absolute;bottom:calc(100% + 8px);left:0;z-index:60;min-width:15rem;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:4px">{$modeMenu}</div>
       </span>
       <span style="margin-inline-start:auto;display:flex;align-items:center;gap:var(--space-2);font-family:var(--font-mono);font-size:var(--text-2xs)">
@@ -304,6 +304,20 @@ HTML;
         );
     }
 
+    /** The initial shared signals, seeded into the page — one truth projected across the UI (decisions/0189). */
+    private function liveSignals(): string
+    {
+        $modeLabels = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
+        $settings = $this->data?->settings() ?? [];
+        $mode = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? $modeLabels[$settings['mode']] : 'Ask before changing';
+        $state = $this->data?->counters()['state'] ?? 'idle';
+
+        return (string) json_encode([
+            'composer.mode.label' => $mode,
+            'session.state.label' => ucfirst((string) $state),
+        ], \JSON_UNESCAPED_SLASHES);
+    }
+
     /** The topbar's right side: the real session state, the mode, and Export session (autopsy/video material). */
     private function topbarActions(): string
     {
@@ -319,7 +333,9 @@ HTML;
 
         return sprintf(
             '<span class="%s" id="milpa-topstate">%s</span>'
-            . '<span class="mui-badge">%s</span>'
+            // The mode is a SHARED signal: this topbar badge and the composer's chip read one truth, so
+            // changing the mode in one place projects to the other (greenhouse decisions/0189).
+            . '<span class="mui-badge" x-data x-text="$store.milpa[\'composer.mode.label\']">%s</span>'
             . '<a class="mui-btn mui-btn--sm" id="milpa-export" href="%s" download>Export session</a>',
             $working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge',
             htmlspecialchars(ucfirst($state), ENT_QUOTES),
@@ -977,7 +993,8 @@ HTML;
       });
       modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (opt) {
         opt.addEventListener('click', function () {
-          document.getElementById('milpa-mode-label').textContent = opt.getAttribute('data-label');
+          // Set the SHARED signal — the chip and the topbar badge both read it, so both update (0189).
+          if (window.MilpaLive && window.MilpaLive.signal) { window.MilpaLive.signal('composer.mode.label', opt.getAttribute('data-label')); }
           modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (o) { o.removeAttribute('aria-current'); });
           opt.setAttribute('aria-current', 'true');
           modeMenu.hidden = true;
@@ -1073,6 +1090,7 @@ HTML;
 <!-- milpa/live — the framework's official UI system. The boot payload feeds the remote runtime; the local
      and remote runtimes register their Alpine factories BEFORE Alpine boots. Served from the package. -->
 <script id="milpa-live-boot" type="application/json"><!--LIVEBOOT--></script>
+<script id="milpa-live-signals" type="application/json"><!--LIVESIGNALS--></script>
 <script src="/desktop/assets/milpa-live.js"></script>
 <script src="/desktop/assets/milpa-live-remote.js"></script>
 <script src="/desktop/assets/alpine.min.js"></script>
