@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.26.0](https://github.com/getmilpa/desktop-app/compare/v0.25.0...v0.26.0) (2026-09-03)
+
+
+### Features
+
+* the main tablist is a pure Milpa Component ([#38](https://github.com/getmilpa/desktop-app/issues/38)) ([cda7189](https://github.com/getmilpa/desktop-app/commit/cda71899ab67fcae1c25adce69b97c1c1996f0d7))
+
 ## [0.25.0](https://github.com/getmilpa/desktop-app/compare/v0.24.0...v0.25.0) (2026-09-03)
 
 
