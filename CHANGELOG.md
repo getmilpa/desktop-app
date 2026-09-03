@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.22.0](https://github.com/getmilpa/desktop-app/compare/v0.21.0...v0.22.0) (2026-09-03)
+
+
+### Features
+
+* **live:** the composer mode and the topbar mode are one shared signal ([#30](https://github.com/getmilpa/desktop-app/issues/30)) ([290cda4](https://github.com/getmilpa/desktop-app/commit/290cda4cbcd28f0ee11bcf2a91991c27e7b3f269))
+
 ## [0.21.0](https://github.com/getmilpa/desktop-app/compare/v0.20.0...v0.21.0) (2026-09-03)
 
 
