@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp;
 
+use Milpa\Attributes\PluginMetadata;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
@@ -38,6 +39,13 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  * arc named in 0188. Installing this plugin IS the activation — there is no config to fail closed on;
  * a Milpa without it simply has no desktop shell, which is the honest default.
  */
+#[PluginMetadata(
+    version: '0.1.0',
+    author: 'Rodrigo Vicente - TeamX Agency',
+    site: 'https://teamx.agency',
+    name: 'DesktopApp',
+    type: 'Web',
+)]
 final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
 {
     public function __construct(private readonly DIContainerInterface $container)
