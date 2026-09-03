@@ -184,10 +184,10 @@ HTML;
       <span class="mui-sidebar__brand"><span style="display:inline-flex;width:26px;height:26px;border-radius:99px;align-items:center;justify-content:center;background:var(--accent-subtle);color:var(--accent)">◇</span><span class="mui-sidebar__wordmark">Milpa</span></span>
       <div class="mui-sidebar__nav">
         <div class="mui-sidebar__section">
-          <a class="mui-sidebar__item" href="#" aria-current="page"><span class="mui-sidebar__item-icon">▤</span><span class="mui-sidebar__item-label">Sessions</span></a>
+          <a class="mui-sidebar__item" href="#" data-nav="sessions" aria-current="page"><span class="mui-sidebar__item-icon">▤</span><span class="mui-sidebar__item-label">Sessions</span></a>
           <a class="mui-sidebar__item" href="#" data-nav="decisions"><span class="mui-sidebar__item-icon">◈</span><span class="mui-sidebar__item-label">Decisions</span><span class="mui-sidebar__item-badge mui-badge mui-badge--warning" id="milpa-decisions-badge" hidden>1</span></a>
-          <a class="mui-sidebar__item" href="#"><span class="mui-sidebar__item-icon">▩</span><span class="mui-sidebar__item-label">Capabilities</span></a>
-          <a class="mui-sidebar__item" href="#"><span class="mui-sidebar__item-icon">⚙</span><span class="mui-sidebar__item-label">Settings</span></a>
+          <a class="mui-sidebar__item" href="#" data-nav="capabilities"><span class="mui-sidebar__item-icon">▩</span><span class="mui-sidebar__item-label">Capabilities</span></a>
+          <a class="mui-sidebar__item" href="#" data-nav="settings"><span class="mui-sidebar__item-icon">⚙</span><span class="mui-sidebar__item-label">Settings</span></a>
         </div>
         <div class="mui-sidebar__section">
           <span class="mui-sidebar__section-label">sessions · goal and state</span>
@@ -215,6 +215,7 @@ HTML;
     </header>
 
     <main class="mui-shell__main mui-shell__main--wide" style="grid-row:2;grid-column:2;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
+      <div class="view" data-view="session" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
       <div class="mui-tabs" role="tablist" style="padding:0 var(--space-6);flex:none">
         <button class="mui-tabs__tab" role="tab" aria-selected="true" type="button" data-tab="chat">Conversation</button>
         <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="work">Work</button>
@@ -279,6 +280,51 @@ HTML;
         </section>
 
       </div>
+      </div><!-- /view session -->
+
+      <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);align-items:start">
+
+          <div class="mui-card mui-card--raised">
+            <div class="mui-card__header"><h2 class="mui-card__title">Model and provider</h2></div>
+            <div class="mui-card__body mui-stack">
+              <div class="mui-field"><label class="mui-field__label" for="set-prov">Provider</label><span class="mui-select-wrap"><select id="set-prov" class="mui-select"><option>Local model</option><option>Local-network model</option><option>External provider</option></select></span></div>
+              <div class="mui-field"><label class="mui-field__label" for="set-end">Endpoint</label><input id="set-end" class="mui-input" style="font-family:var(--font-mono);font-size:var(--text-xs)" value="http://llama.local:11438/v1"><span class="mui-field__hint">The endpoint receives context. It does not execute operations.</span></div>
+              <div class="mui-field mui-field--row" style="justify-content:space-between"><label class="mui-field__label" for="set-stream">Show streaming tokens</label><input class="mui-switch" type="checkbox" id="set-stream" checked="checked"></div>
+            </div>
+          </div>
+
+          <div class="mui-card mui-card--raised">
+            <div class="mui-card__header"><h2 class="mui-card__title">Default autonomy</h2></div>
+            <div class="mui-card__body mui-stack mui-stack--sm">
+              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" checked="checked"><span class="mui-choice__text">Ask before changing <span class="mui-badge" style="margin-inline-start:8px">ask</span><span class="mui-choice__hint">Pauses mutations without a standing permission.</span></span></label>
+              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode"><span class="mui-choice__text">Compatibility <span class="mui-badge" style="margin-inline-start:8px">acknowledge</span><span class="mui-choice__hint">Today decides like auto: no observable prior notice.</span></span></label>
+              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode"><span class="mui-choice__text">Continue automatically <span class="mui-badge" style="margin-inline-start:8px">auto</span><span class="mui-choice__hint">Signatures and incomplete intent still stop.</span></span></label>
+              <div class="mui-alert mui-alert--info" role="note"><span class="mui-alert__icon" aria-hidden="true">i</span><div class="mui-alert__content"><p class="mui-alert__desc">The three values are not yet three behaviorally distinct levels.</p></div></div>
+            </div>
+          </div>
+
+          <div class="mui-card">
+            <div class="mui-card__header"><h2 class="mui-card__title">Context and storage</h2></div>
+            <div class="mui-card__body mui-stack mui-stack--sm">
+              <div class="mui-field mui-field--row" style="justify-content:space-between"><label class="mui-field__label" for="set-comp">Compact context automatically</label><input class="mui-switch" id="set-comp" type="checkbox" checked="checked"></div>
+              <p style="margin:0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Compaction reduces what the model sees, never the session record.</p>
+              <div class="mui-field"><label class="mui-field__label" for="set-path">Sessions folder</label><input id="set-path" class="mui-input mui-input--sm" style="font-family:var(--font-mono);font-size:var(--text-xs)" value=".milpa/sessions/" readonly="readonly"></div>
+            </div>
+          </div>
+
+          <div class="mui-card">
+            <div class="mui-card__header"><h2 class="mui-card__title">Appearance</h2></div>
+            <div class="mui-card__body mui-stack mui-stack--sm">
+              <div class="mui-field"><span class="mui-field__label">Theme</span><div class="mui-cluster mui-cluster--sm"><button type="button" class="mui-btn mui-btn--sm" data-theme-set="system">System</button><button type="button" class="mui-btn mui-btn--sm" data-theme-set="dark" aria-pressed="true">Dark</button><button type="button" class="mui-btn mui-btn--sm" data-theme-set="light">Light</button></div></div>
+              <div class="mui-field"><span class="mui-field__label">Interface scale</span><div class="mui-cluster mui-cluster--sm"><button type="button" class="mui-btn mui-btn--sm" aria-pressed="true">100%</button><button type="button" class="mui-btn mui-btn--sm">115%</button><button type="button" class="mui-btn mui-btn--sm">130%</button></div></div>
+            </div>
+          </div>
+
+        </div>
+        <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none"><button type="button" class="mui-btn">Discard changes</button><button type="button" class="mui-btn mui-btn--primary">Save settings</button></div>
+      </div>
+
     </main>
   </div>
 
@@ -311,6 +357,37 @@ HTML;
       tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.getAttribute('data-tab') === name)); });
       document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
     }
+
+    // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
+    var navItems = document.querySelectorAll('.mui-sidebar__item[data-nav]');
+    function showView(view) {
+      document.querySelectorAll('.view').forEach(function (v) { v.hidden = v.getAttribute('data-view') !== view; });
+      navItems.forEach(function (n) {
+        var on = n.getAttribute('data-nav') === view || (view === 'session' && (n.getAttribute('data-nav') === 'sessions' || n.getAttribute('data-nav') === 'decisions'));
+        if (on) { n.setAttribute('aria-current', 'page'); } else { n.removeAttribute('aria-current'); }
+      });
+    }
+    navItems.forEach(function (n) {
+      n.addEventListener('click', function (e) {
+        e.preventDefault();
+        var nav = n.getAttribute('data-nav');
+        if (nav === 'settings') { showView('settings'); }
+        else if (nav === 'decisions') { showView('session'); showTab('chat'); }
+        else if (nav === 'sessions') { showView('session'); }
+      });
+    });
+
+    // Appearance theme buttons in Settings (dark / light / system).
+    document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var choice = btn.getAttribute('data-theme-set');
+        var theme = choice === 'system'
+          ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+          : choice;
+        document.documentElement.setAttribute('data-theme', theme);
+        document.querySelectorAll('[data-theme-set]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === btn)); });
+      });
+    });
 
     // Connection status → status bar + top badge.
     var conn = document.getElementById('milpa-conn');

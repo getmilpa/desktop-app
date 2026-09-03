@@ -81,6 +81,19 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-count', $body);
     }
 
+    public function testTheSettingsViewIsServedWithinTheSameShell(): void
+    {
+        // Settings occupies the same shell (wireframe 2c), reached from the sidebar — not a separate window.
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('data-view="settings"', $body);
+        self::assertStringContainsString('data-view="session"', $body);
+        self::assertStringContainsString('Model and provider', $body);
+        self::assertStringContainsString('Default autonomy', $body);
+        self::assertStringContainsString('data-nav="settings"', $body);
+        self::assertStringContainsString('data-theme-set="light"', $body);
+    }
+
     public function testTheConsentGateComponentIsServedHiddenAndWiredToTheCeremony(): void
     {
         // The gate is the Desktop's reason to exist (0477): a real reactive panel that renders a parked gate
