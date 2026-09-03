@@ -48,6 +48,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\ComposerField $composerField = null,
         private readonly ?\Milpa\DesktopApp\Live\Sidebar $sidebar = null,
         private readonly ?\Milpa\DesktopApp\Live\Topbar $topbar = null,
+        private readonly ?\Milpa\DesktopApp\Live\Tabs $tabs = null,
     ) {
     }
 
@@ -114,11 +115,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -265,6 +266,13 @@ HTML;
         return ($this->topbar ?? new \Milpa\DesktopApp\Live\Topbar('desktop-topbar-fallback', $this->data, $this->events))->render();
     }
 
+    /** The main tablist, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's third
+     *  pure-component surface. The panes and composer dock read the same `desktop.tab` signal to show/hide. */
+    private function tabsHtml(): string
+    {
+        return ($this->tabs ?? new \Milpa\DesktopApp\Live\Tabs('desktop-tabs-fallback', $this->events))->render();
+    }
+
     /** The initial shared signals, seeded into the page — one truth projected across the UI (decisions/0189). */
     private function liveSignals(): string
     {
@@ -278,6 +286,7 @@ HTML;
             'session.state.label' => ucfirst(\is_array($counters) ? (string) $counters['state'] : 'idle'),
             'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
             'desktop.nav' => 'sessions',
+            'desktop.tab' => 'chat',
         ], \JSON_UNESCAPED_SLASHES);
     }
 
@@ -508,17 +517,12 @@ HTML;
     <!--TOPBAR-->
 
     <main class="mui-shell__main mui-shell__main--wide" style="grid-row:2;grid-column:2;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
-      <div class="view" data-view="session" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
-      <div class="mui-tabs" role="tablist" style="padding:0 var(--space-6);flex:none">
-        <button class="mui-tabs__tab" role="tab" aria-selected="true" type="button" data-tab="chat">Conversation</button>
-        <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="work">Work</button>
-        <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="activity">Activity</button>
-        <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="context">Context</button>
-      </div>
+      <div class="view" data-view="session" x-data style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+      <!--TABS-->
 
       <div style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
 
-        <section class="tabpane" data-pane="chat" id="milpa-chat">
+        <section class="tabpane" data-pane="chat" id="milpa-chat" :hidden="$store.milpa['desktop.tab'] !== 'chat'">
           <div class="msg msg--system">session opened · nothing runs on open</div>
           <div class="msg msg--user"><div><span class="msg__meta">you · now</span><p style="margin:var(--space-2) 0 0;font-size:var(--text-sm)">Enable the devtools capability on this app.</p></div></div>
           <div class="msg msg--thinking"><span class="msg__meta">agent · thinking</span><p>Reading the app's capabilities and the parked gate before acting…</p></div>
@@ -543,12 +547,12 @@ HTML;
           </div>
         </section>
 
-        <section class="tabpane" data-pane="work" hidden>
+        <section class="tabpane" data-pane="work" hidden :hidden="$store.milpa['desktop.tab'] !== 'work'">
           <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">The session's work board — todo items by status.</p>
           <!--WORK-->
         </section>
 
-        <section class="tabpane" data-pane="activity" hidden style="display:grid;grid-template-columns:1fr 20rem;gap:var(--space-6);align-items:start">
+        <section class="tabpane" data-pane="activity" hidden :hidden="$store.milpa['desktop.tab'] !== 'activity'" style="display:grid;grid-template-columns:1fr 20rem;gap:var(--space-6);align-items:start">
           <div>
             <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">A projection of the session's facts — not a full audit log. Live over the hub.</p>
             <ol class="mui-replay__stream" id="milpa-activity" aria-live="polite"><!--AUDIT--></ol>
@@ -556,7 +560,7 @@ HTML;
           <aside class="mui-replay__projection"><!--PROJECTION--></aside>
         </section>
 
-        <section class="tabpane" data-pane="context" hidden>
+        <section class="tabpane" data-pane="context" hidden :hidden="$store.milpa['desktop.tab'] !== 'context'">
           <div class="panel-grid">
             <!-- Panels other plugins contribute through desktop.shell.compose (addPanel) are rendered here. -->
             <!--PANELS-->
@@ -566,7 +570,7 @@ HTML;
       </div>
       <!-- The composer is docked below the scroll, sticky at the bottom: messages flow above it and it
            stays put. Shown only on the Conversation tab. -->
-      <div id="milpa-composer-dock" style="flex:none;padding:var(--space-3) var(--space-8) var(--space-5);border-top:1px solid var(--border-subtle);background:var(--bg)"><!--COMPOSER--></div>
+      <div id="milpa-composer-dock" :hidden="$store.milpa['desktop.tab'] !== 'chat'" style="flex:none;padding:var(--space-3) var(--space-8) var(--space-5);border-top:1px solid var(--border-subtle);background:var(--bg)"><!--COMPOSER--></div>
       </div><!-- /view session -->
 
       <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
@@ -829,23 +833,11 @@ HTML;
       html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     });
 
-    // Tabs.
-    var tabs = document.querySelectorAll('.mui-tabs__tab');
-    var dock = document.getElementById('milpa-composer-dock');
-    // The composer belongs to the conversation only — dock it there, hide it on the other tabs.
-    function syncDock(name) { if (dock) { dock.hidden = name !== 'chat'; } }
-    tabs.forEach(function (tab) {
-      tab.addEventListener('click', function () {
-        tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
-        var name = tab.getAttribute('data-tab');
-        document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
-        syncDock(name);
-      });
-    });
+    // Tabs are the `desktop-tabs` Milpa Component (greenhouse decisions/0189): the tablist sets the shared
+    // `desktop.tab` signal on click, and the panes + composer dock read it to show/hide (Alpine `:hidden`).
+    // No imperative click-wiring here; switching a tab is setting one signal.
     function showTab(name) {
-      tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.getAttribute('data-tab') === name)); });
-      document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
-      syncDock(name);
+      if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal('desktop.tab', name); }
     }
 
     // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
