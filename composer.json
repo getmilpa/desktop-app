@@ -13,7 +13,7 @@
         "milpa/core": ">=0.6.2 <1.0",
         "milpa/http": ">=0.1.5 <1.0",
         "milpa/live": ">=0.17 <1.0",
-        "milpa/live-web": ">=0.10 <1.0",
+        "milpa/live-web": ">=0.11 <1.0",
         "milpa/mercure": ">=0.1.0 <1.0",
         "milpa/runtime": ">=0.9.1 <1.0",
         "nyholm/psr7": "^1.8",

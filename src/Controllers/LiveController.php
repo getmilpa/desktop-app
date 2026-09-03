@@ -47,7 +47,8 @@ final class LiveController
             stateEnvelope: \is_string($body['state'] ?? null) ? $body['state'] : '',
             payload: \is_array($body['payload'] ?? null) ? $body['payload'] : [],
             sessionId: \is_string($cookies[ComposerField::SESSION_COOKIE] ?? null) ? $cookies[ComposerField::SESSION_COOKIE] : '',
-            csrfToken: $request->getHeaderLine('X-CSRF-Token'),
+            // The client runtime sends the CSRF token in the body; a header is accepted as a fallback.
+            csrfToken: \is_string($body['csrfToken'] ?? null) && $body['csrfToken'] !== '' ? $body['csrfToken'] : $request->getHeaderLine('X-CSRF-Token'),
         ));
 
         return new Response(
@@ -61,6 +62,12 @@ final class LiveController
     public function client(ServerRequestInterface $request): ResponseInterface
     {
         return $this->serveAsset('milpa-live.js');
+    }
+
+    /** Serve the milpa/live REMOTE runtime (server-driven factories: remote fields, autocomplete) from the package. */
+    public function clientRemote(ServerRequestInterface $request): ResponseInterface
+    {
+        return $this->serveAsset('milpa-live-remote.js');
     }
 
     /** Serve the vendored Alpine build from the package, as-is. */
