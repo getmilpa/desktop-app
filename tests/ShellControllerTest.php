@@ -147,6 +147,11 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('3 turns', $body, 'status counters');
         self::assertStringContainsString('data-view="auth"', $body, 'the Auth screen');
         self::assertStringContainsString('data-pane="work"', $body);
+        // Drag-drop wiring (0484): draggable cards, drop columns and the persisting POST.
+        self::assertStringContainsString('class="work-board" data-session=', $body);
+        self::assertStringContainsString('draggable="true" data-index="0"', $body);
+        self::assertStringContainsString('class="work-col" data-status="done"', $body);
+        self::assertStringContainsString("fetch('/desktop/work'", $body);
 
         unlink($dir . '/s1.json');
         unlink($dir . '/events.log');

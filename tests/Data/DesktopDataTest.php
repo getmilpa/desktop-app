@@ -134,5 +134,6 @@ final class DesktopDataTest extends TestCase
         self::assertSame([], $data->work());
         self::assertSame([], $data->audit());
         self::assertSame(0, $data->counters()['turns']);
+        self::assertSame('', $data->currentSessionId());
     }
 }

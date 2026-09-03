@@ -98,4 +98,31 @@ final class DesktopStoreTest extends TestCase
 
         self::assertFileExists($this->dir . '/nested/settings.json');
     }
+
+    public function testMovingAWorkItemPersistsItsNewStatus(): void
+    {
+        $sessionsDir = $this->dir . '/sessions';
+        mkdir($sessionsDir);
+        file_put_contents($sessionsDir . '/s1.json', json_encode([
+            'id' => 's1', 'goal' => 'g', 'work' => [['title' => 'a', 'status' => 'pending', 'origin' => 'planned']],
+        ], JSON_THROW_ON_ERROR));
+        $store = new DesktopStore($sessionsDir, $this->dir . '/settings.json');
+
+        self::assertTrue($store->updateWorkStatus('s1', 0, 'done'));
+
+        $work = (new DesktopData(new DIContainer(), null, $sessionsDir))->work();
+        self::assertSame('done', $work[0]['status']);
+    }
+
+    public function testMoveRejectsBadSessionIdMissingFileAndBadIndex(): void
+    {
+        $sessionsDir = $this->dir . '/sessions';
+        mkdir($sessionsDir);
+        file_put_contents($sessionsDir . '/s1.json', json_encode(['work' => [['title' => 'a', 'status' => 'pending']]], JSON_THROW_ON_ERROR));
+        $store = new DesktopStore($sessionsDir, $this->dir . '/settings.json');
+
+        self::assertFalse($store->updateWorkStatus('../evil', 0, 'done'), 'no path traversal');
+        self::assertFalse($store->updateWorkStatus('missing', 0, 'done'), 'no such session');
+        self::assertFalse($store->updateWorkStatus('s1', 9, 'done'), 'no such item');
+    }
 }

@@ -34,7 +34,7 @@ final class DesktopAppPluginTest extends TestCase
         $plugin = new DesktopAppPlugin(new DIContainer());
 
         $routes = $plugin->routes();
-        self::assertCount(7, $routes);
+        self::assertCount(8, $routes);
         foreach ($routes as $route) {
             self::assertInstanceOf(Route::class, $route);
             self::assertNotNull($route->handler);
@@ -43,7 +43,7 @@ final class DesktopAppPluginTest extends TestCase
         self::assertSame(
             [
                 '/desktop', '/desktop/events', '/desktop/assets/tokens.css', '/desktop/assets/bundle.css',
-                '/desktop/data.json', '/desktop/settings', '/desktop/sessions',
+                '/desktop/data.json', '/desktop/settings', '/desktop/sessions', '/desktop/work',
             ],
             $paths,
         );
@@ -77,6 +77,6 @@ final class DesktopAppPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
 
-        self::assertCount(7, $plugin->routes(), 'the shell, feed, assets, data, and the write endpoints');
+        self::assertCount(8, $plugin->routes(), 'the shell, feed, assets, data, and the write endpoints');
     }
 }

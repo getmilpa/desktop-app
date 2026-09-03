@@ -111,6 +111,18 @@ final class DesktopData
     }
 
     /**
+     * The current session's addressable id — its file name (the first in the store), or '' when there is
+     * none. The file name is what the write side addresses ({@see DesktopStore::updateWorkStatus()}), so it is
+     * the id the UI must post back, not the display id in the JSON body.
+     */
+    public function currentSessionId(): string
+    {
+        $files = $this->sessionFiles();
+
+        return $files === [] ? '' : basename($files[0], '.json');
+    }
+
+    /**
      * The current session's counters (turns, steps, tokens, tool calls) — from the session, else derived.
      *
      * @return array{turns: int, steps: int, tokens: int, tool_calls: int, state: string}

@@ -85,4 +85,29 @@ final class DesktopStore
 
         return $id;
     }
+
+    /**
+     * Move a work item to a new status in its session file. Returns whether it was applied.
+     *
+     * The session id must name an existing file in the store (validated, no traversal); the index must be a
+     * real work item. The write is the whole session file re-serialized — the record moves, nothing runs.
+     */
+    public function updateWorkStatus(string $sessionId, int $index, string $status): bool
+    {
+        if (preg_match('/^[0-9A-Za-z_-]{1,64}$/', $sessionId) !== 1) {
+            return false;
+        }
+        $file = $this->sessionsPath . '/' . $sessionId . '.json';
+        if (!is_file($file)) {
+            return false;
+        }
+        $session = json_decode((string) file_get_contents($file), true);
+        if (!is_array($session) || !isset($session['work'][$index]) || !is_array($session['work'][$index])) {
+            return false;
+        }
+        $session['work'][$index]['status'] = $status;
+        file_put_contents($file, json_encode($session, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), LOCK_EX);
+
+        return true;
+    }
 }

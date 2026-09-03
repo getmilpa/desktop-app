@@ -79,6 +79,29 @@ final class MutationControllerTest extends TestCase
         self::assertFileExists($this->dir . '/sessions/' . $decoded['id'] . '.json');
     }
 
+    public function testPostWorkMovesAnItem(): void
+    {
+        mkdir($this->dir . '/sessions');
+        file_put_contents($this->dir . '/sessions/s1.json', json_encode(['work' => [['title' => 'a', 'status' => 'pending']]], JSON_THROW_ON_ERROR));
+
+        $request = (new ServerRequest('POST', '/desktop/work'))
+            ->withBody(\Nyholm\Psr7\Stream::create(json_encode(['session' => 's1', 'index' => 0, 'status' => 'done'], JSON_THROW_ON_ERROR)));
+
+        $res = $this->controller()->moveWork($request);
+
+        self::assertSame(200, $res->getStatusCode());
+        self::assertStringContainsString('"ok":true', (string) $res->getBody());
+        self::assertStringContainsString('"status": "done"', (string) file_get_contents($this->dir . '/sessions/s1.json'));
+    }
+
+    public function testPostWorkWithAnUnknownSessionReportsNotOk(): void
+    {
+        $request = (new ServerRequest('POST', '/desktop/work'))
+            ->withBody(\Nyholm\Psr7\Stream::create(json_encode(['session' => 'nope', 'index' => 0, 'status' => 'done'], JSON_THROW_ON_ERROR)));
+
+        self::assertStringContainsString('"ok":false', (string) $this->controller()->moveWork($request)->getBody());
+    }
+
     public function testAMalformedBodyIsToleratedAsEmpty(): void
     {
         $request = (new ServerRequest('POST', '/desktop/settings'))

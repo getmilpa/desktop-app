@@ -177,21 +177,25 @@ final class ShellController
             return '<div class="mui-empty"><p class="mui-empty__title">No work board yet</p><p class="mui-empty__desc">A session writes its plan as work items; they appear here by status.</p></div>';
         }
 
+        // Reaching here means work() returned items, so $this->data is non-null.
+        $session = htmlspecialchars($this->data->currentSessionId(), ENT_QUOTES);
         $columns = ['pending' => 'Pending', 'in_progress' => 'In progress', 'done' => 'Done', 'blocked' => 'Blocked'];
         $byStatus = ['pending' => '', 'in_progress' => '', 'done' => '', 'blocked' => ''];
-        foreach ($work as $item) {
+        foreach ($work as $i => $item) {
             $status = \array_key_exists($item['status'], $columns) ? $item['status'] : 'pending';
             $byStatus[$status] .= sprintf(
-                '<article class="mui-card mui-card--compact"><div class="mui-card__body"><p style="margin:0 0 var(--space-3);font-size:var(--text-sm)">%s</p><span class="mui-badge">%s</span></div></article>',
+                '<article class="mui-card mui-card--compact" draggable="true" data-index="%d" style="cursor:grab"><div class="mui-card__body"><p style="margin:0 0 var(--space-3);font-size:var(--text-sm)">%s</p><span class="mui-badge">%s</span></div></article>',
+                $i,
                 htmlspecialchars($item['title'], ENT_QUOTES),
                 htmlspecialchars($item['origin'], ENT_QUOTES),
             );
         }
 
-        $out = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);align-items:start">';
+        $out = '<div class="work-board" data-session="' . $session . '" style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);align-items:start">';
         foreach ($columns as $key => $label) {
             $out .= sprintf(
-                '<section style="display:flex;flex-direction:column;gap:var(--space-3)"><div class="mui-cluster mui-cluster--sm" style="justify-content:space-between"><span class="mui-section__kicker" style="margin:0">%s</span></div>%s</section>',
+                '<section class="work-col" data-status="%s" style="display:flex;flex-direction:column;gap:var(--space-3);min-height:8rem;padding:var(--space-2);border-radius:var(--radius-md)"><div class="mui-cluster mui-cluster--sm" style="justify-content:space-between"><span class="mui-section__kicker" style="margin:0">%s</span></div>%s</section>',
+                htmlspecialchars($key, ENT_QUOTES),
                 htmlspecialchars($label, ENT_QUOTES),
                 $byStatus[$key],
             );
@@ -557,6 +561,35 @@ HTML;
     }
     var discardBtn = document.getElementById('milpa-discard');
     if (discardBtn) { discardBtn.addEventListener('click', function () { location.reload(); }); }
+
+    // Work board drag-drop: moving a card to another column PERSISTS its new status (0484).
+    var board = document.querySelector('.work-board');
+    if (board) {
+      var dragged = null;
+      board.querySelectorAll('article[draggable]').forEach(function (card) {
+        card.addEventListener('dragstart', function () { dragged = card; card.style.opacity = '.5'; });
+        card.addEventListener('dragend', function () { card.style.opacity = ''; });
+      });
+      board.querySelectorAll('.work-col').forEach(function (col) {
+        col.addEventListener('dragover', function (e) { e.preventDefault(); col.style.background = 'var(--accent-subtle)'; });
+        col.addEventListener('dragleave', function () { col.style.background = ''; });
+        col.addEventListener('drop', function (e) {
+          e.preventDefault();
+          col.style.background = '';
+          if (!dragged) { return; }
+          col.appendChild(dragged);
+          fetch('/desktop/work', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session: board.getAttribute('data-session'),
+              index: parseInt(dragged.getAttribute('data-index'), 10),
+              status: col.getAttribute('data-status')
+            })
+          });
+          dragged = null;
+        });
+      });
+    }
 
     // Theme toggle (dark-first; the design system reads data-theme on <html>).
     document.getElementById('milpa-theme').addEventListener('click', function () {

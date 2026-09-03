@@ -162,6 +162,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 name: 'desktop.sessions.create',
                 handler: new HandlerReference(MutationController::class, 'createSession'),
             ),
+            new Route(
+                path: '/desktop/work',
+                methods: HttpMethod::POST,
+                name: 'desktop.work.move',
+                handler: new HandlerReference(MutationController::class, 'moveWork'),
+            ),
         ];
     }
 

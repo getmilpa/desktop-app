@@ -52,6 +52,17 @@ final class MutationController
         return $this->json(['ok' => true, 'id' => $id]);
     }
 
+    /** Move a work item to a new status (drag-drop on the board), persisting it to the session file. */
+    public function moveWork(ServerRequestInterface $request): ResponseInterface
+    {
+        $body = json_decode((string) $request->getBody(), true);
+        $session = is_array($body) && is_string($body['session'] ?? null) ? $body['session'] : '';
+        $index = is_array($body) && is_numeric($body['index'] ?? null) ? (int) $body['index'] : -1;
+        $status = is_array($body) && is_string($body['status'] ?? null) ? $body['status'] : '';
+
+        return $this->json(['ok' => $this->store->updateWorkStatus($session, $index, $status)]);
+    }
+
     /** @param array<string, mixed> $data */
     private function json(array $data): ResponseInterface
     {
