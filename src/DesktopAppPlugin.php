@@ -112,7 +112,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $sidebar = new \Milpa\DesktopApp\Live\Sidebar($this->liveSecret('signing'), $data, $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Sidebar::class, $sidebar);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar));
+        // The topbar is the shell's second pure-Milpa-Components surface (greenhouse decisions/0189): a
+        // projection surface reading shared signals, with a signed envelope and lifecycle events.
+        $topbar = new \Milpa\DesktopApp\Live\Topbar($this->liveSecret('signing'), $data, $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Topbar::class, $topbar);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
