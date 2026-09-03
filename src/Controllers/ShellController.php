@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Controllers;
 
+use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
@@ -43,6 +44,7 @@ final class ShellController
     public function __construct(
         private readonly MilpaEventDispatcherInterface $events,
         private readonly ?MercureConfig $mercure = null,
+        private readonly ?DesktopData $data = null,
     ) {
     }
 
@@ -81,10 +83,38 @@ final class ShellController
         }
 
         return str_replace(
-            ['<!--RUNTIME-->', '<!--PANELS-->', '<!--LIVE-->'],
-            [$this->runtimeScript(), $panels, $this->connectScript()],
+            ['<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->', '<!--LIVE-->'],
+            [$this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(), $this->connectScript()],
             $this->template(),
         );
+    }
+
+    /** The installed-capabilities table rows, from real runtime data (greenhouse decisions/0481). */
+    private function capabilitiesRows(): string
+    {
+        $caps = $this->data?->capabilities() ?? [];
+        if ($caps === []) {
+            return '<tr><td colspan="4" class="mui-empty">No capabilities reported by the runtime.</td></tr>';
+        }
+
+        $rows = '';
+        foreach ($caps as $cap) {
+            $rows .= sprintf(
+                '<tr><td class="mui-table__lead">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
+                htmlspecialchars($cap['name'], ENT_QUOTES),
+                htmlspecialchars($cap['version'], ENT_QUOTES),
+                htmlspecialchars($cap['type'], ENT_QUOTES),
+                htmlspecialchars($cap['author'], ENT_QUOTES),
+            );
+        }
+
+        return $rows;
+    }
+
+    /** The configured model endpoint, from real config (falls back to a sensible default). */
+    private function endpointValue(): string
+    {
+        return htmlspecialchars($this->data?->model()['endpoint'] ?? 'http://llama.local:11438', ENT_QUOTES);
     }
 
     /**
@@ -289,7 +319,7 @@ HTML;
             <div class="mui-card__header"><h2 class="mui-card__title">Model and provider</h2></div>
             <div class="mui-card__body mui-stack">
               <div class="mui-field"><label class="mui-field__label" for="set-prov">Provider</label><span class="mui-select-wrap"><select id="set-prov" class="mui-select"><option>Local model</option><option>Local-network model</option><option>External provider</option></select></span></div>
-              <div class="mui-field"><label class="mui-field__label" for="set-end">Endpoint</label><input id="set-end" class="mui-input" style="font-family:var(--font-mono);font-size:var(--text-xs)" value="http://llama.local:11438/v1"><span class="mui-field__hint">The endpoint receives context. It does not execute operations.</span></div>
+              <div class="mui-field"><label class="mui-field__label" for="set-end">Endpoint</label><input id="set-end" class="mui-input" style="font-family:var(--font-mono);font-size:var(--text-xs)" value="<!--ENDPOINT-->"><span class="mui-field__hint">The endpoint receives context. It does not execute operations.</span></div>
               <div class="mui-field mui-field--row" style="justify-content:space-between"><label class="mui-field__label" for="set-stream">Show streaming tokens</label><input class="mui-switch" type="checkbox" id="set-stream" checked="checked"></div>
             </div>
           </div>
@@ -323,6 +353,16 @@ HTML;
 
         </div>
         <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none"><button type="button" class="mui-btn">Discard changes</button><button type="button" class="mui-btn mui-btn--primary">Save settings</button></div>
+      </div>
+
+      <div class="view" data-view="capabilities" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Capabilities installed in this app — read from the runtime.</p>
+        <div class="mui-table-wrap">
+          <table class="mui-table">
+            <thead><tr><th scope="col">Capability</th><th scope="col">Version</th><th scope="col">Type</th><th scope="col">Author</th></tr></thead>
+            <tbody id="milpa-capabilities"><!--CAPABILITIES--></tbody>
+          </table>
+        </div>
       </div>
 
     </main>
@@ -372,6 +412,7 @@ HTML;
         e.preventDefault();
         var nav = n.getAttribute('data-nav');
         if (nav === 'settings') { showView('settings'); }
+        else if (nav === 'capabilities') { showView('capabilities'); }
         else if (nav === 'decisions') { showView('session'); showTab('chat'); }
         else if (nav === 'sessions') { showView('session'); }
       });

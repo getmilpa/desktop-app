@@ -15,8 +15,11 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Tests;
 
 use Milpa\DesktopApp\Controllers\ShellController;
+use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\Eventing\EventDispatcher;
+use Milpa\Runtime\Kernel;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -92,6 +95,30 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('Default autonomy', $body);
         self::assertStringContainsString('data-nav="settings"', $body);
         self::assertStringContainsString('data-theme-set="light"', $body);
+    }
+
+    public function testTheCapabilitiesViewShowsRealInstalledPlugins(): void
+    {
+        // Real backend data (0481): the capabilities table lists the booted plugins, read from the runtime.
+        $kernel = Kernel::boot(['root' => sys_get_temp_dir(), 'plugins' => [DesktopAppPlugin::class]]);
+        $kernel->container()->registerService(Kernel::class, $kernel);
+        $controller = new ShellController(new EventDispatcher(new NullLogger()), null, new DesktopData($kernel->container()));
+
+        $body = (string) $controller->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('data-view="capabilities"', $body);
+        self::assertStringContainsString('id="milpa-capabilities"', $body);
+        // The real DesktopApp plugin appears in the table (name + version + type from its #[PluginMetadata]).
+        self::assertStringContainsString('DesktopApp', $body);
+        self::assertStringContainsString('mui-table__lead', $body);
+    }
+
+    public function testWithoutDataTheCapabilitiesTableShowsAnEmptyState(): void
+    {
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('data-view="capabilities"', $body);
+        self::assertStringContainsString('No capabilities reported', $body);
     }
 
     public function testTheConsentGateComponentIsServedHiddenAndWiredToTheCeremony(): void

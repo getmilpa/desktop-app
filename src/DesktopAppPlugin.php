@@ -16,8 +16,10 @@ namespace Milpa\DesktopApp;
 
 use Milpa\Attributes\PluginMetadata;
 use Milpa\DesktopApp\Controllers\AssetsController;
+use Milpa\DesktopApp\Controllers\DataController;
 use Milpa\DesktopApp\Controllers\EventsController;
 use Milpa\DesktopApp\Controllers\ShellController;
+use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\MercurePublisher;
 use Milpa\DesktopApp\Live\ShellChangeRecorder;
@@ -83,8 +85,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $events = $this->container->get(MilpaEventDispatcherInterface::class);
         assert($events instanceof MilpaEventDispatcherInterface);
 
+        $data = new DesktopData($this->container);
+        $this->container->registerService(DesktopData::class, $data);
+        $this->container->registerService(DataController::class, new DataController($data));
+
         $mercure = $this->mercure();
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure));
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
@@ -130,6 +136,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 methods: HttpMethod::GET,
                 name: 'desktop.assets.bundle',
                 handler: new HandlerReference(AssetsController::class, 'bundle'),
+            ),
+            new Route(
+                path: '/desktop/data.json',
+                methods: HttpMethod::GET,
+                name: 'desktop.data',
+                handler: new HandlerReference(DataController::class, 'data'),
             ),
         ];
     }
