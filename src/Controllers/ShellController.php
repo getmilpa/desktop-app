@@ -50,6 +50,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Topbar $topbar = null,
         private readonly ?\Milpa\DesktopApp\Live\Tabs $tabs = null,
         private readonly ?\Milpa\DesktopApp\Live\WorkBoard $workBoard = null,
+        private readonly ?\Milpa\DesktopApp\Live\Activity $activity = null,
     ) {
     }
 
@@ -116,11 +117,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
         );
@@ -312,45 +313,11 @@ HTML;
         return ($this->workBoard ?? new \Milpa\DesktopApp\Live\WorkBoard('desktop-work-board-fallback', $this->data, $this->events))->render();
     }
 
-    /** The Audit projection stats (2f), from the current session's real counters. */
-    private function projectionStats(): string
+    /** The Activity tab, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's fifth
+     *  pure-component surface. Facts still arrive live over the hub, prepended to #milpa-activity. */
+    private function activityHtml(): string
     {
-        $c = $this->data?->counters() ?? ['turns' => 0, 'steps' => 0, 'tokens' => 0, 'tool_calls' => 0, 'state' => 'idle'];
-        $stats = [
-            'state' => $c['state'], 'turns' => $c['turns'], 'steps' => $c['steps'],
-            'tokens' => $c['tokens'], 'tool calls' => $c['tool_calls'],
-        ];
-        $out = '';
-        foreach ($stats as $label => $value) {
-            $out .= sprintf(
-                '<p class="mui-replay__stat"><span class="mui-replay__stat-label">%s</span><span class="mui-replay__stat-value">%s</span></p>',
-                htmlspecialchars($label, ENT_QUOTES),
-                htmlspecialchars((string) $value, ENT_QUOTES),
-            );
-        }
-
-        return $out;
-    }
-
-    /** The Audit stream (2f): the session's facts, from the shared event log. */
-    private function auditStream(): string
-    {
-        $audit = $this->data?->audit() ?? [];
-        if ($audit === []) {
-            return '<li class="mui-replay__event"><span class="mui-replay__actor">no facts recorded yet</span></li>';
-        }
-
-        $out = '';
-        foreach ($audit as $fact) {
-            $out .= sprintf(
-                '<li class="mui-replay__event"><span class="mui-replay__type">%s</span> <span class="mui-replay__actor">%s · seq %d</span></li>',
-                htmlspecialchars($fact['type'], ENT_QUOTES),
-                htmlspecialchars($fact['data'], ENT_QUOTES),
-                $fact['seq'],
-            );
-        }
-
-        return $out;
+        return ($this->activity ?? new \Milpa\DesktopApp\Live\Activity('desktop-activity-fallback', $this->data, $this->events))->render();
     }
 
     /**
@@ -526,11 +493,7 @@ HTML;
         </section>
 
         <section class="tabpane" data-pane="activity" hidden :hidden="$store.milpa['desktop.tab'] !== 'activity'" style="display:grid;grid-template-columns:1fr 20rem;gap:var(--space-6);align-items:start">
-          <div>
-            <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">A projection of the session's facts — not a full audit log. Live over the hub.</p>
-            <ol class="mui-replay__stream" id="milpa-activity" aria-live="polite"><!--AUDIT--></ol>
-          </div>
-          <aside class="mui-replay__projection"><!--PROJECTION--></aside>
+          <!--ACTIVITY-->
         </section>
 
         <section class="tabpane" data-pane="context" hidden :hidden="$store.milpa['desktop.tab'] !== 'context'">

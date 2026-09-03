@@ -127,7 +127,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $workBoard = new \Milpa\DesktopApp\Live\WorkBoard($this->liveSecret('signing'), $data, $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\WorkBoard::class, $workBoard);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard));
+        // The Activity tab is the shell's fifth pure-Milpa-Components surface (greenhouse decisions/0189): the
+        // session's live fact stream + a counter projection, as a signed component with lifecycle events.
+        $activity = new \Milpa\DesktopApp\Live\Activity($this->liveSecret('signing'), $data, $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Activity::class, $activity);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
