@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.0](https://github.com/getmilpa/desktop-app/compare/v0.4.0...v0.5.0) (2026-09-03)
+
+
+### Features
+
+* wire the live feed to a Mercure hub — the poll is gone when a hub is configured (evidence/0475) ([599203a](https://github.com/getmilpa/desktop-app/commit/599203a9995e28f1f1892c743dd3760ab88adf96))
+
 ## [0.4.0](https://github.com/getmilpa/desktop-app/compare/v0.3.0...v0.4.0) (2026-09-03)
 
 
