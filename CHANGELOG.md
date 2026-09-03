@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0](https://github.com/getmilpa/desktop-app/compare/v0.3.0...v0.4.0) (2026-09-03)
+
+
+### Features
+
+* the live feed is a continuous SSE stream, not short-poll (evidence/0473) ([769a3d6](https://github.com/getmilpa/desktop-app/commit/769a3d6914fcefa6f4712cdc741b0763153be575))
+
 ## [0.3.0](https://github.com/getmilpa/desktop-app/compare/v0.2.0...v0.3.0) (2026-09-03)
 
 
