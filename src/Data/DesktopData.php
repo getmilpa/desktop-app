@@ -228,6 +228,26 @@ final class DesktopData
     }
 
     /**
+     * A downloadable dump of the CURRENT session — the material for a video or an autopsy of what the
+     * agent did: the raw session record, its counters and context, the work board and the activity/audit.
+     *
+     * @return array{exported_at: string, id: string, model: array{model: string, endpoint: string}, session: array<string, mixed>, counters: array{turns: int, steps: int, tokens: int, tool_calls: int, state: string}, context: array{tokens: int, window: int, used_pct: int, free: int}, work: list<array{title: string, status: string, origin: string}>, audit: list<array{seq: int, type: string, data: string}>}
+     */
+    public function export(): array
+    {
+        return [
+            'exported_at' => date('c'),
+            'id' => $this->currentSessionId(),
+            'model' => $this->model(),
+            'session' => $this->currentSession(),
+            'counters' => $this->counters(),
+            'context' => $this->context(),
+            'work' => $this->work(),
+            'audit' => $this->audit(),
+        ];
+    }
+
+    /**
      * The whole snapshot the Desktop reads.
      *
      * @return array{
