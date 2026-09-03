@@ -85,7 +85,9 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $events = $this->container->get(MilpaEventDispatcherInterface::class);
         assert($events instanceof MilpaEventDispatcherInterface);
 
-        $data = new DesktopData($this->container);
+        $log = new ShellEventLog($this->logPath());
+
+        $data = new DesktopData($this->container, $log, $this->sessionsPath());
         $this->container->registerService(DesktopData::class, $data);
         $this->container->registerService(DataController::class, new DataController($data));
 
@@ -94,7 +96,6 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
-        $log = new ShellEventLog($this->logPath());
         [$windowMs, $pollMs] = $this->feedTiming();
         $this->container->registerService(EventsController::class, new EventsController($log, new SseFormatter(), $windowMs, $pollMs));
 
@@ -152,6 +153,15 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $config = $this->container->get(Config::class);
 
         return $config instanceof Config ? MercureConfig::fromConfig($config) : null;
+    }
+
+    /** Where the app's session store lives: `desktop.sessions.path` in config, else `.milpa/sessions/`. */
+    private function sessionsPath(): string
+    {
+        $config = $this->container->get(Config::class);
+        $configured = $config instanceof Config ? $config->get('desktop.sessions.path') : null;
+
+        return is_string($configured) && $configured !== '' ? $configured : getcwd() . '/.milpa/sessions';
     }
 
     /** Where the shared event log lives: `desktop.events.log` in config, else a per-app temp file. */

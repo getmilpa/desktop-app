@@ -14,10 +14,13 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Tests;
 
+use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
+use Milpa\DesktopApp\Live\ShellEvent;
+use Milpa\DesktopApp\Live\ShellEventLog;
 use Milpa\Eventing\EventDispatcher;
 use Milpa\Runtime\Kernel;
 use Nyholm\Psr7\ServerRequest;
@@ -119,6 +122,44 @@ final class ShellControllerTest extends TestCase
 
         self::assertStringContainsString('data-view="capabilities"', $body);
         self::assertStringContainsString('No capabilities reported', $body);
+    }
+
+    public function testTheScreensRenderRealSessionWorkAndAudit(): void
+    {
+        // The screens read real data (0482): sessions in the sidebar, the work board, the audit stream, counters.
+        $dir = sys_get_temp_dir() . '/milpa-shell-sessions-' . uniqid('', true);
+        mkdir($dir);
+        file_put_contents($dir . '/s1.json', json_encode([
+            'goal' => 'Audit the plugins', 'state' => 'working', 'turns' => 3, 'tool_calls' => 12,
+            'work' => [['title' => 'List plugins', 'status' => 'done', 'origin' => 'planned']],
+        ], JSON_THROW_ON_ERROR));
+        $log = new ShellEventLog($dir . '/events.log');
+        $log->append(new ShellEvent('gate.opened', ['operation' => 'capabilities.enable']));
+        $data = new DesktopData(new DIContainer(), $log, $dir);
+
+        $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, $data))
+            ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('Audit the plugins', $body, 'session in the sidebar');
+        self::assertStringContainsString('List plugins', $body, 'work board item');
+        self::assertStringContainsString('gate.opened', $body, 'audit fact');
+        self::assertStringContainsString('3 turns', $body, 'status counters');
+        self::assertStringContainsString('data-view="auth"', $body, 'the Auth screen');
+        self::assertStringContainsString('data-pane="work"', $body);
+
+        unlink($dir . '/s1.json');
+        unlink($dir . '/events.log');
+        rmdir($dir);
+    }
+
+    public function testEmptyDataShowsEmptyStatesAcrossScreens(): void
+    {
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('No sessions yet', $body);
+        self::assertStringContainsString('No work board yet', $body);
+        self::assertStringContainsString('no facts recorded yet', $body);
+        self::assertStringContainsString('0 turns', $body);
     }
 
     public function testTheConsentGateComponentIsServedHiddenAndWiredToTheCeremony(): void

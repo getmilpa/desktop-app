@@ -83,8 +83,14 @@ final class ShellController
         }
 
         return str_replace(
-            ['<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->', '<!--LIVE-->'],
-            [$this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(), $this->connectScript()],
+            [
+                '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--AUTHMODEL-->', '<!--LIVE-->',
+            ],
+            [
+                $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->authModelLabel(), $this->connectScript(),
+            ],
             $this->template(),
         );
     }
@@ -115,6 +121,120 @@ final class ShellController
     private function endpointValue(): string
     {
         return htmlspecialchars($this->data?->model()['endpoint'] ?? 'http://llama.local:11438', ENT_QUOTES);
+    }
+
+    /** The real model label for the Auth provider option: "Local model · <model> (<endpoint>)". */
+    private function authModelLabel(): string
+    {
+        $m = $this->data?->model() ?? ['model' => 'qwen3.8-27b', 'endpoint' => 'http://llama.local:11438'];
+
+        return htmlspecialchars('Local model · ' . $m['model'] . ' (' . $m['endpoint'] . ')', ENT_QUOTES);
+    }
+
+    /** The sidebar session list, from the real session store (greenhouse decisions/0482). */
+    private function sessionsList(): string
+    {
+        $sessions = $this->data?->sessions() ?? [];
+        if ($sessions === []) {
+            return '<p class="mui-empty" style="padding:0 var(--space-4)">No sessions yet. Open a workspace to start one.</p>';
+        }
+
+        $out = '';
+        foreach ($sessions as $s) {
+            $out .= sprintf(
+                '<a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span style="font-size:var(--text-sm)">%s</span><span class="mui-badge">%s</span></a>',
+                htmlspecialchars($s['goal'], ENT_QUOTES),
+                htmlspecialchars($s['state'], ENT_QUOTES),
+            );
+        }
+
+        return $out;
+    }
+
+    /** The status bar's counters, from the current session (greenhouse decisions/0482). */
+    private function statusCounters(): string
+    {
+        $c = $this->data?->counters() ?? ['turns' => 0, 'steps' => 0, 'tokens' => 0, 'tool_calls' => 0, 'state' => 'idle'];
+
+        return sprintf(
+            '%d turns · %d steps · %d tokens · %d tool calls',
+            $c['turns'],
+            $c['steps'],
+            $c['tokens'],
+            $c['tool_calls'],
+        );
+    }
+
+    /** The Work board (2e), columns by status, from the current session's work items. */
+    private function workBoard(): string
+    {
+        $work = $this->data?->work() ?? [];
+        if ($work === []) {
+            return '<div class="mui-empty"><p class="mui-empty__title">No work board yet</p><p class="mui-empty__desc">A session writes its plan as work items; they appear here by status.</p></div>';
+        }
+
+        $columns = ['pending' => 'Pending', 'in_progress' => 'In progress', 'done' => 'Done', 'blocked' => 'Blocked'];
+        $byStatus = ['pending' => '', 'in_progress' => '', 'done' => '', 'blocked' => ''];
+        foreach ($work as $item) {
+            $status = \array_key_exists($item['status'], $columns) ? $item['status'] : 'pending';
+            $byStatus[$status] .= sprintf(
+                '<article class="mui-card mui-card--compact"><div class="mui-card__body"><p style="margin:0 0 var(--space-3);font-size:var(--text-sm)">%s</p><span class="mui-badge">%s</span></div></article>',
+                htmlspecialchars($item['title'], ENT_QUOTES),
+                htmlspecialchars($item['origin'], ENT_QUOTES),
+            );
+        }
+
+        $out = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);align-items:start">';
+        foreach ($columns as $key => $label) {
+            $out .= sprintf(
+                '<section style="display:flex;flex-direction:column;gap:var(--space-3)"><div class="mui-cluster mui-cluster--sm" style="justify-content:space-between"><span class="mui-section__kicker" style="margin:0">%s</span></div>%s</section>',
+                htmlspecialchars($label, ENT_QUOTES),
+                $byStatus[$key],
+            );
+        }
+
+        return $out . '</div>';
+    }
+
+    /** The Audit projection stats (2f), from the current session's real counters. */
+    private function projectionStats(): string
+    {
+        $c = $this->data?->counters() ?? ['turns' => 0, 'steps' => 0, 'tokens' => 0, 'tool_calls' => 0, 'state' => 'idle'];
+        $stats = [
+            'state' => $c['state'], 'turns' => $c['turns'], 'steps' => $c['steps'],
+            'tokens' => $c['tokens'], 'tool calls' => $c['tool_calls'],
+        ];
+        $out = '';
+        foreach ($stats as $label => $value) {
+            $out .= sprintf(
+                '<p class="mui-replay__stat"><span class="mui-replay__stat-label">%s</span><span class="mui-replay__stat-value">%s</span></p>',
+                htmlspecialchars($label, ENT_QUOTES),
+                htmlspecialchars((string) $value, ENT_QUOTES),
+            );
+        }
+
+        return $out;
+    }
+
+    /** The Audit stream (2f): the session's facts, from the shared event log. */
+    private function auditStream(): string
+    {
+        $audit = $this->data?->audit() ?? [];
+        if ($audit === []) {
+            return '<li class="mui-replay__event"><span class="mui-replay__actor">no facts recorded yet</span></li>';
+        }
+
+        $out = '';
+        foreach ($audit as $fact) {
+            $out .= sprintf(
+                '<li class="mui-replay__event"><span class="mui-replay__type">%s</span> <span class="mui-replay__actor">%s · seq %d</span></li>',
+                htmlspecialchars($fact['type'], ENT_QUOTES),
+                htmlspecialchars($fact['data'], ENT_QUOTES),
+                $fact['seq'],
+            );
+        }
+
+        return $out;
     }
 
     /**
@@ -206,6 +326,7 @@ HTML;
     <span class="lights"><span style="background:var(--danger)"></span><span style="background:var(--warning)"></span><span style="background:var(--success)"></span></span>
     <span class="mui-search-trigger" style="max-width:280px;margin-inline-start:var(--space-4)"><span class="mui-search-trigger__icon" aria-hidden="true">⌕</span>Search sessions<span class="mui-kbd" style="margin-inline-start:auto">⌘K</span></span>
     <span style="margin-inline:auto;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">served by Milpa · one origin</span>
+    <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm" id="milpa-auth-open">Open workspace</button>
     <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm" id="milpa-theme" aria-label="toggle theme">◐ Theme</button>
   </div>
 
@@ -219,11 +340,9 @@ HTML;
           <a class="mui-sidebar__item" href="#" data-nav="capabilities"><span class="mui-sidebar__item-icon">▩</span><span class="mui-sidebar__item-label">Capabilities</span></a>
           <a class="mui-sidebar__item" href="#" data-nav="settings"><span class="mui-sidebar__item-icon">⚙</span><span class="mui-sidebar__item-label">Settings</span></a>
         </div>
-        <div class="mui-sidebar__section">
+        <div class="mui-sidebar__section" id="milpa-sessions">
           <span class="mui-sidebar__section-label">sessions · goal and state</span>
-          <a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3);background:var(--accent-subtle)"><span style="font-size:var(--text-sm)">Official website</span><span class="mui-badge mui-badge--accent mui-badge--dot">Working</span></a>
-          <a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span style="font-size:var(--text-sm)">Audit the app's plugins</span><span class="mui-badge">Ready to continue</span></a>
-          <a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span style="font-size:var(--text-sm);color:var(--text-muted)">default · new</span></a>
+          <!--SESSIONS-->
         </div>
       </div>
       <div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">
@@ -294,12 +413,16 @@ HTML;
         </section>
 
         <section class="tabpane" data-pane="work" hidden>
-          <p class="mui-empty">The work board (todo columns derived from the session) lands here.</p>
+          <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">The session's work board — todo items by status.</p>
+          <!--WORK-->
         </section>
 
-        <section class="tabpane" data-pane="activity" hidden>
-          <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Every change the runtime receives — a live stream of facts.</p>
-          <ul class="feed" id="milpa-activity" aria-live="polite"><li style="color:var(--text-muted)">waiting for changes…</li></ul>
+        <section class="tabpane" data-pane="activity" hidden style="display:grid;grid-template-columns:1fr 20rem;gap:var(--space-6);align-items:start">
+          <div>
+            <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">A projection of the session's facts — not a full audit log. Live over the hub.</p>
+            <ol class="mui-replay__stream" id="milpa-activity" aria-live="polite"><!--AUDIT--></ol>
+          </div>
+          <aside class="mui-replay__projection"><!--PROJECTION--></aside>
         </section>
 
         <section class="tabpane" data-pane="context" hidden>
@@ -371,13 +494,39 @@ HTML;
   <div class="statusbar">
     <span id="milpa-conn" style="color:var(--text-muted)">○ connecting…</span>
     <span>qwen3.8-27b · local model</span>
-    <span>2 turns · 283 steps · 41 tool calls</span>
+    <span><!--STATUS--></span>
     <span style="margin-inline-start:auto">m4-core local-agent · v0.1.0</span>
+  </div>
+</div>
+
+<!-- Auth (wireframe 2a): open the workspace. An entry overlay; nothing runs on open. -->
+<div class="view" data-view="auth" id="milpa-auth" hidden style="position:fixed;inset:0;z-index:1400;display:grid;grid-template-columns:1fr 560px;background:var(--bg)">
+  <div style="display:flex;flex-direction:column;justify-content:flex-end;padding:var(--space-12);border-inline-end:1px solid var(--border-subtle);background:var(--surface)">
+    <p class="mui-section__kicker" style="margin:0 0 var(--space-3)">local workspace</p>
+    <h1 style="font-family:var(--font-heading);font-size:var(--text-4xl);line-height:1.03;margin:0 0 var(--space-4)">Milpa Desktop</h1>
+    <p style="margin:0;max-width:36ch;font-size:var(--text-base);line-height:var(--leading-relaxed);color:var(--text-secondary)">Open a Milpa app to start, understand and resume an agent's work. The session is the unit; nothing runs on open.</p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:var(--space-6);padding:var(--space-10) var(--space-8);overflow:auto">
+    <div class="mui-stack">
+      <div class="mui-field"><label class="mui-field__label" for="auth-app">Milpa app</label><input id="auth-app" class="mui-input mui-input--lg" style="font-family:var(--font-mono)" value="getmilpa/framework" readonly="readonly"><span class="mui-field__hint">Reads <code>.milpa/foundation.json</code>. One app at a time.</span></div>
+      <div class="mui-field"><span class="mui-field__label">Decision identity</span>
+        <label class="mui-choice"><input class="mui-radio" type="radio" name="auth-id" checked="checked"><span class="mui-choice__text">System user<span class="mui-choice__hint">Not verified. Call signatures are asked for separately.</span></span></label>
+        <label class="mui-choice"><input class="mui-radio" type="radio" name="auth-id"><span class="mui-choice__text">Signature-verified principal<span class="mui-choice__hint">Requires an external mechanism.</span></span></label>
+      </div>
+      <div class="mui-field"><label class="mui-field__label" for="auth-prov">Model provider</label><span class="mui-select-wrap"><select id="auth-prov" class="mui-select mui-select--lg"><option><!--AUTHMODEL--></option><option>Local-network model</option><option>External provider</option></select></span></div>
+    </div>
+    <div class="mui-alert mui-alert--warning" role="note"><span class="mui-alert__icon" aria-hidden="true">!</span><div class="mui-alert__content"><p class="mui-alert__title">Your system user is not a verified identity</p><p class="mui-alert__desc">Authorizing in a session grants the operation; it is not signing the call.</p></div></div>
+    <div style="margin-top:auto"><button type="button" class="mui-btn mui-btn--primary mui-btn--full mui-btn--lg" id="milpa-auth-enter">Open workspace</button></div>
   </div>
 </div>
 
 <script>
   (function () {
+    // Auth overlay (open the workspace).
+    var auth = document.getElementById('milpa-auth');
+    document.getElementById('milpa-auth-open').addEventListener('click', function () { auth.hidden = false; });
+    document.getElementById('milpa-auth-enter').addEventListener('click', function () { auth.hidden = true; });
+
     // Theme toggle (dark-first; the design system reads data-theme on <html>).
     document.getElementById('milpa-theme').addEventListener('click', function () {
       var html = document.documentElement;
@@ -438,13 +587,16 @@ HTML;
       else { conn.textContent = '○ offline'; conn.style.color = 'var(--text-muted)'; }
     });
 
-    // Activity stream.
+    // Activity / audit stream: prepend each live fact as a mui-replay event.
     var list = document.getElementById('milpa-activity');
     window.MilpaShell.onAny(function (type, data) {
-      var placeholder = list.querySelector('li');
-      if (placeholder && placeholder.textContent.indexOf('waiting') === 0) { list.removeChild(placeholder); }
+      var placeholder = list.querySelector('.mui-replay__actor');
+      if (placeholder && placeholder.textContent.indexOf('no facts') === 0) { list.removeChild(placeholder.parentNode); }
       var li = document.createElement('li');
-      li.textContent = type + ' · ' + JSON.stringify(data);
+      li.className = 'mui-replay__event';
+      li.innerHTML = '<span class="mui-replay__type"></span> <span class="mui-replay__actor"></span>';
+      li.querySelector('.mui-replay__type').textContent = type;
+      li.querySelector('.mui-replay__actor').textContent = JSON.stringify(data) + ' · live';
       list.insertBefore(li, list.firstChild);
     });
 

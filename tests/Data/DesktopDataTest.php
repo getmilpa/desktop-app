@@ -17,6 +17,8 @@ namespace Milpa\DesktopApp\Tests\Data;
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\DesktopAppPlugin;
+use Milpa\DesktopApp\Live\ShellEvent;
+use Milpa\DesktopApp\Live\ShellEventLog;
 use Milpa\Runtime\Kernel;
 use PHPUnit\Framework\TestCase;
 
@@ -61,12 +63,76 @@ final class DesktopDataTest extends TestCase
         self::assertSame('http://hub.test:9000', $model['endpoint']);
     }
 
-    public function testToArrayCarriesBothCapabilitiesAndModel(): void
+    public function testToArrayCarriesEveryDataSource(): void
     {
         $snapshot = (new DesktopData(new DIContainer()))->toArray();
 
-        self::assertArrayHasKey('capabilities', $snapshot);
-        self::assertArrayHasKey('model', $snapshot);
-        self::assertArrayHasKey('endpoint', $snapshot['model']);
+        foreach (['capabilities', 'model', 'sessions', 'counters', 'work', 'audit'] as $key) {
+            self::assertArrayHasKey($key, $snapshot);
+        }
+    }
+
+    public function testSessionsCountersAndWorkComeFromTheSessionStore(): void
+    {
+        $dir = sys_get_temp_dir() . '/milpa-sessions-' . uniqid('', true);
+        mkdir($dir);
+        file_put_contents($dir . '/s1.json', json_encode([
+            'id' => 's1', 'goal' => 'Publish the site', 'state' => 'working',
+            'turns' => 2, 'steps' => 10, 'tokens' => 500, 'tool_calls' => 41,
+            'work' => [
+                ['title' => 'List plugins', 'status' => 'done', 'origin' => 'planned'],
+                ['title' => 'Verify each', 'status' => 'in_progress', 'origin' => 'found'],
+                'not-an-array-ignored',
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $data = new DesktopData(new DIContainer(), null, $dir);
+
+        $sessions = $data->sessions();
+        self::assertCount(1, $sessions);
+        self::assertSame(['id' => 's1', 'goal' => 'Publish the site', 'state' => 'working'], $sessions[0]);
+
+        $counters = $data->counters();
+        self::assertSame(2, $counters['turns']);
+        self::assertSame(41, $counters['tool_calls']);
+        self::assertSame('working', $counters['state']);
+
+        $work = $data->work();
+        self::assertCount(2, $work);
+        self::assertSame('List plugins', $work[0]['title']);
+        self::assertSame('in_progress', $work[1]['status']);
+
+        unlink($dir . '/s1.json');
+        rmdir($dir);
+    }
+
+    public function testAuditComesFromTheEventLog(): void
+    {
+        $path = sys_get_temp_dir() . '/milpa-audit-' . uniqid('', true) . '.log';
+        $log = new ShellEventLog($path);
+        $log->append(new ShellEvent('gate.opened', ['operation' => 'capabilities.enable']));
+        $log->append(new ShellEvent('badge.updated', ['text' => 'hi']));
+
+        $audit = (new DesktopData(new DIContainer(), $log))->audit();
+
+        self::assertCount(2, $audit);
+        self::assertSame(1, $audit[0]['seq']);
+        self::assertSame('gate.opened', $audit[0]['type']);
+        self::assertStringContainsString('capabilities.enable', $audit[0]['data']);
+
+        // steps defaults to the audit count when the session has no explicit counter.
+        self::assertSame(2, (new DesktopData(new DIContainer(), $log))->counters()['steps']);
+
+        unlink($path);
+    }
+
+    public function testEmptySourcesDegradeGracefully(): void
+    {
+        $data = new DesktopData(new DIContainer());
+
+        self::assertSame([], $data->sessions());
+        self::assertSame([], $data->work());
+        self::assertSame([], $data->audit());
+        self::assertSame(0, $data->counters()['turns']);
     }
 }
