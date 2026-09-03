@@ -62,16 +62,30 @@ final class ShellController
         $composition = new ShellComposition();
         $this->events->dispatch(self::COMPOSE_EVENT, ['composition' => $composition]);
 
-        $headers = ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'];
+        $cookies = [];
         if ($this->mercure !== null) {
             // The hub reads the subscriber JWT from this cookie; the browser sends it with EventSource.
-            $headers['Set-Cookie'] = 'mercureAuthorization=' . $this->mercure->subscriberJwt() . '; Path=/; SameSite=Lax';
+            $cookies[] = 'mercureAuthorization=' . $this->mercure->subscriberJwt() . '; Path=/; SameSite=Lax';
         }
 
-        return new Response(200, $headers, $this->html($composition));
+        // The milpa/live session id binds the signed state + CSRF for the composer's server round-trip.
+        $csrf = '';
+        if ($this->composerField !== null) {
+            $existing = $request->getCookieParams()[\Milpa\DesktopApp\Live\ComposerField::SESSION_COOKIE] ?? null;
+            $liveSid = \is_string($existing) && $existing !== '' ? $existing : bin2hex(random_bytes(16));
+            $cookies[] = \Milpa\DesktopApp\Live\ComposerField::SESSION_COOKIE . '=' . $liveSid . '; Path=/; SameSite=Lax; HttpOnly';
+            $csrf = $this->composerField->csrfToken($liveSid);
+        }
+
+        $headers = ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'];
+        if ($cookies !== []) {
+            $headers['Set-Cookie'] = \count($cookies) === 1 ? $cookies[0] : $cookies;
+        }
+
+        return new Response(200, $headers, $this->html($composition, $csrf));
     }
 
-    private function html(ShellComposition $composition): string
+    private function html(ShellComposition $composition, string $liveCsrf = ''): string
     {
         $panels = '';
         foreach ($composition->sections() as $section) {
@@ -93,11 +107,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVECSRF-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), htmlspecialchars($liveCsrf, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -462,6 +476,7 @@ HTML;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="milpa-live-csrf" content="<!--LIVECSRF-->">
 <title>Milpa Desktop</title>
 <link rel="stylesheet" href="/desktop/assets/tokens.css">
 <link rel="stylesheet" href="/desktop/assets/bundle.css">
@@ -919,6 +934,30 @@ HTML;
         showView(navToView[n.getAttribute('data-nav')] || 'session');
       });
     });
+
+    // The composer field posts to the live endpoint on blur (the remote path): the server validates and,
+    // via a cross-component RenderEffect, re-paints the sibling status — declared behaviour, no imperative
+    // wiring (greenhouse evidence/0491). We drive the post here because a textarea's runtime is local.
+    (function () {
+      if (!composerInput) { return; }
+      var meta = document.querySelector('meta[name="milpa-live-csrf"]');
+      var token = meta ? meta.getAttribute('content') : '';
+      if (!token) { return; } // no live endpoint wired
+      composerInput.addEventListener('blur', function () {
+        var envelope = document.querySelector('script[data-milpa-state="composer-message"]');
+        if (!envelope) { return; }
+        fetch('/desktop/live', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+          body: JSON.stringify({ action: 'blur', state: envelope.textContent, payload: { value: composerInput.value } })
+        }).then(function (r) { return r.json(); }).then(function (res) {
+          (res && res.effects || []).forEach(function (e) {
+            if (!e || e.type !== 'render' || !e.target || !e.html) { return; }
+            var target = document.querySelector('[data-milpa-component-id="' + e.target + '"]');
+            if (target) { target.outerHTML = e.html; }
+          });
+        }).catch(function () {});
+      });
+    })();
 
     // New session: open the entry overlay to configure and confirm a new session.
     var newBtn = document.getElementById('milpa-new-session');

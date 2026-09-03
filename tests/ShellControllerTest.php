@@ -238,6 +238,31 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('/desktop/assets/milpa-live.js', $body);
     }
 
+    public function testTheComposerFieldValidatesOnBlurAndDeclaresTheStatusRepaint(): void
+    {
+        // End-to-end demo of cross-component reactivity (greenhouse evidence/0491): on blur the field
+        // validates on the server and DECLARES a RenderEffect that re-paints the sibling status component.
+        $field = new \Milpa\DesktopApp\Live\ComposerMessageComponent();
+        $context = new \Milpa\Live\ValueObjects\ComponentContext('composer-message');
+        $state = $field->mount(['name' => 'message'], $context);
+
+        $ok = $field->handle(new \Milpa\Live\ValueObjects\InteractionRequest('composer-message', 'textarea', 'blur', $state, ['value' => 'hello world']));
+        $render = null;
+        foreach ($ok->effects as $effect) {
+            if (($effect['type'] ?? null) === 'render') {
+                $render = $effect;
+            }
+        }
+        self::assertNotNull($render, 'blur declares a render effect');
+        self::assertSame('composer-status', $render['target']);
+        self::assertSame('input', $render['component']);
+        self::assertStringContainsString('chars · ready', (string) $render['props']['value']);
+        self::assertSame([], $ok->errors);
+
+        $empty = $field->handle(new \Milpa\Live\ValueObjects\InteractionRequest('composer-message', 'textarea', 'blur', $state, ['value' => '   ']));
+        self::assertArrayHasKey('value', $empty->errors, 'an empty value is rejected on the server');
+    }
+
     public function testTheComposerFieldEmitsRenderEventsSoPluginsCanExtendIt(): void
     {
         // Milpa is event-driven: a component emits lifecycle events so other plugins can subscribe and
