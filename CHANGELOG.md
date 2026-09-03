@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.29.0](https://github.com/getmilpa/desktop-app/compare/v0.28.0...v0.29.0) (2026-09-03)
+
+
+### Features
+
+* the Context tab is a pure Milpa Component ([#44](https://github.com/getmilpa/desktop-app/issues/44)) ([6bd02fa](https://github.com/getmilpa/desktop-app/commit/6bd02fac6231b2bbb4a2824c419e2f199f81315f))
+
 ## [0.28.0](https://github.com/getmilpa/desktop-app/compare/v0.27.0...v0.28.0) (2026-09-03)
 
 
