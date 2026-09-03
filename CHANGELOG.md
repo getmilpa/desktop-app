@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.21.0](https://github.com/getmilpa/desktop-app/compare/v0.20.0...v0.21.0) (2026-09-03)
+
+
+### Features
+
+* **live:** the composer uses the framework's remote field runtime (no Desktop JS) ([#28](https://github.com/getmilpa/desktop-app/issues/28)) ([e1512cd](https://github.com/getmilpa/desktop-app/commit/e1512cdef20a214e005db559ef338a5f81a3dd0d))
+
 ## [0.20.0](https://github.com/getmilpa/desktop-app/compare/v0.19.0...v0.20.0) (2026-09-03)
 
 
