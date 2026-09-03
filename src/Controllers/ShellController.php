@@ -297,7 +297,8 @@ HTML;
 
         return sprintf(
             '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">%s</span>'
-            . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session %s · %s mode</span>',
+            // The derived `session.summary` signal ("{state} · {turns} turns") re-computes reactively.
+            . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session %s · %s mode · <span x-data x-text="$store.milpa[\'session.summary\']"></span></span>',
             htmlspecialchars($goal, ENT_QUOTES),
             htmlspecialchars($id, ENT_QUOTES),
             htmlspecialchars($mode, ENT_QUOTES),
@@ -310,11 +311,12 @@ HTML;
         $modeLabels = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
         $settings = $this->data?->settings() ?? [];
         $mode = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? $modeLabels[$settings['mode']] : 'Ask before changing';
-        $state = $this->data?->counters()['state'] ?? 'idle';
+        $counters = $this->data?->counters();
 
         return (string) json_encode([
             'composer.mode.label' => $mode,
-            'session.state.label' => ucfirst((string) $state),
+            'session.state.label' => ucfirst(\is_array($counters) ? (string) $counters['state'] : 'idle'),
+            'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
         ], \JSON_UNESCAPED_SLASHES);
     }
 
@@ -332,7 +334,8 @@ HTML;
         $href = '/desktop/export' . ($id !== '' ? '?session=' . rawurlencode($id) : '');
 
         return sprintf(
-            '<span class="%s" id="milpa-topstate">%s</span>'
+            // The session state is a SHARED signal too — the badge reads it (ready for a panel to read the same).
+            '<span class="%s" id="milpa-topstate" x-data x-text="$store.milpa[\'session.state.label\']">%s</span>'
             // The mode is a SHARED signal: this topbar badge and the composer's chip read one truth, so
             // changing the mode in one place projects to the other (greenhouse decisions/0189).
             . '<span class="mui-badge" x-data x-text="$store.milpa[\'composer.mode.label\']">%s</span>'
@@ -860,11 +863,10 @@ HTML;
         sendBtn.setAttribute('aria-label', working ? 'stop the turn' : 'continue session');
         sendBtn.disabled = working ? false : (!composerInput || composerInput.value.trim() === '');
       }
+      // Set the shared session-state signal (the badge's text reads it); keep the accent class local.
+      if (window.MilpaLive && window.MilpaLive.signal) { window.MilpaLive.signal('session.state.label', working ? 'Working' : 'Idle'); }
       var top = document.getElementById('milpa-topstate');
-      if (top) {
-        top.textContent = working ? 'Working' : 'Idle';
-        top.className = working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge';
-      }
+      if (top) { top.className = working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge'; }
     }
     if (sendBtn) {
       sendBtn.addEventListener('click', function () {
@@ -1091,6 +1093,9 @@ HTML;
      and remote runtimes register their Alpine factories BEFORE Alpine boots. Served from the package. -->
 <script id="milpa-live-boot" type="application/json"><!--LIVEBOOT--></script>
 <script id="milpa-live-signals" type="application/json"><!--LIVESIGNALS--></script>
+<!-- The mode is remembered across reloads; the session summary is DERIVED from the state and turn signals. -->
+<script id="milpa-live-persist" type="application/json">["composer.mode.label"]</script>
+<script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"}}</script>
 <script src="/desktop/assets/milpa-live.js"></script>
 <script src="/desktop/assets/milpa-live-remote.js"></script>
 <script src="/desktop/assets/alpine.min.js"></script>
