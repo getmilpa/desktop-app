@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.0](https://github.com/getmilpa/desktop-app/compare/v0.6.0...v0.7.0) (2026-09-03)
+
+
+### Features
+
+* the consent gate as a reactive component — agent asks, human approves at a real origin (evidence/0477) ([8ad3547](https://github.com/getmilpa/desktop-app/commit/8ad35479e38fda033e09ca51aa29def8eedf52f9))
+
 ## [0.6.0](https://github.com/getmilpa/desktop-app/compare/v0.5.0...v0.6.0) (2026-09-03)
 
 
