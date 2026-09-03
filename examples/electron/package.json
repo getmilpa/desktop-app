@@ -1,0 +1,15 @@
+{
+  "name": "milpa-desktop-electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A minimal Electron host for a Milpa app running milpa/desktop-app: it serves the app over HTTP and loads its /desktop shell in a native window at a real origin.",
+  "license": "Apache-2.0",
+  "author": "Rodrigo Vicente - TeamX Agency",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^32.0.0"
+  }
+}

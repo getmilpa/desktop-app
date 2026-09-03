@@ -30,6 +30,44 @@ composer require milpa/desktop-app
 Then declare it in `config/plugins.php`. Installing the plugin *is* the activation; a Milpa without it
 simply has no desktop shell.
 
+## Run it end to end
+
+From a fresh Milpa app to the shell in a browser — the whole path, proven on a fresh app
+(greenhouse `evidence/0487`):
+
+```bash
+composer create-project milpa/framework my-app   # 1. a Milpa app
+cd my-app
+composer require milpa/desktop-app                # 2. add the plugin
+# 3. declare Milpa\DesktopApp\DesktopAppPlugin::class in config/plugins.php
+php -S 127.0.0.1:8080 -t public public/router.php # 4. serve over HTTP
+# 5. open http://127.0.0.1:8080/desktop
+```
+
+Step 4 needs a `public/router.php` so the built-in server hands non-file requests (the shell, and the
+`/desktop/assets/*.css` served by a route, not from disk) to the Kernel:
+
+```php
+<?php // public/router.php
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+if ($path !== '/' && is_file(__DIR__ . $path)) {
+    return false; // serve a real static file as-is
+}
+require __DIR__ . '/index.php'; // everything else goes to the Kernel
+```
+
+A real deployment (nginx/Caddy/Apache) needs no router — this is only the built-in server's convention.
+
+## A native window (Electron)
+
+`examples/electron/` is a minimal Electron host: it starts the app's `php -S` and loads `/desktop` in a
+native window at a real origin — the Desktop is a Milpa serving itself, not an Electron app driving one.
+
+```bash
+cd examples/electron && npm install
+MILPA_APP_DIR=/path/to/my-app npm start
+```
+
 ## What it serves
 
 - `GET /desktop` — the Milpa Desktop dashboard, served over HTTP. Point an Electron `loadURL` (or a
