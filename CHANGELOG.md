@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0](https://github.com/getmilpa/desktop-app/compare/v0.2.0...v0.3.0) (2026-09-03)
+
+
+### Features
+
+* a live event feed — plugins push shell changes to the browser over SSE ([dd5aba3](https://github.com/getmilpa/desktop-app/commit/dd5aba320beda47d5e7eb9d1276bb04a338e37b5))
+
 ## [0.2.0](https://github.com/getmilpa/desktop-app/compare/v0.1.1...v0.2.0) (2026-09-03)
 
 
