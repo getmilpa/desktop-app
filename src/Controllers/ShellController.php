@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Controllers;
 
+use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Nyholm\Psr7\Response;
@@ -32,16 +33,22 @@ use Psr\Http\Message\ServerRequestInterface;
  * with a {@see ShellComposition} in the payload, and any plugin that subscribed to that event (in its
  * own `boot()`) appends sections that this controller renders into the page. That is the reactive-UI
  * seam of 0188 in its first, render-time form — a plugin renders the UI and other plugins modify it,
- * decoupled through the event name. Live push over websockets (milpa/mercure) is the deferred arc; this
- * establishes the composition seam it will later push into.
+ * decoupled through the event name.
+ *
+ * When a Mercure hub is wired ({@see MercureConfig}, evidence/0474-0475), the shell also carries a live
+ * client: it sets the subscriber JWT as the `mercureAuthorization` cookie and opens an `EventSource` on the
+ * hub's public URL, so shell changes published to the hub arrive with no poll. Absent a hub, the page ships
+ * without the live client and the `/desktop/events` feed (0473) remains the transport.
  */
 final class ShellController
 {
     /** The event other plugins subscribe to (in their `boot()`) to contribute shell sections. */
     public const COMPOSE_EVENT = 'desktop.shell.compose';
 
-    public function __construct(private readonly MilpaEventDispatcherInterface $events)
-    {
+    public function __construct(
+        private readonly MilpaEventDispatcherInterface $events,
+        private readonly ?MercureConfig $mercure = null,
+    ) {
     }
 
     /** Serve the desktop shell page, composed with every plugin's contributed sections. */
@@ -50,11 +57,13 @@ final class ShellController
         $composition = new ShellComposition();
         $this->events->dispatch(self::COMPOSE_EVENT, ['composition' => $composition]);
 
-        return new Response(
-            200,
-            ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'],
-            $this->html($composition),
-        );
+        $headers = ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'];
+        if ($this->mercure !== null) {
+            // The hub reads the subscriber JWT from this cookie; the browser sends it with EventSource.
+            $headers['Set-Cookie'] = 'mercureAuthorization=' . $this->mercure->subscriberJwt() . '; Path=/; SameSite=Lax';
+        }
+
+        return new Response(200, $headers, $this->html($composition));
     }
 
     private function html(ShellComposition $composition): string
@@ -68,7 +77,39 @@ final class ShellController
             );
         }
 
-        return str_replace('<!--EXTENSIONS-->', $extensions, $this->template());
+        return str_replace(
+            ['<!--EXTENSIONS-->', '<!--LIVE-->'],
+            [$extensions, $this->liveClient()],
+            $this->template(),
+        );
+    }
+
+    /** The live client card + EventSource script when a hub is wired; empty otherwise. */
+    private function liveClient(): string
+    {
+        if ($this->mercure === null) {
+            return '';
+        }
+
+        $url = json_encode($this->mercure->publicUrl . '?topic=' . rawurlencode($this->mercure->topic), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
+        return <<<HTML
+<div class="card">
+  <h2>Live</h2>
+  <p>Subscribed to the Mercure hub — shell changes arrive with no poll.</p>
+  <ul id="live"></ul>
+</div>
+<script>
+  (function () {
+    var es = new EventSource({$url}, { withCredentials: true });
+    es.onmessage = function (e) {
+      var li = document.createElement('li');
+      li.textContent = e.data;
+      document.getElementById('live').appendChild(li);
+    };
+  })();
+</script>
+HTML;
     }
 
     private function template(): string
@@ -112,10 +153,12 @@ final class ShellController
 
 <!-- Sections other plugins contribute through desktop.shell.compose are rendered here. -->
 <!--EXTENSIONS-->
+<!-- The live client (EventSource on the Mercure hub) is rendered here when a hub is wired. -->
+<!--LIVE-->
 <div class="card">
   <h2>What comes next</h2>
-  <p>Other plugins extend this shell by subscribing to <code>desktop.shell.compose</code>. Live push
-  over websockets (milpa/mercure) and the full UI as Milpa components are the arc
+  <p>Other plugins extend this shell by subscribing to <code>desktop.shell.compose</code>, and push live
+  changes through <code>milpa/mercure</code>. The full UI as Milpa components is the arc
   (greenhouse decisions/0188).</p>
 </div>
 HTML;

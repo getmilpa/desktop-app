@@ -17,6 +17,9 @@ namespace Milpa\DesktopApp;
 use Milpa\Attributes\PluginMetadata;
 use Milpa\DesktopApp\Controllers\EventsController;
 use Milpa\DesktopApp\Controllers\ShellController;
+use Milpa\DesktopApp\Live\MercureConfig;
+use Milpa\DesktopApp\Live\MercurePublisher;
+use Milpa\DesktopApp\Live\ShellChangeRecorder;
 use Milpa\DesktopApp\Live\ShellEvent;
 use Milpa\DesktopApp\Live\ShellEventLog;
 use Milpa\DesktopApp\Live\SseFormatter;
@@ -79,16 +82,20 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $events = $this->container->get(MilpaEventDispatcherInterface::class);
         assert($events instanceof MilpaEventDispatcherInterface);
 
-        $this->container->registerService(ShellController::class, new ShellController($events));
+        $mercure = $this->mercure();
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure));
 
         $log = new ShellEventLog($this->logPath());
         [$windowMs, $pollMs] = $this->feedTiming();
         $this->container->registerService(EventsController::class, new EventsController($log, new SseFormatter(), $windowMs, $pollMs));
 
-        $events->subscribe(self::CHANGED_EVENT, static function (string $eventName, array $payload) use ($log): void {
+        $publisher = $mercure !== null ? new MercurePublisher($mercure->service(), $mercure->topic) : null;
+        $recorder = new ShellChangeRecorder($log, $publisher);
+
+        $events->subscribe(self::CHANGED_EVENT, static function (string $eventName, array $payload) use ($recorder): void {
             $shellEvent = $payload['shellEvent'] ?? null;
             if ($shellEvent instanceof ShellEvent) {
-                $log->append($shellEvent);
+                $recorder->record($shellEvent);
             }
         });
     }
@@ -110,6 +117,14 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 handler: new HandlerReference(EventsController::class, 'events'),
             ),
         ];
+    }
+
+    /** The Mercure hub wiring, when the app configured `desktop.mercure.*`; null otherwise (log-only). */
+    private function mercure(): ?MercureConfig
+    {
+        $config = $this->container->get(Config::class);
+
+        return $config instanceof Config ? MercureConfig::fromConfig($config) : null;
     }
 
     /** Where the shared event log lives: `desktop.events.log` in config, else a per-app temp file. */
