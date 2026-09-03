@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.18.0](https://github.com/getmilpa/desktop-app/compare/v0.17.0...v0.18.0) (2026-09-03)
+
+
+### Features
+
+* **shell:** the composer field is a milpa/live component — Milpa Components as the UI substrate ([#22](https://github.com/getmilpa/desktop-app/issues/22)) ([684a04d](https://github.com/getmilpa/desktop-app/commit/684a04d7fa77ea638f38ad3b7e866fd53147a81f))
+
 ## [0.17.0](https://github.com/getmilpa/desktop-app/compare/v0.16.0...v0.17.0) (2026-09-03)
 
 
