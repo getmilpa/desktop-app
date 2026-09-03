@@ -52,11 +52,23 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('/webauthn/intent', $body);
     }
 
-    public function testWithoutAHubTheShellCarriesNoLiveClientOrCookie(): void
+    public function testTheClientRuntimeAndActivityComponentAreAlwaysServed(): void
+    {
+        // The component runtime is the reactive-renderer contract (0476): present with or without a hub, so a
+        // plugin can always register handlers; the built-in Activity component is a real reactive element.
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('window.MilpaShell', $body);
+        self::assertStringContainsString('MilpaShell.onAny(', $body);
+        self::assertStringContainsString('id="milpa-activity"', $body);
+    }
+
+    public function testWithoutAHubTheShellCarriesNoConnectionOrCookie(): void
     {
         $res = $this->controller()->shell(new ServerRequest('GET', '/desktop'));
 
         self::assertSame('', $res->getHeaderLine('Set-Cookie'));
+        // The runtime is there, but nothing connects it to a transport without a hub.
         self::assertStringNotContainsString('new EventSource(', (string) $res->getBody());
     }
 
@@ -78,5 +90,7 @@ final class ShellControllerTest extends TestCase
         // The client subscribes to the hub's PUBLIC url on the shell topic — no poll.
         self::assertStringContainsString('new EventSource(', $body);
         self::assertStringContainsString('https://public.example/.well-known/mercure?topic=desktop%2Fshell', $body);
+        // The connection feeds the component runtime rather than dumping raw text.
+        self::assertStringContainsString('MilpaShell.emit(', $body);
     }
 }

@@ -78,14 +78,41 @@ final class ShellController
         }
 
         return str_replace(
-            ['<!--EXTENSIONS-->', '<!--LIVE-->'],
-            [$extensions, $this->liveClient()],
+            ['<!--RUNTIME-->', '<!--EXTENSIONS-->', '<!--LIVE-->'],
+            [$this->runtimeScript(), $extensions, $this->connectScript()],
             $this->template(),
         );
     }
 
-    /** The live client card + EventSource script when a hub is wired; empty otherwise. */
-    private function liveClient(): string
+    /**
+     * The client component runtime, always served (greenhouse decisions/0476).
+     *
+     * `MilpaShell` is the bridge between the live transport and the UI: a component registers a handler with
+     * `MilpaShell.on('<event>', cb)` (or `onAny`) and the runtime calls it when that event arrives. Defined
+     * before the contributed sections so a plugin's own script can register against it; the connection that
+     * feeds it is {@see connectScript()}. This is the reactive-renderer contract of 0188 in its first form.
+     */
+    private function runtimeScript(): string
+    {
+        return <<<'HTML'
+<script>
+  window.MilpaShell = (function () {
+    var byType = {}, anyHandlers = [];
+    return {
+      on: function (type, cb) { (byType[type] = byType[type] || []).push(cb); },
+      onAny: function (cb) { anyHandlers.push(cb); },
+      emit: function (type, data) {
+        (byType[type] || []).forEach(function (cb) { cb(data); });
+        anyHandlers.forEach(function (cb) { cb(type, data); });
+      }
+    };
+  })();
+</script>
+HTML;
+    }
+
+    /** Connect the runtime to the Mercure hub when one is wired; empty otherwise (static + poll fallback). */
+    private function connectScript(): string
     {
         if ($this->mercure === null) {
             return '';
@@ -94,18 +121,12 @@ final class ShellController
         $url = json_encode($this->mercure->publicUrl . '?topic=' . rawurlencode($this->mercure->topic), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
         return <<<HTML
-<div class="card">
-  <h2>Live</h2>
-  <p>Subscribed to the Mercure hub — shell changes arrive with no poll.</p>
-  <ul id="live"></ul>
-</div>
 <script>
   (function () {
     var es = new EventSource({$url}, { withCredentials: true });
     es.onmessage = function (e) {
-      var li = document.createElement('li');
-      li.textContent = e.data;
-      document.getElementById('live').appendChild(li);
+      var env; try { env = JSON.parse(e.data); } catch (err) { return; }
+      window.MilpaShell.emit(env.event, env.data);
     };
   })();
 </script>
@@ -129,7 +150,11 @@ HTML;
   .card p { margin: 0 0 .6rem; opacity: .85; }
   a.btn { display: inline-block; text-decoration: none; border: 1px solid currentColor; border-radius: 8px; padding: .45rem .9rem; font-size: .92rem; }
   code { font-family: ui-monospace, monospace; }
+  ul.feed { list-style: none; margin: 0; padding: 0; font: 13px/1.5 ui-monospace, monospace; }
+  ul.feed li { padding: .25rem .5rem; border-radius: 6px; background: color-mix(in oklab, currentColor 6%, transparent); margin: .2rem 0; }
+  .muted { opacity: .55; }
 </style>
+<!--RUNTIME-->
 <h1>Milpa Desktop</h1>
 <p class="sub">This shell is served by Milpa itself, over HTTP — one app, one origin.</p>
 
@@ -153,7 +178,26 @@ HTML;
 
 <!-- Sections other plugins contribute through desktop.shell.compose are rendered here. -->
 <!--EXTENSIONS-->
-<!-- The live client (EventSource on the Mercure hub) is rendered here when a hub is wired. -->
+
+<div class="card">
+  <h2>Activity</h2>
+  <p>A built-in reactive component: every shell change the runtime receives lands here, live.</p>
+  <ul class="feed" id="milpa-activity"><li class="muted">waiting for changes…</li></ul>
+</div>
+<script>
+  (function () {
+    var list = document.getElementById('milpa-activity');
+    window.MilpaShell.onAny(function (type, data) {
+      var placeholder = list.querySelector('.muted');
+      if (placeholder) { list.removeChild(placeholder); }
+      var li = document.createElement('li');
+      li.textContent = type + ' · ' + JSON.stringify(data);
+      list.appendChild(li);
+    });
+  })();
+</script>
+
+<!-- The connection to the Mercure hub is rendered here when a hub is wired; it feeds MilpaShell. -->
 <!--LIVE-->
 <div class="card">
   <h2>What comes next</h2>
