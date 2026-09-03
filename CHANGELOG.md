@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.19.0](https://github.com/getmilpa/desktop-app/compare/v0.18.0...v0.19.0) (2026-09-03)
+
+
+### Features
+
+* **live:** the composer component emits before/after render events for plugins to extend ([#24](https://github.com/getmilpa/desktop-app/issues/24)) ([aa85104](https://github.com/getmilpa/desktop-app/commit/aa85104cb38dea2e471b107bc52445e51419cad1))
+
 ## [0.18.0](https://github.com/getmilpa/desktop-app/compare/v0.17.0...v0.18.0) (2026-09-03)
 
 
