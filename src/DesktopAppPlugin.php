@@ -18,8 +18,10 @@ use Milpa\Attributes\PluginMetadata;
 use Milpa\DesktopApp\Controllers\AssetsController;
 use Milpa\DesktopApp\Controllers\DataController;
 use Milpa\DesktopApp\Controllers\EventsController;
+use Milpa\DesktopApp\Controllers\LiveController;
 use Milpa\DesktopApp\Controllers\MutationController;
 use Milpa\DesktopApp\Controllers\ShellController;
+use Milpa\DesktopApp\Live\ComposerField;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Live\MercureConfig;
@@ -98,7 +100,14 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $this->container->registerService(DataController::class, new DataController($data));
 
         $mercure = $this->mercure();
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data));
+        // milpa/live — the framework's official UI system — powers the composer field as a real component
+        // (greenhouse decisions/0189). The registry is extensible: an agent or a human registers new
+        // primitives the same way ComposerField registers the textarea.
+        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'));
+        $this->container->registerService(ComposerField::class, $composerField);
+        $this->container->registerService(LiveController::class, new LiveController($composerField->endpoint()));
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
@@ -157,6 +166,24 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 handler: new HandlerReference(DataController::class, 'export'),
             ),
             new Route(
+                path: '/desktop/live',
+                methods: HttpMethod::POST,
+                name: 'desktop.live',
+                handler: new HandlerReference(LiveController::class, 'live'),
+            ),
+            new Route(
+                path: '/desktop/assets/milpa-live.js',
+                methods: HttpMethod::GET,
+                name: 'desktop.assets.live',
+                handler: new HandlerReference(LiveController::class, 'client'),
+            ),
+            new Route(
+                path: '/desktop/assets/alpine.min.js',
+                methods: HttpMethod::GET,
+                name: 'desktop.assets.alpine',
+                handler: new HandlerReference(LiveController::class, 'alpine'),
+            ),
+            new Route(
                 path: '/desktop/settings',
                 methods: HttpMethod::POST,
                 name: 'desktop.settings.save',
@@ -204,6 +231,18 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
     }
 
     /** Where the shared event log lives: `desktop.events.log` in config, else a per-app temp file. */
+    /**
+     * The HMAC secret for the live component's signed state / CSRF: `desktop.live.<kind>_secret` in config,
+     * else a stable per-install value derived from this package's path. Set it in config for a real deployment.
+     */
+    private function liveSecret(string $kind): string
+    {
+        $config = $this->container->get(Config::class);
+        $configured = $config instanceof Config ? $config->get('desktop.live.' . $kind . '_secret') : null;
+
+        return is_string($configured) && $configured !== '' ? $configured : hash('sha256', __DIR__ . '|milpa-live|' . $kind);
+    }
+
     private function logPath(): string
     {
         $config = $this->container->get(Config::class);

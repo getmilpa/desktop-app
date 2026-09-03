@@ -34,7 +34,7 @@ final class DesktopAppPluginTest extends TestCase
         $plugin = new DesktopAppPlugin(new DIContainer());
 
         $routes = $plugin->routes();
-        self::assertCount(9, $routes);
+        self::assertCount(12, $routes);
         foreach ($routes as $route) {
             self::assertInstanceOf(Route::class, $route);
             self::assertNotNull($route->handler);
@@ -43,7 +43,8 @@ final class DesktopAppPluginTest extends TestCase
         self::assertSame(
             [
                 '/desktop', '/desktop/events', '/desktop/assets/tokens.css', '/desktop/assets/bundle.css',
-                '/desktop/data.json', '/desktop/export', '/desktop/settings', '/desktop/sessions', '/desktop/work',
+                '/desktop/data.json', '/desktop/export', '/desktop/live', '/desktop/assets/milpa-live.js',
+                '/desktop/assets/alpine.min.js', '/desktop/settings', '/desktop/sessions', '/desktop/work',
             ],
             $paths,
         );
@@ -77,7 +78,7 @@ final class DesktopAppPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
 
-        self::assertCount(9, $plugin->routes(), 'the shell, feed, assets, data, export, and the write endpoints');
+        self::assertCount(12, $plugin->routes(), 'the shell, feed, assets, data, export, live + its assets, and the write endpoints');
         $paths = array_map(static fn ($r): string => $r->path, $plugin->routes());
         self::assertContains('/desktop/export', $paths, 'the session export (autopsy/video material)');
     }

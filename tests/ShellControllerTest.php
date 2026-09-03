@@ -220,6 +220,24 @@ final class ShellControllerTest extends TestCase
         rmdir($dir);
     }
 
+    public function testTheComposerFieldIsAMilpaLiveComponentWhenWired(): void
+    {
+        // Milpa Components is the framework's official UI system (greenhouse decisions/0189): the composer's
+        // text field is a real milpa/live <textarea> component — Alpine-bound, carrying a signed state envelope.
+        $field = new \Milpa\DesktopApp\Live\ComposerField('sign-secret', 'csrf-secret');
+        $rendered = $field->render();
+
+        self::assertStringContainsString('milpaField', $rendered, 'the Alpine local runtime factory');
+        self::assertStringContainsString('data-milpa-component="textarea"', $rendered);
+        self::assertStringContainsString('application/milpa+xhtml', $rendered, 'the signed state envelope');
+
+        // Wired into the shell, the composer hosts that component and serves the client runtime.
+        $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, null, $field))
+            ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        self::assertStringContainsString('data-milpa-component="textarea"', $body);
+        self::assertStringContainsString('/desktop/assets/milpa-live.js', $body);
+    }
+
     public function testTheComposerCarriesFloatingContextAndSessionPanels(): void
     {
         // Wireframe 3a: clean floating panels over the composer, opened by their figures, fed by real data.

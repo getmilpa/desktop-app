@@ -45,6 +45,7 @@ final class ShellController
         private readonly MilpaEventDispatcherInterface $events,
         private readonly ?MercureConfig $mercure = null,
         private readonly ?DesktopData $data = null,
+        private readonly ?\Milpa\DesktopApp\Live\ComposerField $composerField = null,
     ) {
     }
 
@@ -171,6 +172,12 @@ final class ShellController
                 $key,
             );
         }
+
+        // The composer's text field IS a milpa/live component when the framework's UI system is wired
+        // (greenhouse decisions/0189); otherwise a plain textarea (backwards-compatible fallback).
+        $field = $this->composerField !== null
+            ? $this->composerField->render()
+            : '<textarea id="composer-input" class="mui-textarea" rows="2" placeholder="Write to the session…" style="border:0;outline:0;background:transparent;min-height:3rem;padding:0;font-size:var(--text-sm);font-family:var(--font-mono);width:100%;resize:none"></textarea>';
         $free = $this->kfmt($ctx['free']);
         $pct = $ctx['used_pct'];
         $barColor = $pct < 70 ? 'var(--success)' : ($pct < 90 ? 'var(--warning)' : 'var(--danger)');
@@ -196,7 +203,7 @@ final class ShellController
   </div>
 
   <div class="milpa-composer-box" style="border:1px solid var(--border);border-radius:22px;background:var(--surface-raised);box-shadow:var(--shadow-md);padding:var(--space-4) var(--space-5) var(--space-3)">
-    <textarea id="composer-input" class="mui-textarea" rows="2" placeholder="Write to the session…" style="border:0;outline:0;background:transparent;min-height:3rem;padding:0;font-size:var(--text-sm);font-family:var(--font-mono);width:100%;resize:none"></textarea>
+    {$field}
     <div style="display:flex;align-items:center;gap:var(--space-3);margin-top:var(--space-2)">
       <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--icon" aria-label="attach" style="border-radius:var(--radius-full)">＋</button>
       <span style="position:relative;display:inline-flex">
@@ -747,7 +754,8 @@ HTML;
         });
       });
     });
-    var composerInput = document.getElementById('composer-input');
+    // The composer's textarea — the milpa/live component's field when wired, else the fallback (same query).
+    var composerInput = document.querySelector('#milpa-composer-dock textarea');
     var sendBtn = document.getElementById('milpa-send');
     var chat = document.getElementById('milpa-chat');
     // The send button is enabled only when there is something to send (text today; attachments later).
@@ -801,6 +809,8 @@ HTML;
       if (text === '') { return; }
       appendMessage('user', { text: text });
       composerInput.value = '';
+      // Notify the milpa/live component (Alpine x-model / @input) so its state clears too.
+      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
       refreshSend();
       composerInput.focus();
     }
@@ -1038,6 +1048,10 @@ HTML;
 </script>
 <!-- The connection to the Mercure hub is rendered here when a hub is wired; it feeds MilpaShell. -->
 <!--LIVE-->
+<!-- milpa/live — the framework's official UI system. The client runtime registers the local Alpine
+     factories the components emit; it loads BEFORE Alpine boots. Served from the milpa/live-web package. -->
+<script src="/desktop/assets/milpa-live.js"></script>
+<script src="/desktop/assets/alpine.min.js"></script>
 </body>
 </html>
 HTML;
