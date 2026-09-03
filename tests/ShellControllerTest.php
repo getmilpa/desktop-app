@@ -15,8 +15,10 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Tests;
 
 use Milpa\DesktopApp\Controllers\ShellController;
+use Milpa\Eventing\EventDispatcher;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * The shell is served over HTTP at a real origin (greenhouse decisions/0188): that is the move that
@@ -24,9 +26,15 @@ use PHPUnit\Framework\TestCase;
  */
 final class ShellControllerTest extends TestCase
 {
+    private function controller(): ShellController
+    {
+        // A real dispatcher with no subscribers: dispatch is a no-op, so the shell renders its base.
+        return new ShellController(new EventDispatcher(new NullLogger()));
+    }
+
     public function testItServesTheShellAsHtml(): void
     {
-        $res = (new ShellController())->shell(new ServerRequest('GET', '/desktop'));
+        $res = $this->controller()->shell(new ServerRequest('GET', '/desktop'));
 
         self::assertSame(200, $res->getStatusCode());
         self::assertStringContainsString('text/html', $res->getHeaderLine('Content-Type'));
@@ -35,7 +43,7 @@ final class ShellControllerTest extends TestCase
 
     public function testTheShellReachesThePasskeyDoorsInThisOrigin(): void
     {
-        $body = (string) (new ShellController())->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
         // Same-origin links: the whole point of serving the shell over HTTP.
         self::assertStringContainsString('/webauthn/enroll', $body);

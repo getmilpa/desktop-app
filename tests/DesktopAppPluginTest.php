@@ -17,9 +17,12 @@ namespace Milpa\DesktopApp\Tests;
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\DesktopAppPlugin;
+use Milpa\Eventing\EventDispatcher;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\Route;
+use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * The plugin mounts the shell route and registers its controller (greenhouse decisions/0188): a Milpa
@@ -43,6 +46,8 @@ final class DesktopAppPluginTest extends TestCase
     public function testBootRegistersTheShellController(): void
     {
         $container = new DIContainer();
+        // The kernel registers the dispatcher before plugins boot; mirror that here.
+        $container->registerService(MilpaEventDispatcherInterface::class, new EventDispatcher(new NullLogger()));
         $plugin = new DesktopAppPlugin($container);
         $plugin->boot();
 

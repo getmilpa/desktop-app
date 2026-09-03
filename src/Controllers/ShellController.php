@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Controllers;
 
+use Milpa\DesktopApp\ShellComposition;
+use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -22,25 +24,54 @@ use Psr\Http\Message\ServerRequestInterface;
  * Serves the desktop shell over HTTP (greenhouse decisions/0188).
  *
  * This is the seam where the app's own UI lives, served by Milpa so a host loads it at a real origin.
- * The first slice serves a shell that PROVES the architecture: it declares it is Milpa-served, and it
- * links the passkey ceremony (`/webauthn/enroll`, `/webauthn/intent`) which now shares this origin —
- * so the ceremony no longer needs a separate `file://`-workaround window. The full renderer migration,
- * the live components and the reactive event bus are the arc; this establishes that a plugin can serve
- * the shell and that the shell is same-origin as the doors it must reach.
+ * The shell PROVES the architecture: it declares it is Milpa-served, and it links the passkey ceremony
+ * (`/webauthn/enroll`, `/webauthn/intent`) which now shares this origin — so the ceremony no longer
+ * needs a separate `file://`-workaround window.
+ *
+ * The shell is also EXTENSIBLE by other plugins: on every render it dispatches {@see COMPOSE_EVENT}
+ * with a {@see ShellComposition} in the payload, and any plugin that subscribed to that event (in its
+ * own `boot()`) appends sections that this controller renders into the page. That is the reactive-UI
+ * seam of 0188 in its first, render-time form — a plugin renders the UI and other plugins modify it,
+ * decoupled through the event name. Live push over websockets (milpa/mercure) is the deferred arc; this
+ * establishes the composition seam it will later push into.
  */
 final class ShellController
 {
-    /** Serve the desktop shell page. */
+    /** The event other plugins subscribe to (in their `boot()`) to contribute shell sections. */
+    public const COMPOSE_EVENT = 'desktop.shell.compose';
+
+    public function __construct(private readonly MilpaEventDispatcherInterface $events)
+    {
+    }
+
+    /** Serve the desktop shell page, composed with every plugin's contributed sections. */
     public function shell(ServerRequestInterface $request): ResponseInterface
     {
+        $composition = new ShellComposition();
+        $this->events->dispatch(self::COMPOSE_EVENT, ['composition' => $composition]);
+
         return new Response(
             200,
             ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'],
-            $this->html(),
+            $this->html($composition),
         );
     }
 
-    private function html(): string
+    private function html(ShellComposition $composition): string
+    {
+        $extensions = '';
+        foreach ($composition->sections() as $section) {
+            $extensions .= sprintf(
+                '  <section class="card ext" data-plugin="%s">%s</section>' . "\n",
+                htmlspecialchars($section['id'], ENT_QUOTES),
+                $section['html'],
+            );
+        }
+
+        return str_replace('<!--EXTENSIONS-->', $extensions, $this->template());
+    }
+
+    private function template(): string
     {
         return <<<'HTML'
 <!doctype html>
@@ -79,10 +110,12 @@ final class ShellController
   </p>
 </div>
 
+<!-- Sections other plugins contribute through desktop.shell.compose are rendered here. -->
+<!--EXTENSIONS-->
 <div class="card">
   <h2>What comes next</h2>
-  <p>This shell is the seam. The full UI as Milpa components, the reactive event bus
-  (websockets / milpa/mercure) and the events other plugins hook to change this UI are the arc
+  <p>Other plugins extend this shell by subscribing to <code>desktop.shell.compose</code>. Live push
+  over websockets (milpa/mercure) and the full UI as Milpa components are the arc
   (greenhouse decisions/0188).</p>
 </div>
 HTML;

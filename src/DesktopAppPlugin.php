@@ -20,6 +20,7 @@ use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Di\DIContainerInterface;
+use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Runtime\Http\RouteProviderInterface;
 
@@ -58,10 +59,18 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         return $this->container;
     }
 
-    /** Register the shell controller so the router can resolve it. */
+    /**
+     * Register the shell controller so the router can resolve it, wired with the event dispatcher the
+     * shell composes through. The kernel registers the dispatcher BEFORE any plugin boots, so it is
+     * present here — the assert documents that invariant (and lets the container's own resolution be
+     * the loud failure if the contract is ever broken).
+     */
     public function boot(): void
     {
-        $this->container->registerService(ShellController::class, new ShellController());
+        $events = $this->container->get(MilpaEventDispatcherInterface::class);
+        assert($events instanceof MilpaEventDispatcherInterface);
+
+        $this->container->registerService(ShellController::class, new ShellController($events));
     }
 
     /** The shell route: the app's own UI, served over HTTP for a host to load at a real origin. */
