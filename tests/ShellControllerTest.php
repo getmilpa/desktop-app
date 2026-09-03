@@ -75,7 +75,8 @@ final class ShellControllerTest extends TestCase
         $body = (string) (new ShellController($dispatcher))->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
         self::assertStringContainsString('data-panel="sessions"', $body);
-        self::assertStringContainsString('<h2>Sessions</h2>', $body);
+        self::assertStringContainsString('Sessions', $body);
+        self::assertStringContainsString('mui-card__title', $body);
         self::assertStringContainsString('data-panel-body', $body);
         self::assertStringContainsString('data-count', $body);
     }

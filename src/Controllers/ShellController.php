@@ -22,16 +22,18 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Serves the Milpa Desktop dashboard over HTTP (greenhouse decisions/0188, 0478).
+ * Serves the Milpa Desktop dashboard — the real UI, built from the Milpa design system (greenhouse decisions/0479).
  *
- * The whole Desktop UI, built from Milpa components: a header with a live connection indicator and a
- * responsive grid of panels. Every panel is a component on the {@see runtimeScript()} client runtime —
- * it renders server-side and reacts to live events. The built-ins are the consent gate (the Desktop's
- * reason to exist), the activity stream, and the passkey doors; plugins add their own panels through the
- * composition seam ({@see COMPOSE_EVENT}) with `addPanel()` and drive them live via `MilpaShell.panel()`.
+ * The whole Desktop app frame implemented from the canonical wireframes ("Wireframes de Milpa Design"): the
+ * window chrome, the `mui-shell` grid (sidebar with sessions + a topbar + tabbed main), the composer and the
+ * status bar — styled by the vendored `@milpa/design` system (`tierra/oro/olivo` tokens, `mui-*` components,
+ * Space Grotesk / Space Mono), dark-first with a light toggle, served by {@see AssetsController}.
  *
- * Served by Milpa at a real origin, so the passkey ceremony (`/webauthn/*`) is same-origin; when a Mercure
- * hub is wired ({@see MercureConfig}, evidence/0474-0475) the grid updates with no poll.
+ * Every panel is a component on the {@see runtimeScript()} client runtime: the consent gate (the design's
+ * `mui-gate`, rendered live when an agent parks one), the Activity tab (the live event stream), and any panel
+ * a plugin contributes through {@see COMPOSE_EVENT} with `addPanel()`, driven live via `MilpaShell.panel()`.
+ * When a Mercure hub is wired ({@see MercureConfig}) the UI updates with no poll; the passkey ceremony is
+ * same-origin. UI, UX and DX, all Milpa components.
  */
 final class ShellController
 {
@@ -63,15 +65,19 @@ final class ShellController
     {
         $panels = '';
         foreach ($composition->sections() as $section) {
-            $title = $section['title'] !== null
-                ? '<header class="panel-h"><h2>' . htmlspecialchars($section['title'], ENT_QUOTES) . '</h2></header>'
+            $header = $section['title'] !== null
+                ? '<div class="mui-card__header"><h2 class="mui-card__title">' . htmlspecialchars($section['title'], ENT_QUOTES) . '</h2></div>'
                 : '';
             $panels .= sprintf(
-                '<section class="panel" data-panel="%1$s" data-plugin="%1$s">%2$s<div class="panel-body" data-panel-body>%3$s</div></section>' . "\n",
+                '<section class="mui-card" data-panel="%1$s" data-plugin="%1$s">%2$s<div class="mui-card__body" data-panel-body>%3$s</div></section>' . "\n",
                 htmlspecialchars($section['id'], ENT_QUOTES),
-                $title,
+                $header,
                 $section['html'],
             );
+        }
+        if ($panels === '') {
+            $panels = '<p class="mui-empty">No plugin has contributed a panel yet. A plugin adds one with '
+                . '<code>ShellComposition::addPanel()</code>.</p>';
         }
 
         return str_replace(
@@ -84,10 +90,8 @@ final class ShellController
     /**
      * The client component runtime, always served (greenhouse decisions/0476, 0478).
      *
-     * `MilpaShell` is the bridge between the live transport and the UI, and the panel API is the DX: a
-     * component registers `on('<event>', cb)` / `onAny(cb)`, reads its panel body with `panel('<id>')`, and
-     * tracks the connection with `onStatus(cb)`. Defined before the panels so a plugin's own script can
-     * register against it; the connection that feeds it is {@see connectScript()}.
+     * `MilpaShell` bridges the live transport to the UI, and the panel API is the DX: `on('<event>', cb)` /
+     * `onAny(cb)` react to events, `panel('<id>')` returns a panel body, `onStatus(cb)` tracks the connection.
      */
     private function runtimeScript(): string
     {
@@ -142,161 +146,193 @@ HTML;
     {
         return <<<'HTML'
 <!doctype html>
+<html data-theme="dark" lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Milpa Desktop</title>
+<link rel="stylesheet" href="/desktop/assets/tokens.css">
+<link rel="stylesheet" href="/desktop/assets/bundle.css">
 <style>
-  :root {
-    --bg: oklch(0.985 0.004 150);
-    --surface: oklch(1 0 0);
-    --surface-2: oklch(0.965 0.006 150);
-    --ink: oklch(0.26 0.012 160);
-    --muted: oklch(0.52 0.012 160);
-    --line: oklch(0.26 0.012 160 / 0.14);
-    --accent: oklch(0.58 0.13 150);
-    --accent-ink: oklch(0.99 0.01 150);
-    --shadow: 0 1px 2px oklch(0.26 0.02 160 / 0.06), 0 6px 20px oklch(0.26 0.02 160 / 0.06);
-  }
-  :root:not([data-theme="light"]) {
-    @media (prefers-color-scheme: dark) {
-      --bg: oklch(0.17 0.01 160); --surface: oklch(0.21 0.012 160); --surface-2: oklch(0.235 0.014 160);
-      --ink: oklch(0.93 0.006 150); --muted: oklch(0.68 0.012 160); --line: oklch(0.93 0.01 150 / 0.14);
-      --accent: oklch(0.74 0.14 150); --accent-ink: oklch(0.17 0.02 160);
-      --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.35);
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: oklch(0.17 0.01 160); --surface: oklch(0.21 0.012 160); --surface-2: oklch(0.235 0.014 160);
-    --ink: oklch(0.93 0.006 150); --muted: oklch(0.68 0.012 160); --line: oklch(0.93 0.01 150 / 0.14);
-    --accent: oklch(0.74 0.14 150); --accent-ink: oklch(0.17 0.02 160);
-    --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.35);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  code, .mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", monospace; }
-  a { color: var(--accent); text-underline-offset: 2px; }
-
-  header.top {
-    position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    padding: .85rem 1.4rem; background: color-mix(in oklab, var(--bg) 86%, transparent);
-    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
-  }
-  .brand { display: flex; align-items: baseline; gap: .55rem; }
-  .brand b { font-size: 1.02rem; font-weight: 650; letter-spacing: -0.01em; }
-  .brand span { font-size: .82rem; color: var(--muted); }
-  .conn { display: inline-flex; align-items: center; gap: .45rem; font-size: .82rem; color: var(--muted); }
-  .conn .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--muted); }
-  .conn[data-state="live"] { color: var(--accent); }
-  .conn[data-state="live"] .dot { background: var(--accent); box-shadow: 0 0 0 0 var(--accent); animation: pulse 2.4s ease-out infinite; }
-  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 55%, transparent); } 70%,100% { box-shadow: 0 0 0 .5rem transparent; } }
-
-  main { max-width: 68rem; margin: 0 auto; padding: 1.5rem 1.4rem 4rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 1rem; align-items: start; }
-  .panel {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    padding: 1rem 1.1rem 1.1rem; box-shadow: var(--shadow); min-width: 0;
-  }
-  .panel-h { display: flex; align-items: center; justify-content: space-between; margin: 0 0 .7rem; }
-  .panel h2 { font-size: .95rem; font-weight: 620; margin: 0; letter-spacing: -0.005em; }
-  .panel p { margin: 0 0 .7rem; color: var(--muted); font-size: .9rem; }
-  .panel .lede { color: var(--ink); }
-
-  .btn {
-    display: inline-flex; align-items: center; gap: .4rem; text-decoration: none; cursor: pointer;
-    border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
-    border-radius: 9px; padding: .5rem .85rem; font-size: .88rem; font-weight: 550;
-    transition: background .15s ease, transform .1s ease;
-  }
-  .btn:hover { background: color-mix(in oklab, var(--accent) 10%, var(--surface-2)); }
-  .btn:active { transform: translateY(1px); }
-  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-  .btn.primary:hover { background: color-mix(in oklab, var(--accent) 88%, black); }
-  .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .3rem; }
-
-  .kv { font-size: .88rem; margin: .15rem 0; }
-  .kv b { color: var(--muted); font-weight: 550; margin-right: .35rem; }
-  ul.feed { list-style: none; margin: 0; padding: 0; font: 12.5px/1.5 ui-monospace, monospace; max-height: 15rem; overflow: auto; }
-  ul.feed li { padding: .3rem .5rem; border-radius: 8px; background: var(--surface-2); margin: .25rem 0; word-break: break-word; animation: rise .18s cubic-bezier(.2,.7,.3,1); }
-  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-  .muted { color: var(--muted); }
-
-  /* The consent gate: elevated, spans the whole grid, demands the eye when active. */
-  .panel.gate { grid-column: 1 / -1; border-color: color-mix(in oklab, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent), var(--shadow); }
-  .panel.gate .badge { font-size: .72rem; color: var(--accent); border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent); border-radius: 999px; padding: .1rem .5rem; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .conn[data-state="live"] .dot { animation: none; }
-    ul.feed li { animation: none; }
-    .btn { transition: none; }
-  }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-body); }
+  .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .chrome { flex: none; display: flex; align-items: center; gap: var(--space-3); height: 46px; padding: 0 var(--space-4); border-bottom: 1px solid var(--border-subtle); background: var(--surface); }
+  .lights { display: flex; gap: 8px; }
+  .lights span { width: 12px; height: 12px; border-radius: 99px; }
+  .statusbar { flex: none; display: flex; align-items: center; gap: var(--space-5); height: 40px; padding: 0 var(--space-4); border-top: 1px solid var(--border-subtle); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+  .tabpane[hidden] { display: none; }
+  ul.feed { list-style: none; margin: 0; padding: 0; font: var(--text-xs)/1.5 var(--font-mono); overflow: auto; }
+  ul.feed li { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); margin: var(--space-2) 0; word-break: break-word; }
+  .mui-empty { color: var(--text-muted); font-size: var(--text-sm); }
+  .panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: var(--space-4); }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 </style>
+</head>
+<body>
 <!--RUNTIME-->
+<div class="app">
 
-<header class="top">
-  <div class="brand"><b>Milpa Desktop</b><span>served by Milpa, one origin</span></div>
-  <div class="conn" id="milpa-conn" data-state="idle"><span class="dot"></span><span data-conn-label>connecting…</span></div>
-</header>
-
-<main>
-  <div class="grid">
-
-    <!-- The consent gate: hidden until an agent parks one, then rendered live from a gate.opened event. -->
-    <section class="panel gate" id="milpa-gate" hidden>
-      <div class="panel-h"><h2>An agent is asking to act</h2><span class="badge">awaiting you</span></div>
-      <p class="kv"><b>Operation</b><code data-gate-op></code></p>
-      <p class="kv"><b>Arguments</b><code data-gate-args></code></p>
-      <div class="actions">
-        <a class="btn primary" data-gate-approve href="#">Approve with passkey</a>
-        <button type="button" class="btn" data-gate-dismiss>Dismiss</button>
-      </div>
-    </section>
-
-    <section class="panel" data-panel="activity">
-      <div class="panel-h"><h2>Activity</h2></div>
-      <p>Every change the runtime receives, live.</p>
-      <ul class="feed" id="milpa-activity" aria-live="polite"><li class="muted">waiting for changes…</li></ul>
-    </section>
-
-    <section class="panel" data-panel="passkey">
-      <div class="panel-h"><h2>Passkey</h2></div>
-      <p>The ceremony runs in this origin — no <code>file://</code>, no separate window.</p>
-      <div class="actions">
-        <a class="btn" href="/webauthn/enroll">Register a passkey</a>
-        <a class="btn" href="/webauthn/intent?operation=capabilities.enable&amp;arguments=%7B%22name%22%3A%22a2a%22%7D&amp;session=ses-A">Approve a sample op</a>
-      </div>
-    </section>
-
-    <!-- Panels other plugins contribute through desktop.shell.compose are rendered here. -->
-    <!--PANELS-->
-
+  <div class="chrome">
+    <span class="lights"><span style="background:var(--danger)"></span><span style="background:var(--warning)"></span><span style="background:var(--success)"></span></span>
+    <span class="mui-search-trigger" style="max-width:280px;margin-inline-start:var(--space-4)"><span class="mui-search-trigger__icon" aria-hidden="true">⌕</span>Search sessions<span class="mui-kbd" style="margin-inline-start:auto">⌘K</span></span>
+    <span style="margin-inline:auto;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">served by Milpa · one origin</span>
+    <button type="button" class="mui-btn mui-btn--ghost mui-btn--sm" id="milpa-theme" aria-label="toggle theme">◐ Theme</button>
   </div>
-</main>
+
+  <div class="mui-shell" style="flex:1;min-height:0;--_sidebar-w:17.5rem;overflow:hidden;display:grid;grid-template-columns:var(--_sidebar-w) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)">
+    <nav class="mui-sidebar" aria-label="main" style="grid-row:1 / span 2;grid-column:1;position:static;height:auto;min-height:0">
+      <span class="mui-sidebar__brand"><span style="display:inline-flex;width:26px;height:26px;border-radius:99px;align-items:center;justify-content:center;background:var(--accent-subtle);color:var(--accent)">◇</span><span class="mui-sidebar__wordmark">Milpa</span></span>
+      <div class="mui-sidebar__nav">
+        <div class="mui-sidebar__section">
+          <a class="mui-sidebar__item" href="#" aria-current="page"><span class="mui-sidebar__item-icon">▤</span><span class="mui-sidebar__item-label">Sessions</span></a>
+          <a class="mui-sidebar__item" href="#" data-nav="decisions"><span class="mui-sidebar__item-icon">◈</span><span class="mui-sidebar__item-label">Decisions</span><span class="mui-sidebar__item-badge mui-badge mui-badge--warning" id="milpa-decisions-badge" hidden>1</span></a>
+          <a class="mui-sidebar__item" href="#"><span class="mui-sidebar__item-icon">▩</span><span class="mui-sidebar__item-label">Capabilities</span></a>
+          <a class="mui-sidebar__item" href="#"><span class="mui-sidebar__item-icon">⚙</span><span class="mui-sidebar__item-label">Settings</span></a>
+        </div>
+        <div class="mui-sidebar__section">
+          <span class="mui-sidebar__section-label">sessions · goal and state</span>
+          <a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3);background:var(--accent-subtle)"><span style="font-size:var(--text-sm)">Official website</span><span class="mui-badge mui-badge--accent mui-badge--dot">Working</span></a>
+          <a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span style="font-size:var(--text-sm)">Audit the app's plugins</span><span class="mui-badge">Ready to continue</span></a>
+          <a class="mui-sidebar__item" href="#" style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span style="font-size:var(--text-sm);color:var(--text-muted)">default · new</span></a>
+        </div>
+      </div>
+      <div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">
+        <button type="button" class="mui-btn mui-btn--subtle mui-btn--full">New session</button>
+        <a class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" href="/webauthn/enroll">Register a passkey</a>
+      </div>
+    </nav>
+
+    <header class="mui-topbar" style="grid-row:1;grid-column:2;min-height:64px">
+      <div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px">
+        <span style="font-size:var(--text-base);font-weight:var(--weight-medium)">Publish the official site with visual validation</span>
+        <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session 3f9c · ask mode</span>
+      </div>
+      <div class="mui-topbar__end">
+        <span class="mui-badge mui-badge--accent mui-badge--dot" id="milpa-topstate">Working</span>
+        <span class="mui-badge">Ask before changing</span>
+        <button type="button" class="mui-btn mui-btn--sm">Interrupt turn</button>
+      </div>
+    </header>
+
+    <main class="mui-shell__main mui-shell__main--wide" style="grid-row:2;grid-column:2;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
+      <div class="mui-tabs" role="tablist" style="padding:0 var(--space-6);flex:none">
+        <button class="mui-tabs__tab" role="tab" aria-selected="true" type="button" data-tab="chat">Conversation</button>
+        <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="work">Work</button>
+        <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="activity">Activity</button>
+        <button class="mui-tabs__tab" role="tab" aria-selected="false" type="button" data-tab="context">Context</button>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
+
+        <section class="tabpane" data-pane="chat" style="display:flex;flex-direction:column;gap:var(--space-5);max-width:88ch">
+          <div style="display:flex;justify-content:flex-end">
+            <div style="max-width:56ch;padding:var(--space-3) var(--space-5);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)">
+              <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">you · now</span>
+              <p style="margin:var(--space-2) 0 0;font-size:var(--text-sm)">Enable the devtools capability on this app.</p>
+            </div>
+          </div>
+          <div>
+            <span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">agent · local</span>
+            <p style="margin:var(--space-2) 0 0;font-size:var(--text-sm);line-height:var(--leading-relaxed);text-wrap:pretty">When an agent needs your decision, it parks a gate here — a durable question, not a modal. Approve it with your passkey, in this origin.</p>
+          </div>
+
+          <!-- The consent gate: the design's mui-gate, rendered live when an agent parks one. -->
+          <div class="mui-card mui-card--raised" id="milpa-gate" hidden style="border-color:var(--warning-border);background:var(--warning-bg)">
+            <div class="mui-card__body mui-gate">
+              <div class="mui-gate__request">
+                <p class="mui-gate__actor" style="margin:0">an agent stopped its turn · a durable question, not a modal</p>
+                <p class="mui-gate__action" style="margin:var(--space-2) 0;font-size:var(--text-base)" data-gate-action>An agent is asking to act.</p>
+                <p class="mui-gate__facts" style="margin:0">operation <strong data-gate-op></strong> · arguments <code data-gate-args></code></p>
+              </div>
+              <div class="mui-gate__decisions">
+                <a class="mui-btn mui-btn--primary" data-gate-approve href="#">Approve with passkey</a>
+                <button type="button" class="mui-btn" data-gate-dismiss>Dismiss</button>
+              </div>
+              <p style="margin:0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Answering keeps your answer; it does not resume the session. Continuing is another verb.</p>
+            </div>
+          </div>
+
+          <div style="margin-top:var(--space-2);border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface);padding:var(--space-4) var(--space-5)">
+            <textarea class="mui-textarea" rows="2" placeholder="Write to the session — Continue drives it" style="border:0;background:transparent;min-height:3.5rem;padding:0;font-size:var(--text-sm)"></textarea>
+            <div class="mui-cluster mui-cluster--sm" style="margin-top:var(--space-3)">
+              <span class="mui-badge">Ask before changing</span>
+              <span style="margin-inline-start:auto;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">qwen3.8-27b · local</span>
+              <button type="button" class="mui-btn mui-btn--primary">Continue session</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="tabpane" data-pane="work" hidden>
+          <p class="mui-empty">The work board (todo columns derived from the session) lands here.</p>
+        </section>
+
+        <section class="tabpane" data-pane="activity" hidden>
+          <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Every change the runtime receives — a live stream of facts.</p>
+          <ul class="feed" id="milpa-activity" aria-live="polite"><li style="color:var(--text-muted)">waiting for changes…</li></ul>
+        </section>
+
+        <section class="tabpane" data-pane="context" hidden>
+          <div class="panel-grid">
+            <!-- Panels other plugins contribute through desktop.shell.compose (addPanel) are rendered here. -->
+            <!--PANELS-->
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <div class="statusbar">
+    <span id="milpa-conn" style="color:var(--text-muted)">○ connecting…</span>
+    <span>qwen3.8-27b · local model</span>
+    <span>2 turns · 283 steps · 41 tool calls</span>
+    <span style="margin-inline-start:auto">m4-core local-agent · v0.1.0</span>
+  </div>
+</div>
 
 <script>
   (function () {
-    var conn = document.getElementById('milpa-conn');
-    var label = conn.querySelector('[data-conn-label]');
-    var text = { live: 'live', offline: 'offline', idle: 'connecting…' };
-    window.MilpaShell.onStatus(function (state) {
-      conn.setAttribute('data-state', state);
-      label.textContent = text[state] || state;
+    // Theme toggle (dark-first; the design system reads data-theme on <html>).
+    document.getElementById('milpa-theme').addEventListener('click', function () {
+      var html = document.documentElement;
+      html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     });
 
+    // Tabs.
+    var tabs = document.querySelectorAll('.mui-tabs__tab');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
+        var name = tab.getAttribute('data-tab');
+        document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
+      });
+    });
+    function showTab(name) {
+      tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.getAttribute('data-tab') === name)); });
+      document.querySelectorAll('.tabpane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== name; });
+    }
+
+    // Connection status → status bar + top badge.
+    var conn = document.getElementById('milpa-conn');
+    var top = document.getElementById('milpa-topstate');
+    window.MilpaShell.onStatus(function (state) {
+      if (state === 'live') { conn.textContent = '◉ live'; conn.style.color = 'var(--accent-text)'; }
+      else { conn.textContent = '○ offline'; conn.style.color = 'var(--text-muted)'; }
+    });
+
+    // Activity stream.
     var list = document.getElementById('milpa-activity');
     window.MilpaShell.onAny(function (type, data) {
-      var placeholder = list.querySelector('.muted');
-      if (placeholder) { list.removeChild(placeholder); }
+      var placeholder = list.querySelector('li');
+      if (placeholder && placeholder.textContent.indexOf('waiting') === 0) { list.removeChild(placeholder); }
       var li = document.createElement('li');
       li.textContent = type + ' · ' + JSON.stringify(data);
       list.insertBefore(li, list.firstChild);
     });
 
+    // The consent gate.
     var gate = document.getElementById('milpa-gate');
+    var badge = document.getElementById('milpa-decisions-badge');
     window.MilpaShell.on('gate.opened', function (g) {
       var args = (g && g.arguments) || {};
       var href = '/webauthn/intent?operation=' + encodeURIComponent(g.operation)
@@ -304,14 +340,19 @@ HTML;
         + '&session=' + encodeURIComponent(g.session || '');
       gate.querySelector('[data-gate-op]').textContent = g.operation || '';
       gate.querySelector('[data-gate-args]').textContent = JSON.stringify(args);
+      gate.querySelector('[data-gate-action]').textContent = 'An agent is asking to run ' + (g.operation || '') + '.';
       gate.querySelector('[data-gate-approve]').setAttribute('href', href);
       gate.hidden = false;
+      badge.hidden = false;
+      showTab('chat');
     });
-    gate.querySelector('[data-gate-dismiss]').addEventListener('click', function () { gate.hidden = true; });
+    gate.querySelector('[data-gate-dismiss]').addEventListener('click', function () { gate.hidden = true; badge.hidden = true; });
   })();
 </script>
 <!-- The connection to the Mercure hub is rendered here when a hub is wired; it feeds MilpaShell. -->
 <!--LIVE-->
+</body>
+</html>
 HTML;
     }
 }

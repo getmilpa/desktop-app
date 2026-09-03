@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp;
 
 use Milpa\Attributes\PluginMetadata;
+use Milpa\DesktopApp\Controllers\AssetsController;
 use Milpa\DesktopApp\Controllers\EventsController;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Live\MercureConfig;
@@ -85,6 +86,8 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $mercure = $this->mercure();
         $this->container->registerService(ShellController::class, new ShellController($events, $mercure));
 
+        $this->container->registerService(AssetsController::class, new AssetsController());
+
         $log = new ShellEventLog($this->logPath());
         [$windowMs, $pollMs] = $this->feedTiming();
         $this->container->registerService(EventsController::class, new EventsController($log, new SseFormatter(), $windowMs, $pollMs));
@@ -115,6 +118,18 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 methods: HttpMethod::GET,
                 name: 'desktop.events',
                 handler: new HandlerReference(EventsController::class, 'events'),
+            ),
+            new Route(
+                path: '/desktop/assets/tokens.css',
+                methods: HttpMethod::GET,
+                name: 'desktop.assets.tokens',
+                handler: new HandlerReference(AssetsController::class, 'tokens'),
+            ),
+            new Route(
+                path: '/desktop/assets/bundle.css',
+                methods: HttpMethod::GET,
+                name: 'desktop.assets.bundle',
+                handler: new HandlerReference(AssetsController::class, 'bundle'),
             ),
         ];
     }
