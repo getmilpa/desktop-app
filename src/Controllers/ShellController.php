@@ -68,13 +68,18 @@ final class ShellController
             $cookies[] = 'mercureAuthorization=' . $this->mercure->subscriberJwt() . '; Path=/; SameSite=Lax';
         }
 
-        // The milpa/live session id binds the signed state + CSRF for the composer's server round-trip.
-        $csrf = '';
+        // The milpa/live boot payload the client runtime reads (#milpa-live-boot): the endpoint, the session
+        // id, and the CSRF token — bound to this session and route. The remote field posts with these.
+        $liveBoot = '';
         if ($this->composerField !== null) {
             $existing = $request->getCookieParams()[\Milpa\DesktopApp\Live\ComposerField::SESSION_COOKIE] ?? null;
             $liveSid = \is_string($existing) && $existing !== '' ? $existing : bin2hex(random_bytes(16));
             $cookies[] = \Milpa\DesktopApp\Live\ComposerField::SESSION_COOKIE . '=' . $liveSid . '; Path=/; SameSite=Lax; HttpOnly';
-            $csrf = $this->composerField->csrfToken($liveSid);
+            $liveBoot = (string) json_encode([
+                'endpoint' => \Milpa\DesktopApp\Live\ComposerField::ROUTE,
+                'sessionId' => $liveSid,
+                'csrfToken' => $this->composerField->csrfToken($liveSid),
+            ], \JSON_UNESCAPED_SLASHES);
         }
 
         $headers = ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'];
@@ -82,10 +87,10 @@ final class ShellController
             $headers['Set-Cookie'] = \count($cookies) === 1 ? $cookies[0] : $cookies;
         }
 
-        return new Response(200, $headers, $this->html($composition, $csrf));
+        return new Response(200, $headers, $this->html($composition, $liveBoot));
     }
 
-    private function html(ShellComposition $composition, string $liveCsrf = ''): string
+    private function html(ShellComposition $composition, string $liveBoot = ''): string
     {
         $panels = '';
         foreach ($composition->sections() as $section) {
@@ -107,11 +112,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVECSRF-->',
+                '<!--SESSIONS-->', '<!--STATUS-->', '<!--WORK-->', '<!--AUDIT-->', '<!--PROJECTION-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPHEADER-->', '<!--TOPBARACTIONS-->', '<!--LIVEBOOT-->',
             ],
             [
                 $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), htmlspecialchars($liveCsrf, ENT_QUOTES),
+                $this->sessionsList(), $this->statusCounters(), $this->workBoard(), $this->auditStream(), $this->projectionStats(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHeader(), $this->topbarActions(), str_replace('</', '<\/', $liveBoot),
             ],
             $this->template(),
         );
@@ -476,7 +481,6 @@ HTML;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="milpa-live-csrf" content="<!--LIVECSRF-->">
 <title>Milpa Desktop</title>
 <link rel="stylesheet" href="/desktop/assets/tokens.css">
 <link rel="stylesheet" href="/desktop/assets/bundle.css">
@@ -935,29 +939,8 @@ HTML;
       });
     });
 
-    // The composer field posts to the live endpoint on blur (the remote path): the server validates and,
-    // via a cross-component RenderEffect, re-paints the sibling status — declared behaviour, no imperative
-    // wiring (greenhouse evidence/0491). We drive the post here because a textarea's runtime is local.
-    (function () {
-      if (!composerInput) { return; }
-      var meta = document.querySelector('meta[name="milpa-live-csrf"]');
-      var token = meta ? meta.getAttribute('content') : '';
-      if (!token) { return; } // no live endpoint wired
-      composerInput.addEventListener('blur', function () {
-        var envelope = document.querySelector('script[data-milpa-state="composer-message"]');
-        if (!envelope) { return; }
-        fetch('/desktop/live', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
-          body: JSON.stringify({ action: 'blur', state: envelope.textContent, payload: { value: composerInput.value } })
-        }).then(function (r) { return r.json(); }).then(function (res) {
-          (res && res.effects || []).forEach(function (e) {
-            if (!e || e.type !== 'render' || !e.target || !e.html) { return; }
-            var target = document.querySelector('[data-milpa-component-id="' + e.target + '"]');
-            if (target) { target.outerHTML = e.html; }
-          });
-        }).catch(function () {});
-      });
-    })();
+    // The composer field's server round-trip on blur (validate + cross-component effects) is now the
+    // framework's own remote runtime (milpaFieldRemote, bound via `remote`); no Desktop JS drives it.
 
     // New session: open the entry overlay to configure and confirm a new session.
     var newBtn = document.getElementById('milpa-new-session');
@@ -1087,9 +1070,11 @@ HTML;
 </script>
 <!-- The connection to the Mercure hub is rendered here when a hub is wired; it feeds MilpaShell. -->
 <!--LIVE-->
-<!-- milpa/live — the framework's official UI system. The client runtime registers the local Alpine
-     factories the components emit; it loads BEFORE Alpine boots. Served from the milpa/live-web package. -->
+<!-- milpa/live — the framework's official UI system. The boot payload feeds the remote runtime; the local
+     and remote runtimes register their Alpine factories BEFORE Alpine boots. Served from the package. -->
+<script id="milpa-live-boot" type="application/json"><!--LIVEBOOT--></script>
 <script src="/desktop/assets/milpa-live.js"></script>
+<script src="/desktop/assets/milpa-live-remote.js"></script>
 <script src="/desktop/assets/alpine.min.js"></script>
 </body>
 </html>

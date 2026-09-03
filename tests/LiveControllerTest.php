@@ -65,6 +65,22 @@ final class LiveControllerTest extends TestCase
         self::assertStringContainsString('Hola Milpa', (string) ($decoded['html'] ?? ''), 're-rendered HTML carries the value');
     }
 
+    public function testItAcceptsTheCsrfTokenInTheBody(): void
+    {
+        // The framework's client runtime sends the CSRF token in the JSON body (not a header); the endpoint
+        // must accept it there (greenhouse evidence/0491).
+        $field = new ComposerField('sign-secret', 'csrf-secret');
+        $controller = new LiveController($field->endpoint());
+
+        self::assertSame(1, preg_match('#(<milpa-state\b.*?</milpa-state>)#s', $field->render(), $m));
+        $sid = 'sess-body-1';
+        $body = (string) json_encode(['action' => 'change', 'state' => $m[1], 'payload' => ['value' => 'x'], 'csrfToken' => $field->csrfToken($sid)]);
+        $request = (new ServerRequest('POST', '/desktop/live', [], $body))->withCookieParams([ComposerField::SESSION_COOKIE => $sid]);
+
+        $res = $controller->live($request);
+        self::assertSame(200, $res->getStatusCode(), 'CSRF token in the body is accepted');
+    }
+
     public function testAMalformedInteractionIsRejected(): void
     {
         $controller = new LiveController((new ComposerField('sign', 'csrf'))->endpoint());

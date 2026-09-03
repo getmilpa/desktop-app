@@ -87,7 +87,9 @@ final class ComposerField
 
         $subject->html = $this->renderer->render($component, new RenderRequest(
             context: $context,
-            props: ['endpoint' => self::ROUTE],
+            // `remote` binds the framework's remote runtime: the field validates on the server on blur and
+            // applies the cross-component effects — no Desktop-specific JS wires the round-trip.
+            props: ['endpoint' => self::ROUTE, 'remote' => true],
             state: $state,
             target: RenderTarget::HTML,
         ))->output;
@@ -130,7 +132,7 @@ final class ComposerField
             csrf: $this->csrf,
             route: self::ROUTE,
             renderers: [self::COMPONENT => $this->renderer, self::STATUS_COMPONENT => $this->renderer],
-            renderProps: [self::COMPONENT => ['endpoint' => self::ROUTE], self::STATUS_COMPONENT => ['endpoint' => self::ROUTE]],
+            renderProps: [self::COMPONENT => ['endpoint' => self::ROUTE, 'remote' => true], self::STATUS_COMPONENT => ['endpoint' => self::ROUTE]],
         );
     }
 }

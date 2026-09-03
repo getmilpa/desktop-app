@@ -178,6 +178,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 handler: new HandlerReference(LiveController::class, 'client'),
             ),
             new Route(
+                path: '/desktop/assets/milpa-live-remote.js',
+                methods: HttpMethod::GET,
+                name: 'desktop.assets.live.remote',
+                handler: new HandlerReference(LiveController::class, 'clientRemote'),
+            ),
+            new Route(
                 path: '/desktop/assets/alpine.min.js',
                 methods: HttpMethod::GET,
                 name: 'desktop.assets.alpine',
