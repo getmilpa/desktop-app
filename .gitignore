@@ -1,0 +1,6 @@
+vendor/
+composer.lock
+coverage.xml
+build/
+.php-cs-fixer.cache
+.phpunit.cache/
