@@ -51,6 +51,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Tabs $tabs = null,
         private readonly ?\Milpa\DesktopApp\Live\WorkBoard $workBoard = null,
         private readonly ?\Milpa\DesktopApp\Live\Activity $activity = null,
+        private readonly ?\Milpa\DesktopApp\Live\Context $context = null,
     ) {
     }
 
@@ -97,30 +98,13 @@ final class ShellController
 
     private function html(ShellComposition $composition, string $liveBoot = ''): string
     {
-        $panels = '';
-        foreach ($composition->sections() as $section) {
-            $header = $section['title'] !== null
-                ? '<div class="mui-card__header"><h2 class="mui-card__title">' . htmlspecialchars($section['title'], ENT_QUOTES) . '</h2></div>'
-                : '';
-            $panels .= sprintf(
-                '<section class="mui-card" data-panel="%1$s" data-plugin="%1$s">%2$s<div class="mui-card__body" data-panel-body>%3$s</div></section>' . "\n",
-                htmlspecialchars($section['id'], ENT_QUOTES),
-                $header,
-                $section['html'],
-            );
-        }
-        if ($panels === '') {
-            $panels = '<p class="mui-empty">No plugin has contributed a panel yet. A plugin adds one with '
-                . '<code>ShellComposition::addPanel()</code>.</p>';
-        }
-
         return str_replace(
             [
-                '<!--RUNTIME-->', '<!--PANELS-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
+                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
             ],
             [
-                $this->runtimeScript(), $panels, $this->capabilitiesRows(), $this->endpointValue(),
+                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
                 $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
             ],
             $this->template(),
@@ -320,6 +304,13 @@ HTML;
         return ($this->activity ?? new \Milpa\DesktopApp\Live\Activity('desktop-activity-fallback', $this->data, $this->events))->render();
     }
 
+    /** The Context tab, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's sixth
+     *  pure-component surface. Plugins still contribute panels through the composition (addPanel). */
+    private function contextHtml(ShellComposition $composition): string
+    {
+        return ($this->context ?? new \Milpa\DesktopApp\Live\Context('desktop-context-fallback', $this->events))->render($composition->sections());
+    }
+
     /**
      * The client component runtime, always served (greenhouse decisions/0476, 0478).
      *
@@ -497,10 +488,8 @@ HTML;
         </section>
 
         <section class="tabpane" data-pane="context" hidden :hidden="$store.milpa['desktop.tab'] !== 'context'">
-          <div class="panel-grid">
-            <!-- Panels other plugins contribute through desktop.shell.compose (addPanel) are rendered here. -->
-            <!--PANELS-->
-          </div>
+          <!-- The panel grid is the `desktop-context` component; plugins contribute panels via addPanel. -->
+          <!--CONTEXT-->
         </section>
 
       </div>
