@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.0](https://github.com/getmilpa/desktop-app/compare/v0.10.0...v0.11.0) (2026-09-03)
+
+
+### Features
+
+* the data seam — screens read real runtime data, and a Capabilities screen (evidence/0481) ([08f1700](https://github.com/getmilpa/desktop-app/commit/08f1700e3b03d93373b3eeee36d0fcfade639330))
+
 ## [0.10.0](https://github.com/getmilpa/desktop-app/compare/v0.9.0...v0.10.0) (2026-09-03)
 
 
