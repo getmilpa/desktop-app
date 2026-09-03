@@ -122,7 +122,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $tabs = new \Milpa\DesktopApp\Live\Tabs($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Tabs::class, $tabs);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs));
+        // The Work board is the shell's fourth pure-Milpa-Components surface (greenhouse decisions/0189): a
+        // projection component with a signed envelope and lifecycle events; drag-drop persists via /desktop/work.
+        $workBoard = new \Milpa\DesktopApp\Live\WorkBoard($this->liveSecret('signing'), $data, $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\WorkBoard::class, $workBoard);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
