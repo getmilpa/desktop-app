@@ -71,8 +71,16 @@ final class Thinking
         // reliance on Alpine hydrating a dynamically-cloned node (which double-inits in this environment). The
         // conversation feeds this instance: the reasoning into `[data-thinking-body]`, the elapsed into
         // `[data-thinking-head]`. A server-rendered, contract'd, event-emitting component the shell clones.
-        return '<div class="msg msg--thinking milpa-think" data-milpa-component="desktop-thinking" data-milpa-component-id="' . self::COMPONENT_ID . '" data-open="1">'
-            . '<button type="button" class="milpa-think__toggle" data-thinking-toggle data-thinking-head>◈ thinking…</button>'
+        // `data-thinking-active="1"` is the LIVE flag the animation keys off (a breathing spark + typing dots +
+        // an accent edge): the model is still reasoning. `endReasoning` flips it to "0" and the block settles.
+        // The label lives in its OWN span so the elapsed («thought for Ns») replaces only the words, never the
+        // animated spark/dots — those are the component's, not the feed's.
+        return '<div class="msg msg--thinking milpa-think" data-milpa-component="desktop-thinking" data-milpa-component-id="' . self::COMPONENT_ID . '" data-open="1" data-thinking-active="1">'
+            . '<button type="button" class="milpa-think__toggle" data-thinking-toggle data-thinking-head>'
+            . '<span class="milpa-think__spark" data-thinking-spark aria-hidden="true">◈</span>'
+            . '<span class="milpa-think__label" data-thinking-label>thinking</span>'
+            . '<span class="milpa-think__dots" aria-hidden="true"><i></i><i></i><i></i></span>'
+            . '</button>'
             . '<div class="milpa-think__body" data-thinking-body></div>'
             . '</div>';
     }

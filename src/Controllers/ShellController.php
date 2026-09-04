@@ -532,15 +532,36 @@ HTML;
   /* Thinking: the agent reasoning aloud — dimmed and italic, clearly not final speech. */
   .msg--thinking { color: var(--text-muted); font-style: italic; }
   .msg--thinking > p { margin: var(--space-1) 0 0; font-size: var(--text-xs); line-height: var(--leading-relaxed); white-space: pre-wrap; }
-  /* Live thinking block: the words assemble in front of the user, then collapse to a toggle. A quiet,
-     bordered aside — visibly the model's private reasoning, never mistaken for its answer. */
-  .milpa-think { font-style: normal; border-inline-start: 2px solid var(--border); padding-inline-start: var(--space-3); }
-  .milpa-think__toggle { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 0; background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; }
+  /* Live thinking block: the words assemble in front of the user WHILE the model is still reasoning — a
+     breathing spark, typing dots, and an accent edge say "alive"; all of it stops the instant it's done and
+     the block settles to a quiet, collapsible aside — the model's private reasoning, never its answer. */
+  .milpa-think { font-style: normal; border-inline-start: 2px solid var(--border); padding-inline-start: var(--space-3); transition: border-color .45s ease; }
+  .milpa-think[data-thinking-active="1"] { border-inline-start-color: var(--accent); }
+  .milpa-think__toggle { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 0; background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; transition: color .3s ease; }
   .milpa-think__toggle:hover { color: var(--text-secondary); }
-  .milpa-think[data-open="1"] .milpa-think__toggle::after { content: ' ▾'; }
-  .milpa-think[data-open="0"] .milpa-think__toggle::after { content: ' ▸'; }
-  .milpa-think[data-open="0"] .milpa-think__body { display: none; }
-  .milpa-think__body { margin-top: var(--space-2); max-height: 16rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
+  .milpa-think[data-thinking-active="1"] .milpa-think__toggle { color: var(--text-secondary); }
+  /* The spark: a quiet diamond at rest, a breathing accent mark while the model reasons. */
+  .milpa-think__spark { display: inline-block; color: var(--text-muted); }
+  .milpa-think[data-thinking-active="1"] .milpa-think__spark { color: var(--accent-text); animation: milpa-think-pulse 1.6s ease-in-out infinite; }
+  /* Typing dots: the universal "working" cue — only while active, hidden once the block settles. */
+  .milpa-think__dots { display: none; align-items: center; gap: 3px; }
+  .milpa-think[data-thinking-active="1"] .milpa-think__dots { display: inline-flex; }
+  .milpa-think__dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--accent-text); opacity: .25; animation: milpa-think-dot 1.2s ease-in-out infinite; }
+  .milpa-think__dots i:nth-child(2) { animation-delay: .18s; }
+  .milpa-think__dots i:nth-child(3) { animation-delay: .36s; }
+  @keyframes milpa-think-pulse { 0%, 100% { opacity: .5; transform: scale(.88); } 50% { opacity: 1; transform: scale(1.18); } }
+  @keyframes milpa-think-dot { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-1.5px); } }
+  /* The caret shows only once the block is done (active=0): no collapse chevron competes with the live dots. */
+  .milpa-think[data-thinking-active="0"][data-open="1"] .milpa-think__toggle::after { content: ' ▾'; opacity: .6; }
+  .milpa-think[data-thinking-active="0"][data-open="0"] .milpa-think__toggle::after { content: ' ▸'; opacity: .6; }
+  /* Collapse animates (max-height), never a hard cut. */
+  .milpa-think__body { margin-top: var(--space-2); max-height: 16rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; transition: max-height .3s ease, opacity .22s ease, margin-top .3s ease; }
+  .milpa-think[data-open="0"] .milpa-think__body { max-height: 0; margin-top: 0; opacity: 0; overflow: hidden; }
+  @media (prefers-reduced-motion: reduce) {
+    .milpa-think[data-thinking-active="1"] .milpa-think__spark { animation: none; }
+    .milpa-think__dots i { animation: none; opacity: .8; }
+    .milpa-think, .milpa-think__toggle, .milpa-think__body { transition: none; }
+  }
   /* Tool call: a compact mono card, the machinery made legible — name + summary, the raw result collapsed. */
   .msg--tool .msg__tool-head { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); cursor: pointer; }
   .msg--tool .msg__tool-head:hover { border-color: var(--border); }
@@ -899,8 +920,11 @@ HTML;
     function endReasoning() {
       if (!reasoningEl) { return; }
       var secs = Math.max(1, Math.round((Date.now() - reasoningStart) / 1000));
-      var head = reasoningEl.querySelector('[data-thinking-head]');
-      if (head) { head.textContent = '◈ thought for ' + secs + 's'; }
+      // Replace only the LABEL words — the animated spark/dots are the component's own and must survive.
+      var label = reasoningEl.querySelector('[data-thinking-label]');
+      if (label) { label.textContent = 'thought for ' + secs + 's'; }
+      else { var head = reasoningEl.querySelector('[data-thinking-head]'); if (head) { head.textContent = '◈ thought for ' + secs + 's'; } }
+      reasoningEl.setAttribute('data-thinking-active', '0'); // stop the pulse: the reasoning is done
       reasoningEl.setAttribute('data-open', '0');
       reasoningEl = null;
     }
