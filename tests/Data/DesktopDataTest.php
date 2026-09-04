@@ -48,6 +48,13 @@ final class DesktopDataTest extends TestCase
         self::assertSame([], (new DesktopData(new DIContainer()))->capabilities());
     }
 
+    public function testPendingDecisionsAreEmptyWithoutTheAgentStore(): void
+    {
+        // The inbox degrades to none when the agent's SessionStore is not in the container (greenhouse
+        // decisions/0195) — an app without the agent shows nothing rather than failing.
+        self::assertSame([], (new DesktopData(new DIContainer()))->pendingDecisions());
+    }
+
     public function testTheModelComesFromConfigWithEnvFallback(): void
     {
         $kernel = Kernel::boot([

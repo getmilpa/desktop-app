@@ -16,6 +16,7 @@ namespace Milpa\DesktopApp\Controllers;
 
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
+use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
@@ -120,11 +121,11 @@ final class ShellController
     {
         return str_replace(
             [
-                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
+                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--DECISIONS-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
-                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->endpointValue(),
+                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->decisionsInboxHtml(), $this->endpointValue(),
                 $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
@@ -142,6 +143,17 @@ final class ShellController
         $cat = $this->data?->capabilityCatalogue() ?? ['installed' => [], 'available' => []];
 
         return (new CapabilityCatalogueView())->html($cat['installed'], $cat['available']);
+    }
+
+    /**
+     * The decisions inbox as HTML — the questions agents parked, across all sessions (greenhouse decisions/0195).
+     *
+     * Cross-session backlog: {@see DesktopData::pendingDecisions()} reads each session's parked question, and a
+     * pure {@see DecisionsInboxView} renders it so the branches are tested with fixtures, not a runtime.
+     */
+    private function decisionsInboxHtml(): string
+    {
+        return (new DecisionsInboxView())->html($this->data?->pendingDecisions() ?? []);
     }
 
     /** The model endpoint: the persisted setting if saved (0483), else the configured one. */
@@ -493,6 +505,13 @@ HTML;
   .cap-confirm__cmd { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--accent-text); word-break: break-all; }
   .cap-confirm__row { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
   .cap-msg { margin-top: var(--space-4); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
+  /* Decisions inbox: the questions agents parked, across all sessions (greenhouse decisions/0195). */
+  #milpa-decisions-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); max-width: 72ch; }
+  .decision-card { border: 1px solid var(--warning-border, var(--border)); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-4) var(--space-5); }
+  .decision-card__goal { margin: 0 0 var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+  .decision-card__q { margin: 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text); text-wrap: pretty; }
+  .decision-card__facts { margin: var(--space-2) 0 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
+  .decision-card__open { margin-top: var(--space-3); }
   .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
@@ -735,9 +754,8 @@ HTML;
       </div>
 
       <div class="view" data-view="decisions" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
-        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Decisions an agent has parked for you — durable questions, not modals. Each is approved with your passkey, in this origin.</p>
-        <ol class="mui-replay__stream" id="milpa-decisions-list" aria-live="polite"></ol>
-        <p class="mui-empty" id="milpa-decisions-empty" style="color:var(--text-muted)">No decisions to make. When an agent parks a gate, it appears here for you to approve or refuse.</p>
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Decisions an agent has parked for you, across every session — durable questions, not modals. Open the session to approve or refuse, with your passkey, in this origin.</p>
+        <!--DECISIONS-->
       </div>
 
     </main>

@@ -81,6 +81,9 @@ final class DesktopData
      * gated `capabilities:enable` over HTTP, greenhouse decisions/0193) is instantly available to both.
      *
      * @return array{installed: list<array<string, mixed>>, available: list<array<string, mixed>>, source: string}
+     *
+     * @codeCoverageIgnore reads through to the app-runtime Capabilities registry; exercised by integration
+     *                     on a booted app (greenhouse evidence/0507), not by the standalone unit suite
      */
     public function capabilityCatalogue(): array
     {
@@ -95,6 +98,62 @@ final class DesktopData
             'available' => is_array($answer['available'] ?? null) ? array_values($answer['available']) : [],
             'source' => is_string($answer['source'] ?? null) ? $answer['source'] : '',
         ];
+    }
+
+    /**
+     * The decisions inbox: every session that has a question an agent parked, across all sessions.
+     *
+     * The live gate lives in the conversation of the session it belongs to; this is the cross-session
+     * backlog — the durable questions waiting for a human, wherever they were raised. Read from the agent's
+     * {@see \Milpa\Agent\SessionStore} (each session's `->question`), guarded so an app without the agent
+     * package degrades to none rather than failing.
+     *
+     * @return list<array{session: string, goal: string, question: string, operation: string, reason: string}>
+     *
+     * @codeCoverageIgnore reads through to the agent SessionStore; exercised by integration on a booted app
+     *                     (greenhouse evidence/0509), not by the standalone unit suite
+     */
+    public function pendingDecisions(): array
+    {
+        // The agent op builds its own store at `<root>/var/agent-sessions.jsonl` rather than registering one
+        // ({@see \Milpa\AppRuntime\Operations\AgentOperations}); read the SAME file so the inbox sees the
+        // questions the agent parked. Guarded so an app without the agent/event-store packages degrades to none.
+        if (!class_exists(\Milpa\Agent\SessionStore::class) || !class_exists(\Milpa\EventStore\FileEventStore::class)) {
+            return [];
+        }
+        $kernel = $this->container->has(Kernel::class) ? $this->container->get(Kernel::class) : null;
+        if (!$kernel instanceof Kernel) {
+            return [];
+        }
+        $file = $kernel->root() . '/var/agent-sessions.jsonl';
+        if (!is_file($file)) {
+            return [];
+        }
+        $store = new \Milpa\Agent\SessionStore(new \Milpa\EventStore\FileEventStore($file));
+
+        $out = [];
+        foreach ($store->loadAll() as $session) {
+            if ($session->question === null) {
+                continue;
+            }
+            $q = $session->question;
+            $operation = '';
+            if (is_string($q->why) && $q->why !== '') {
+                $decoded = json_decode($q->why, true);
+                if (is_array($decoded) && is_string($decoded['operation'] ?? null)) {
+                    $operation = $decoded['operation'];
+                }
+            }
+            $out[] = [
+                'session' => $session->id,
+                'goal' => $session->goal,
+                'question' => $q->question,
+                'operation' => $operation,
+                'reason' => is_string($q->reason) ? $q->reason : '',
+            ];
+        }
+
+        return $out;
     }
 
     /**

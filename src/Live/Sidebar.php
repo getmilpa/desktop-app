@@ -61,7 +61,7 @@ final class Sidebar
             'sessions' => $this->data?->sessions() ?? [],
             'activeSession' => $this->data?->currentSessionId() ?? '',
             'activeNav' => 'sessions',
-            'decisions' => 0,
+            'decisions' => \count($this->data?->pendingDecisions() ?? []),
         ];
         $subject = new ComposerRender($props);
         $this->events?->dispatch(self::BEFORE_RENDER, ['sidebar' => $subject]);
@@ -85,7 +85,7 @@ final class Sidebar
         return '<nav class="mui-sidebar" aria-label="main" data-milpa-runtime="alpine" data-milpa-component="desktop-sidebar" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data'
             . ' style="grid-row:1 / span 2;grid-column:1;position:static;height:auto;min-height:0">'
             . $this->brand()
-            . '<div class="mui-sidebar__nav"><div class="mui-sidebar__section">' . $this->navItems($active) . '</div>'
+            . '<div class="mui-sidebar__nav"><div class="mui-sidebar__section">' . $this->navItems($active, (int) ($props['decisions'] ?? 0)) . '</div>'
             . '<div class="mui-sidebar__section" id="milpa-sessions"><span class="mui-sidebar__section-label">sessions · goal and state</span>' . $this->sessionsList($sessions, $current) . '</div></div>'
             . '<div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">'
             . '<button type="button" class="mui-btn mui-btn--subtle mui-btn--full" id="milpa-new-session">New session</button>'
@@ -93,15 +93,20 @@ final class Sidebar
             . '</div></nav>';
     }
 
-    private function navItems(string $active): string
+    private function navItems(string $active, int $decisions = 0): string
     {
         $out = '';
         foreach (self::NAV as $item) {
             $key = $item['key'];
+            // The Decisions item carries a count badge when questions are parked (greenhouse decisions/0195):
+            // the human sees there is a decision waiting without opening the pane. Hidden at zero.
+            $badge = ($key === 'decisions' && $decisions > 0)
+                ? '<span class="mui-sidebar__item-badge mui-badge mui-badge--warning" style="margin-inline-start:auto">' . $decisions . '</span>'
+                : '';
             // The active nav is the shared `desktop.nav` signal: click sets it (instant highlight), the shell
             // switches the view on the same data-nav, and aria-current tracks the signal — one truth.
             $out .= sprintf(
-                '<a class="mui-sidebar__item" href="#" data-nav="%s"%s @click="$store.milpa[\'%s\'] = \'%s\'" :aria-current="$store.milpa[\'%s\'] === \'%s\' ? \'page\' : null"><span class="mui-sidebar__item-icon">%s</span><span class="mui-sidebar__item-label">%s</span></a>',
+                '<a class="mui-sidebar__item" href="#" data-nav="%s"%s @click="$store.milpa[\'%s\'] = \'%s\'" :aria-current="$store.milpa[\'%s\'] === \'%s\' ? \'page\' : null"><span class="mui-sidebar__item-icon">%s</span><span class="mui-sidebar__item-label">%s</span>%s</a>',
                 $key,
                 $key === $active ? ' aria-current="page"' : '',
                 SidebarComponent::NAV_SIGNAL,
@@ -110,6 +115,7 @@ final class Sidebar
                 $key,
                 $item['icon'],
                 htmlspecialchars($item['label'], ENT_QUOTES),
+                $badge,
             );
         }
 

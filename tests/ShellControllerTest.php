@@ -19,6 +19,7 @@ use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
+use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\ShellEvent;
@@ -157,6 +158,29 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-view="capabilities"', $body);
         self::assertStringContainsString('cap-grid', $body);
         self::assertStringContainsString('mui-empty', $body);
+    }
+
+    public function testTheDecisionsInboxRendersAParkedQuestionAcrossSessions(): void
+    {
+        // Populated inbox (pure view, greenhouse decisions/0195): a card carries the goal, the question, its
+        // facts, and a link to open the session it was raised in.
+        $html = (new DecisionsInboxView())->html([
+            ['session' => 's-42', 'goal' => 'Publish the site', 'question' => 'Enable milpa/data?', 'operation' => 'capabilities:enable', 'reason' => 'privileged'],
+        ]);
+
+        self::assertStringContainsString('milpa-decisions-list', $html);
+        self::assertStringContainsString('Enable milpa/data?', $html);
+        self::assertStringContainsString('Publish the site', $html);
+        self::assertStringContainsString('capabilities:enable', $html);
+        self::assertStringContainsString('/desktop?session=s-42', $html);
+    }
+
+    public function testTheDecisionsInboxShowsAnEmptyStateWhenNothingIsParked(): void
+    {
+        $html = (new DecisionsInboxView())->html([]);
+
+        self::assertStringContainsString('milpa-decisions-empty', $html);
+        self::assertStringContainsString('No decisions to make', $html);
     }
 
     public function testTheScreensRenderRealSessionWorkAndAudit(): void
