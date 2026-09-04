@@ -69,6 +69,15 @@ final class AgentMessage
             . '<div class="msg__tools" role="group" aria-label="message tools">'
             . $this->tool('data-agent-copy', 'Copy', $this->copyIcon())
             . $this->tool('data-agent-regenerate', 'Regenerate', $this->regenerateIcon())
+            // The ledger's verdict RIDES the answer's tool row (Rod's ask — it saves a whole line): hidden until
+            // the closure lands, then a compact ✓/⚠ with a tooltip saying what the ledger judged. It sits at the
+            // far end (margin-inline-start:auto). When there's no answer to ride, the standalone result-claim
+            // message is the fallback (both carry the same explanation).
+            . '<span class="msg__verdict" data-agent-verdict data-verified="1" tabindex="0" hidden>'
+            . '<span class="msg__verdict-mark" data-verdict-mark aria-hidden="true">✓</span>'
+            . '<span class="msg__verdict-label" data-verdict-label>verified</span>'
+            . '<span class="msg__verdict-tip" role="tooltip" data-verdict-tip>The ledger backs this turn: every completed step carries evidence, nothing was left open, and no artifact&#39;s latest check is red.</span>'
+            . '</span>'
             . '</div>'
             . '</div>';
     }

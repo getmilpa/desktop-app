@@ -95,8 +95,14 @@ final class MessagePrototypes
     /** The result-claim prototype (`desktop-result-claim`) — the closure verdict as a conversation message. */
     public function resultClaim(): string
     {
-        $markup = '<div class="msg msg--result" data-milpa-component="desktop-result-claim" data-milpa-component-id="result-claim" data-verified="1">'
-            . '<span class="msg__result-mark" data-result-mark>✓</span> <span data-result-text>verified</span></div>';
+        // Hoverable: an ⓘ affordance + a tooltip say WHAT the ledger verified (the closure verdict's meaning),
+        // filled per instance. `aria-label` (set in fill) carries the same text to a screen reader — no
+        // duplicate-id `aria-describedby`, since the prototype is cloned many times.
+        $markup = '<div class="msg msg--result" data-milpa-component="desktop-result-claim" data-milpa-component-id="result-claim" data-verified="1" tabindex="0">'
+            . '<span class="msg__result-mark" data-result-mark aria-hidden="true">✓</span> <span data-result-text>verified</span>'
+            . '<span class="msg__result-info" aria-hidden="true">ⓘ</span>'
+            . '<span class="msg__result-tip" role="tooltip" data-result-tip>The ledger backs this turn: every completed step carries evidence, nothing was left open, and no artifact&#39;s latest check is red.</span>'
+            . '</div>';
 
         return $this->wrap(new ResultClaimComponent(), 'result-claim', $markup, self::RESULT_BEFORE, self::RESULT_AFTER, 'resultClaim');
     }
