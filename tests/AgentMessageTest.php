@@ -41,6 +41,11 @@ final class AgentMessageTest extends TestCase
         self::assertStringContainsString('class="msg__tools"', $html);
         self::assertStringContainsString('aria-label="Copy response"', $html);
         self::assertStringContainsString('aria-label="Regenerate response"', $html);
+        // The ledger's verdict rides the tool row (Rod's ask — saves a line): a hidden slot with a tooltip
+        // that the closure fills. Focusable, and hidden until there's a verdict to show.
+        self::assertStringContainsString('data-agent-verdict', $html);
+        self::assertStringContainsString('data-verdict-tip', $html);
+        self::assertStringContainsString('role="tooltip"', $html);
     }
 
     public function testItEmitsRenderEventsSoPluginsCanAddTools(): void

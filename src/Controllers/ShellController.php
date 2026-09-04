@@ -511,6 +511,10 @@ HTML;
   .msg__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); display: block; }
   .msg--user { display: flex; justify-content: flex-end; }
   .msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  /* The user is a human PEER — a contrasting bubble (--surface) on the right. The agent is the SYSTEM
+     speaking, not another human (Rod): its own bubble on the left, but tinted toward the app surface —
+     quieter, closer to the system chrome — and a subtle border, so it reads as the house's voice, not a peer's. */
+  .msg--agent { align-self: flex-start; max-width: 72ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); background: color-mix(in oklab, var(--surface) 55%, var(--bg)); }
   .msg--agent > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
   /* The agent's answer is rendered markdown (safe subset): headings, lists, code, emphasis — legible, not raw. */
   .msg__md { margin-top: var(--space-2); font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
@@ -529,6 +533,18 @@ HTML;
   .msg__tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: none; border-radius: var(--radius-sm); background: none; color: var(--text-muted); cursor: pointer; transition: color var(--dur-fast, 120ms) ease-out, background var(--dur-fast, 120ms) ease-out; }
   .msg__tool-btn:hover { color: var(--text); background: var(--surface); }
   .msg__tool-btn.is-done { color: var(--accent-text); }
+  /* The ledger's verdict, riding the answer's tool row (Rod's ask — saves a line): a compact mark + label at
+     the far end, with a tooltip on hover/focus that says WHAT the ledger judged. Anchored right so it never
+     runs off-screen. */
+  .msg__verdict { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; padding: 0 var(--space-2); height: 28px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); cursor: help; }
+  .msg__verdict[data-verified="1"] .msg__verdict-mark { color: var(--success); }
+  .msg__verdict[data-verified="0"] .msg__verdict-mark { color: var(--warning); }
+  .msg__verdict[data-verified="0"] { color: var(--warning); }
+  .msg__verdict:hover, .msg__verdict:focus-visible { color: var(--text-secondary); background: var(--surface); }
+  .msg__verdict:focus-visible { outline: 2px solid var(--accent-subtle); outline-offset: 2px; }
+  .msg__verdict-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: min(22rem, 60vw); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; white-space: normal; text-align: left; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+  .msg__verdict:hover .msg__verdict-tip, .msg__verdict:focus-visible .msg__verdict-tip, .msg__verdict:focus-within .msg__verdict-tip { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) { .msg__verdict-tip { transition: none; } }
   /* Thinking: the agent reasoning aloud — dimmed and italic, clearly not final speech. */
   .msg--thinking { color: var(--text-muted); font-style: italic; }
   .msg--thinking > p { margin: var(--space-1) 0 0; font-size: var(--text-xs); line-height: var(--leading-relaxed); white-space: pre-wrap; }
@@ -580,7 +596,7 @@ HTML;
   .msg__result-info { color: var(--text-muted); opacity: .5; font-size: .95em; transition: opacity .2s ease, color .2s ease; }
   .msg--result:hover .msg__result-info, .msg--result:focus-visible .msg__result-info { opacity: 1; color: var(--accent-text); }
   .msg--result:focus-visible { outline: 2px solid var(--accent-subtle); outline-offset: 3px; border-radius: var(--radius-sm); }
-  .msg__result-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: 22rem; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; text-transform: none; white-space: normal; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+  .msg__result-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: min(22rem, 60vw); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; text-transform: none; white-space: normal; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
   .msg--result:hover .msg__result-tip, .msg--result:focus-visible .msg__result-tip, .msg--result:focus-within .msg__result-tip { opacity: 1; transform: translateY(0); }
   @media (prefers-reduced-motion: reduce) { .msg__result-tip { transition: none; } }
   /* System: a centered, quiet notice — the house speaking, not a participant. */
@@ -941,6 +957,26 @@ HTML;
       reasoningEl.setAttribute('data-open', '0');
       reasoningEl = null;
     }
+    // The closure verdict RIDES the last agent answer's tool row (Rod's ask — saves a whole line). Returns
+    // false when there's no answer to ride, so the caller can fall back to the standalone result-claim line.
+    function markAgentVerdict(verified, reasons) {
+      if (!chat) { return false; }
+      var msgs = chat.querySelectorAll('.msg--agent');
+      var last = msgs.length ? msgs[msgs.length - 1] : null;
+      var slot = last ? last.querySelector('[data-agent-verdict]') : null;
+      if (!slot) { return false; }
+      var ok = verified !== false;
+      slot.setAttribute('data-verified', ok ? '1' : '0');
+      var mark = slot.querySelector('[data-verdict-mark]'); if (mark) { mark.textContent = ok ? '✓' : '⚠'; }
+      var lbl = slot.querySelector('[data-verdict-label]'); if (lbl) { lbl.textContent = ok ? 'verified' : 'disputed'; }
+      var tip = ok
+        ? "The ledger backs this turn: every completed step carries evidence, nothing was left open, and no artifact's latest check is red."
+        : ('The ledger disputes this turn — ' + (reasons ? reasons : 'the completion is not backed by evidence') + '.');
+      var te = slot.querySelector('[data-verdict-tip]'); if (te) { te.textContent = tip; }
+      slot.setAttribute('aria-label', (ok ? 'Verified. ' : 'Disputed. ') + tip);
+      slot.hidden = false;
+      return true;
+    }
     // One set of delegated handlers for every message component, now and future (greenhouse decisions/0191):
     // the thinking block's toggle, and the agent message's foot tools (copy the answer, regenerate it).
     if (chat) {
@@ -998,7 +1034,9 @@ HTML;
         // The closure verdict as a result-claim message (greenhouse decisions/0191, evidence/0442): the ledger
         // either backs the answer or disputes it. Only show it when the house actually judged the turn.
         if (res && res.closure) {
-          appendMessage('result', { verified: res.closure.verified !== false, reasons: (res.closure.reasons || []).join('; ') });
+          var v = res.closure.verified !== false, why = (res.closure.reasons || []).join('; ');
+          // Primary: ride the answer's tool row (saves a line). Fallback: the standalone result-claim message.
+          if (!markAgentVerdict(v, why)) { appendMessage('result', { verified: v, reasons: why }); }
         }
         // Update the shared counters from what the turn reported (greenhouse decisions/0191): one truth, and
         // every place that shows turns/steps/tools/tokens — the composer chips, the status bar, the panels —
