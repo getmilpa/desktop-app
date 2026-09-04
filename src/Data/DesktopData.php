@@ -314,9 +314,9 @@ final class DesktopData
      * A downloadable dump of the CURRENT session — the material for a video or an autopsy of what the
      * agent did: the raw session record, its counters and context, the work board and the activity/audit.
      *
-     * @return array{exported_at: string, id: string, model: array{model: string, endpoint: string}, session: array<string, mixed>, counters: array{turns: int, steps: int, tokens: int, tool_calls: int, state: string}, context: array{tokens: int, window: int, used_pct: int, free: int}, work: list<array{title: string, status: string, origin: string}>, audit: list<array{seq: int, type: string, data: string}>}
+     * @return array{exported_at: string, id: string, model: array{model: string, endpoint: string}, session: array<string, mixed>, counters: array{turns: int, steps: int, tokens: int, tool_calls: int, state: string}, context: array{tokens: int, window: int, used_pct: int, free: int}, budget: list<array{class: string, messages: int, est_tokens: int}>, work: list<array{title: string, status: string, origin: string}>, audit: list<array{seq: int, type: string, data: string}>}
      */
-    public function export(): array
+    public function export(string $agentSessionId = ''): array
     {
         return [
             'exported_at' => date('c'),
@@ -325,9 +325,57 @@ final class DesktopData
             'session' => $this->currentSession(),
             'counters' => $this->counters(),
             'context' => $this->context(),
+            'budget' => $this->tokenBudget($agentSessionId),
             'work' => $this->work(),
             'audit' => $this->audit(),
         ];
+    }
+
+    /**
+     * Where the token budget goes, by category — so a human can SEE and debug it (greenhouse decisions/0196).
+     *
+     * The provider reports a real TOTAL (decisions/0192), but not how it splits; this estimates the weight of
+     * each part of the composed window (summary / current state / turns …) from its content length, the same
+     * "≈ length/4" the TUI uses. The agent runs under a MINTED id (`run-…`), separate from the DesktopStore
+     * session id, so the caller passes the agent session the browser drove (the `milpa_agent_sid` cookie).
+     * Read from the agent's own store, guarded so an app without it degrades to none.
+     *
+     * @return list<array{class: string, messages: int, est_tokens: int}>
+     *
+     * @codeCoverageIgnore reads through to the agent SessionStore; exercised by integration on a booted app
+     *                     (greenhouse evidence/0510), not by the standalone unit suite
+     */
+    public function tokenBudget(string $agentSessionId = ''): array
+    {
+        if ($agentSessionId === '' || !class_exists(\Milpa\Agent\SessionStore::class) || !class_exists(\Milpa\EventStore\FileEventStore::class)) {
+            return [];
+        }
+        $kernel = $this->container->has(Kernel::class) ? $this->container->get(Kernel::class) : null;
+        if (!$kernel instanceof Kernel) {
+            return [];
+        }
+        $file = $kernel->root() . '/var/agent-sessions.jsonl';
+        $id = $agentSessionId;
+        if (!is_file($file)) {
+            return [];
+        }
+        $session = (new \Milpa\Agent\SessionStore(new \Milpa\EventStore\FileEventStore($file)))->load($id);
+        if ($session === null) {
+            return [];
+        }
+
+        $byClass = [];
+        foreach ($session->classifiedWindow() as $message) {
+            $class = is_string($message['class'] ?? null) ? $message['class'] : 'other';
+            $content = is_string($message['content'] ?? null) ? $message['content'] : '';
+            if (!isset($byClass[$class])) {
+                $byClass[$class] = ['class' => $class, 'messages' => 0, 'est_tokens' => 0];
+            }
+            ++$byClass[$class]['messages'];
+            $byClass[$class]['est_tokens'] += (int) ceil(mb_strlen($content) / 4);
+        }
+
+        return array_values($byClass);
     }
 
     /**

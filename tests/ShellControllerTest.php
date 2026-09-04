@@ -158,6 +158,9 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-view="capabilities"', $body);
         self::assertStringContainsString('cap-grid', $body);
         self::assertStringContainsString('mui-empty', $body);
+        // A settled (non-running) session shows no interrupted-run notice (greenhouse decisions/0196). The
+        // notice's TEXT — not its CSS class, which is always in the stylesheet — is the honest check.
+        self::assertStringNotContainsString('A prior run was interrupted', $body);
     }
 
     public function testTheDecisionsInboxRendersAParkedQuestionAcrossSessions(): void
@@ -203,6 +206,10 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('List plugins', $body, 'work board item');
         self::assertStringContainsString('gate.opened', $body, 'audit fact');
         self::assertStringContainsString('3 turns', $body, 'status counters');
+        // The session was left in a running state ('working') → the interrupted-run notice shows on load
+        // (greenhouse decisions/0196): a run reported as unfinished, never silently auto-resumed.
+        self::assertStringContainsString('milpa-interrupted', $body);
+        self::assertStringContainsString('A prior run was interrupted', $body);
         self::assertStringContainsString('data-view="auth"', $body, 'the Auth screen');
         self::assertStringContainsString('data-pane="work"', $body);
         // The Work board is now a milpa/live component (0189); drag-drop still persists (0484):
