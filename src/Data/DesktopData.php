@@ -191,6 +191,59 @@ final class DesktopData
     }
 
     /**
+     * The composer's commands (greenhouse decisions/0202): the house's own — `/goal`, `/mode`, `/help` — plus
+     * every user-invocable skill as `/<skill-name>`. Each command is an OPERATION the agent could fire too
+     * (`agent:goal`, `agent:mode`, `skill:load`); the Desktop invents no action. Read through the same
+     * {@see self::skills()} seam, so an app without the runtime still offers the house commands.
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string}>
+     */
+    public function commands(): array
+    {
+        return self::commandsFor($this->skills());
+    }
+
+    /**
+     * The house's own commands — what the composer offers even when no skill is user-invocable.
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string}>
+     */
+    public static function houseCommands(): array
+    {
+        return [
+            ['name' => 'goal', 'kind' => 'house', 'description' => "Set, show or clear the session's standing goal", 'usage' => '/goal <text> | /goal clear | /goal'],
+            ['name' => 'mode', 'kind' => 'house', 'description' => 'Choose how much the agent asks', 'usage' => '/mode ask|acknowledge|auto'],
+            ['name' => 'help', 'kind' => 'house', 'description' => 'List the commands this composer understands', 'usage' => '/help'],
+        ];
+    }
+
+    /**
+     * The house commands followed by one `/<name>` per user-invocable skill (a model-only skill is not a
+     * command: the human has no surface for it, greenhouse decisions/0202). Pure, so it is tested with fixtures.
+     *
+     * @param list<array{name: string, description: string, model_invocable: bool, user_invocable: bool}> $skills
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string}>
+     */
+    public static function commandsFor(array $skills): array
+    {
+        $out = self::houseCommands();
+        foreach ($skills as $skill) {
+            if (!$skill['user_invocable']) {
+                continue;
+            }
+            $out[] = [
+                'name' => $skill['name'],
+                'kind' => 'skill',
+                'description' => $skill['description'],
+                'usage' => '/' . $skill['name'] . ' [args]',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * The specialist agent roles this app declares (greenhouse decisions/0197): each a named authority with
      * the skills it preloads, the tools it is denied, and what it produces. A role names authority that already
      * governs; the skills only suggest. Read from the same {@see \Milpa\AppRuntime\Agent\Role\RoleRegistry}

@@ -62,6 +62,36 @@ final class DesktopDataTest extends TestCase
         self::assertSame([], (new DesktopData(new DIContainer()))->skills());
     }
 
+    public function testCommandsAreTheHouseOnesWithoutAKernel(): void
+    {
+        // Without a booted kernel there are no skills to turn into commands, but the house's own commands
+        // stand (greenhouse decisions/0202): /goal, /mode and /help are the composer's, not a skill's.
+        $commands = (new DesktopData(new DIContainer()))->commands();
+
+        self::assertSame(['goal', 'mode', 'help'], array_column($commands, 'name'));
+        self::assertSame(['house', 'house', 'house'], array_column($commands, 'kind'));
+        self::assertSame($commands, DesktopData::houseCommands());
+    }
+
+    public function testCommandsForAddsOnlyTheUserInvocableSkills(): void
+    {
+        // A user-invocable skill becomes `/<name> [args]`; a model-only skill is not a command — the human has
+        // no surface for it (greenhouse decisions/0202). The house commands come first, in their order.
+        $commands = DesktopData::commandsFor([
+            ['name' => 'systematic-debugging', 'description' => 'A method for finding a bug by evidence', 'model_invocable' => true, 'user_invocable' => false],
+            ['name' => 'brainstorming', 'description' => 'Frame the question before building', 'model_invocable' => true, 'user_invocable' => true],
+        ]);
+
+        self::assertSame(['goal', 'mode', 'help', 'brainstorming'], array_column($commands, 'name'));
+        self::assertSame(
+            ['name' => 'brainstorming', 'kind' => 'skill', 'description' => 'Frame the question before building', 'usage' => '/brainstorming [args]'],
+            $commands[3],
+        );
+        foreach ($commands as $c) {
+            self::assertSame(['name', 'kind', 'description', 'usage'], array_keys($c));
+        }
+    }
+
     public function testRolesAreEmptyWithoutAKernel(): void
     {
         // Specialist roles degrade to none without a booted kernel (greenhouse decisions/0197).

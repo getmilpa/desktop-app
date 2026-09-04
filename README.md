@@ -100,6 +100,21 @@ The client runtime `MilpaShell`: `on(type, cb)` / `onAny(cb)` react to events, `
 panel's body element, `onStatus(cb)` tracks the live connection. Events reach the browser through a Mercure
 hub when one is configured (`desktop.mercure.*`), else through the `/desktop/events` feed.
 
+## Commands
+
+The composer understands slash commands (greenhouse `decisions/0202`). `/goal <text>` sets the session's
+standing goal mid-session, `/goal clear` drops it and `/goal` alone shows it; `/mode ask|acknowledge|auto`
+changes the session's autonomy mode; `/help` lists what the composer understands; and `/<skill-name> [args]`
+loads a **user-invocable** skill and starts a turn with its instructions. Typing `/` opens a completion list
+the house serves — its own commands plus every user-invocable skill. Each command is an operation the agent
+could fire too (`agent:goal`, `agent:mode`, `skill:load`), reached over its HTTP projection (`/agent/goal`,
+`/agent/mode`, `/skill/load`) — expose them in `config/http.php`; when one is not exposed, the composer says
+so instead of failing silently.
+
+The mode chip on the composer now DRIVES the session's autonomy mode: every turn sends the chosen mode, not
+a hardcoded `ask`. A goal only bounds what the automatic mode may already pre-consent — it never pre-approves
+a signature (`requiresConfirmation`, the Executable+Privileged ceiling) or third-party egress.
+
 ## Live updates over a Mercure hub
 
 Configure `desktop.mercure.{hub_url,public_url,publisher_key,subscriber_key}` and the app publishes shell

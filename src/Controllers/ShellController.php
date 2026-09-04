@@ -16,6 +16,7 @@ namespace Milpa\DesktopApp\Controllers;
 
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
+use Milpa\DesktopApp\Live\CommandListView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\RolesView;
@@ -125,11 +126,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--ROLES-->', '<!--SCREENS-->', '<!--LIVEROUTE-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->', '<!--COMMANDS-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), str_replace('</', '<\/', $this->commandsJson()),
             ],
             $this->template(),
         );
@@ -166,6 +167,24 @@ final class ShellController
     private function skillsHtml(): string
     {
         return (new SkillsView())->html($this->data?->skills() ?? []);
+    }
+
+    /**
+     * The composer's commands (greenhouse decisions/0202): the house's own plus every user-invocable skill,
+     * from {@see DesktopData::commands()} — or the house's alone when no data seam is wired, so the composer
+     * always knows `/goal`, `/mode` and `/help`. One list feeds both the completion popup and the parser.
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string}>
+     */
+    private function commands(): array
+    {
+        return $this->data?->commands() ?? DesktopData::houseCommands();
+    }
+
+    /** The command list as JSON — the `#milpa-commands` payload the composer's parser reads. */
+    private function commandsJson(): string
+    {
+        return (string) json_encode($this->commands(), \JSON_UNESCAPED_SLASHES);
     }
 
     /**
@@ -259,6 +278,8 @@ final class ShellController
         $field = $this->composerField !== null
             ? $this->composerField->render()
             : '<textarea id="composer-input" class="mui-textarea" rows="2" placeholder="Write to the session…" style="border:0;outline:0;background:transparent;min-height:3rem;padding:0;font-size:var(--text-sm);font-family:var(--font-mono);width:100%;resize:none"></textarea>';
+        // The command completion popup (greenhouse decisions/0202): a pure view over the list the house serves.
+        $commandList = (new CommandListView())->html($this->commands());
         $free = $this->kfmt($ctx['free']);
         $pct = $ctx['used_pct'];
         $barColor = $pct < 70 ? 'var(--success)' : ($pct < 90 ? 'var(--warning)' : 'var(--danger)');
@@ -283,6 +304,7 @@ final class ShellController
 
   </div>
 
+  {$commandList}
   <div class="milpa-composer-box" style="border:1px solid var(--border);border-radius:22px;background:var(--surface-raised);box-shadow:var(--shadow-md);padding:var(--space-4) var(--space-5) var(--space-3)">
     {$field}
     <div style="display:flex;align-items:center;gap:var(--space-3);margin-top:var(--space-2)">
@@ -338,15 +360,18 @@ HTML;
     {
         $modeLabels = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
         $settings = $this->data?->settings() ?? [];
-        $mode = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? $modeLabels[$settings['mode']] : 'Ask before changing';
+        $modeKey = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? (string) $settings['mode'] : 'ask';
         $counters = $this->data?->counters();
         $ctx = $this->data?->context() ?? ['tokens' => 0, 'window' => 32768];
 
         // Every counter the UI shows is a SIGNAL — one truth, projected to the composer chips, the status bar
         // and the panels alike (greenhouse decisions/0191, Rod). The live feed and the turn update these; every
         // place that reads them updates at once. A value shown that is not a signal is a value that goes stale.
+        // The mode is a signal PAIR (greenhouse decisions/0202): the VALUE every turn sends to the agent
+        // (ask | acknowledge | auto) and its label for the chip. Seeded from the saved setting, both persist.
         return (string) json_encode([
-            'composer.mode.label' => $mode,
+            'composer.mode' => $modeKey,
+            'composer.mode.label' => $modeLabels[$modeKey],
             'session.state.label' => ucfirst(\is_array($counters) ? (string) $counters['state'] : 'idle'),
             'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
             'session.steps' => \is_array($counters) ? (int) $counters['steps'] : 0,
@@ -612,6 +637,15 @@ HTML;
   .screen-chip__name { font-family: var(--font-mono); font-size: var(--text-xs); }
   .screen-chip__type { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
   .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
+  /* Command completion (greenhouse decisions/0202): the list the house serves, opened above the composer while
+     a `/name` is being typed. Its visibility is CSS state on `data-open`; the shell's delegated handler flips it. */
+  .milpa-cmds { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 60; min-width: 24rem; max-width: 100%; max-height: 16rem; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+  .milpa-cmds[data-open="0"] { display: none; }
+  .milpa-cmd { display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-3); align-items: baseline; text-align: start; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); cursor: pointer; font: inherit; }
+  .milpa-cmd:hover, .milpa-cmd[aria-selected="true"] { background: var(--accent-subtle); color: var(--accent-text); }
+  .milpa-cmd__name { font-family: var(--font-mono); font-size: var(--text-xs); }
+  .milpa-cmd__desc { font-size: var(--text-xs); color: var(--text-secondary); }
+  .milpa-cmd__usage { grid-column: 2; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
   .milpa-composer-box:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-subtle); }
@@ -908,6 +942,9 @@ HTML;
   </div>
 </div>
 
+<!-- The composer's commands (greenhouse decisions/0202): the house's own plus every user-invocable skill, the
+     same list the completion popup renders. Served BEFORE the shell script, which reads it once on boot. -->
+<script id="milpa-commands" type="application/json"><!--COMMANDS--></script>
 <script>
   (function () {
     // Auth overlay (open the workspace) — creating a session PERSISTS it, then reload shows it (0483).
@@ -1013,6 +1050,7 @@ HTML;
         composerPanels.forEach(function (p) { p.hidden = true; });
         refreshSend();
         refreshCount();
+        refreshCommandList();
       });
     }
     // A SAFE markdown renderer for the agent's message (greenhouse decisions/0191, Rod: the answer shows
@@ -1196,12 +1234,13 @@ HTML;
     var lastPrompt = '';
     // Start a governed turn over the HTTP surface (greenhouse decisions/0190). The working/idle badge and the
     // reasoning stream arrive live over the hub on this session's topic; the final answer comes back here.
-    // `mode: ask` keeps mutating tools behind their gate.
+    // The mode is the chip's VALUE (greenhouse decisions/0202) — `ask` keeps mutating tools behind their gate;
+    // `auto` only skips asking for the reversible; a signature or third-party egress asks in every mode.
     function runTurn(text) {
       lastPrompt = text;
       fetch('/agent', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text, session: agentSession, mode: 'ask' })
+        body: JSON.stringify({ prompt: text, session: agentSession, mode: currentMode() })
       }).then(function (r) { return r.json(); }).then(function (res) {
         if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
         else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
@@ -1234,6 +1273,153 @@ HTML;
       if (typeof res.tokens === 'number') { setSig('session.tokens', kfmt(res.tokens)); }
       if (typeof res.contextTokens === 'number') { setSig('context.used', kfmt(res.contextTokens)); }
     }
+    // ── Composer commands (greenhouse decisions/0202) ────────────────────────────────────────────────────
+    // The house SERVES the command list (#milpa-commands): its own commands (goal / mode / help) and every
+    // user-invocable skill. Each command is an OPERATION the agent could fire too — the Desktop invents no
+    // action; it calls the runtime's http projection of the op: `agent:goal` → /agent/goal, `agent:mode` →
+    // /agent/mode, `skill:load` → /skill/load (the projector derives the path from the name: `:` → `/`,
+    // `_` → `-`). The doctrine's boundary holds here: a goal or a mode never pre-consents a signature
+    // (requiresConfirmation, the Executable+Privileged ceiling) nor third-party egress — the goal only
+    // bounds what the automatic mode may already pre-consent.
+    var MODES = ['ask', 'acknowledge', 'auto'];
+    var COMMANDS = (function () {
+      var el = document.getElementById('milpa-commands');
+      try { var v = el ? JSON.parse(el.textContent || '[]') : []; return Array.isArray(v) ? v : []; } catch (e) { return []; }
+    })();
+    function commandNamed(name) {
+      for (var i = 0; i < COMMANDS.length; i++) { if (COMMANDS[i].name === name) { return COMMANDS[i]; } }
+      return null;
+    }
+    // `/name [args]` — the name is [a-z0-9-]+, the rest (trimmed) is its argument text. Not a command → null.
+    function parseCommand(text) {
+      var m = /^\/([a-z0-9-]+)(?:\s+([\s\S]*))?$/.exec(text);
+      return m ? { name: m[1], args: (m[2] || '').trim() } : null;
+    }
+    function notice(text) { appendMessage('system', { text: text }); }
+    // The mode every turn sends is the `composer.mode` signal — the chip's VALUE, never a hardcoded 'ask'.
+    // Unset or unknown → ask: the mode that asks is the default.
+    function currentMode() {
+      var m = (window.MilpaLive && MilpaLive.signal) ? MilpaLive.signal('composer.mode') : null;
+      return MODES.indexOf(m) !== -1 ? m : 'ask';
+    }
+    // Call an operation over its http projection. The op's own status is the answer: 2xx carries its result;
+    // 404/405 mean the app does not expose it (config/http.php); 428 is the house's confirm gate — reported,
+    // never confirmed from a command. A non-mutating op is projected as GET, so a 405 on POST is retried once
+    // as GET with the same fields. Never a silent failure: every outcome comes back as a status + body.
+    function callOp(path, body) {
+      function read(r) { return r.text().then(function (t) { var d = null; try { d = JSON.parse(t); } catch (e) {} return { status: r.status, ok: r.ok, data: d }; }); }
+      return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(read).then(function (res) {
+        if (res.status !== 405) { return res; }
+        var qs = Object.keys(body).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(String(body[k])); }).join('&');
+        return fetch(path + (qs ? '?' + qs : ''), { method: 'GET' }).then(read);
+      }).catch(function (err) { return { status: 0, ok: false, data: { error: String(err) } }; });
+    }
+    // A failed call as one legible line: the op, the status, and what to do about it.
+    function opFailure(op, res) {
+      var d = res.data || {}, err = d.error || (d.errors ? JSON.stringify(d.errors) : '');
+      var hint = (res.status === 404 || res.status === 405) ? ('the app does not expose ' + op + ' over HTTP — expose the operation in config/http.php')
+        : res.status === 428 ? (op + ' asks for confirmation — the house\'s gate stands; a command does not confirm it')
+        : res.status === 0 ? 'the operation could not be reached'
+        : 'the operation refused';
+      return op + ' → HTTP ' + res.status + ' — ' + hint + (err ? ' (' + err + ')' : '');
+    }
+    function runCommand(cmd) {
+      if (cmd.name === 'help') {
+        COMMANDS.forEach(function (c) { notice(c.usage + ' — ' + c.description); });
+        return;
+      }
+      if (cmd.name === 'goal') {
+        // agent:goal — set (`goal`), clear (`clear`), or show (neither) the session's standing goal.
+        var body = { session: agentSession };
+        if (cmd.args === 'clear') { body.clear = true; } else if (cmd.args !== '') { body.goal = cmd.args; }
+        callOp('/agent/goal', body).then(function (res) {
+          if (!res.ok) { notice(opFailure('agent:goal', res)); return; }
+          var d = res.data || {}, goal = typeof d.goal === 'string' ? d.goal : (body.goal || '');
+          notice(body.clear ? 'goal cleared' : (goal !== '' ? ((body.goal ? 'goal set: ' : 'goal: ') + goal) : 'no goal set — /goal <text> sets one'));
+        });
+        return;
+      }
+      if (cmd.name === 'mode') {
+        if (MODES.indexOf(cmd.args) === -1) { notice('usage: /mode ask|acknowledge|auto'); return; }
+        // The chip and the setting follow at once (the next turn sends it); agent:mode changes the REAL mode
+        // of the running session — not just the chip.
+        applyMode(cmd.args);
+        callOp('/agent/mode', { session: agentSession, mode: cmd.args }).then(function (res) {
+          if (!res.ok) { notice(opFailure('agent:mode', res)); return; }
+          notice('mode: ' + cmd.args + ' — the session\'s autonomy mode' + (cmd.args === 'auto' ? ' (a signature or third-party egress still asks)' : ''));
+        });
+        return;
+      }
+      var skill = commandNamed(cmd.name);
+      if (skill && skill.kind === 'skill') {
+        // skill:load by the human: the skill's body enters the turn as <skill_content>, the args after it.
+        callOp('/skill/load', { name: skill.name, by: 'human' }).then(function (res) {
+          var d = res.data || {};
+          if (!res.ok || d.ok === false || typeof d.body !== 'string') { notice(opFailure('skill:load', res)); return; }
+          runTurn('<skill_content name="' + skill.name + '">\n' + d.body + '\n</skill_content>\n\n' + cmd.args);
+        });
+        return;
+      }
+      notice('unknown command /' + cmd.name + ' — commands: ' + COMMANDS.map(function (c) { return '/' + c.name; }).join(', '));
+    }
+    // The completion popup (#milpa-command-list, a pure CommandListView): opens while the field holds only a
+    // command name being typed (`/go…`), lists the commands that start with it, and fills the name on click or
+    // Enter. CSS state on `data-open` + one delegated handler — no per-instance x-data.
+    var cmdList = document.getElementById('milpa-command-list');
+    function cmdOptions() { return cmdList ? Array.prototype.slice.call(cmdList.querySelectorAll('.milpa-cmd')) : []; }
+    function cmdVisible() { return cmdOptions().filter(function (o) { return !o.hidden; }); }
+    function cmdSelect(opt) { cmdOptions().forEach(function (o) { o.setAttribute('aria-selected', o === opt ? 'true' : 'false'); }); }
+    function cmdOpen() { return !!cmdList && cmdList.getAttribute('data-open') === '1'; }
+    function cmdHide() { if (cmdList) { cmdList.setAttribute('data-open', '0'); } }
+    function refreshCommandList() {
+      if (!cmdList || !composerInput) { return; }
+      var m = /^\/([a-z0-9-]*)$/.exec(composerInput.value);
+      if (!m) { cmdHide(); return; }
+      var shown = [];
+      cmdOptions().forEach(function (o) {
+        var hit = (o.getAttribute('data-command') || '').indexOf(m[1]) === 0;
+        o.hidden = !hit;
+        if (hit) { shown.push(o); }
+      });
+      cmdList.setAttribute('data-open', shown.length ? '1' : '0');
+      cmdSelect(shown[0] || null);
+    }
+    function fillCommand(name) {
+      if (!composerInput) { return; }
+      composerInput.value = '/' + name + ' ';
+      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+      cmdHide();
+      composerInput.focus();
+    }
+    if (cmdList) {
+      cmdList.addEventListener('mousedown', function (e) { e.preventDefault(); }); // the field keeps its focus
+      cmdList.addEventListener('click', function (e) {
+        var opt = e.target.closest ? e.target.closest('.milpa-cmd') : null;
+        if (opt) { fillCommand(opt.getAttribute('data-command') || ''); }
+      });
+    }
+    // Keys the open popup owns: Escape hides, the arrows move, Enter/Tab fill the selected name — unless the
+    // typed name already IS that command, in which case Enter sends it. False → the composer handles the key.
+    function commandListHandlesKey(e) {
+      if (!cmdOpen()) { return false; }
+      var shown = cmdVisible(), idx = -1;
+      shown.forEach(function (o, i) { if (o.getAttribute('aria-selected') === 'true') { idx = i; } });
+      if (e.key === 'Escape') { e.preventDefault(); cmdHide(); return true; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (shown.length) { cmdSelect(shown[(idx + (e.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length]); }
+        return true;
+      }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+        var pick = shown[idx] || shown[0];
+        var name = pick ? (pick.getAttribute('data-command') || '') : '';
+        if (e.key === 'Enter' && composerInput && composerInput.value === '/' + name) { cmdHide(); return false; }
+        e.preventDefault();
+        if (pick) { fillCommand(name); }
+        return true;
+      }
+      return false;
+    }
     function send() {
       if (!composerInput) { return; }
       var text = composerInput.value.trim();
@@ -1243,7 +1429,12 @@ HTML;
       // Notify the milpa/live component (Alpine x-model / @input) so its state clears too.
       composerInput.dispatchEvent(new Event('input', { bubbles: true }));
       refreshSend();
+      cmdHide();
       composerInput.focus();
+      // A slash command is the house's, not the model's (greenhouse decisions/0202): parsed here and run as
+      // the operation it names; only a skill's body reaches the turn.
+      var cmd = parseCommand(text);
+      if (cmd) { runCommand(cmd); return; }
       runTurn(text);
     }
     // While the agent works, the send button becomes Stop; the topbar state follows. "Working" is the
@@ -1270,8 +1461,9 @@ HTML;
       setWorking(document.getElementById('milpa-topstate') && document.getElementById('milpa-topstate').textContent.trim() === 'Working');
     }
     if (composerInput) {
-      // Enter sends; Shift+Enter keeps the newline.
+      // Enter sends; Shift+Enter keeps the newline. An open command popup takes its keys first.
       composerInput.addEventListener('keydown', function (e) {
+        if (commandListHandlesKey(e)) { return; }
         if (e.key === 'Enter' && !e.shiftKey && !working) { e.preventDefault(); send(); }
       });
     }
@@ -1369,10 +1561,30 @@ HTML;
       });
     }
 
-    // Composer mode chip: open a menu to switch ask / acknowledge / auto quickly; the choice persists
-    // (a partial settings post that merges — greenhouse decisions/0483).
+    // Composer mode chip: open a menu to switch ask / acknowledge / auto quickly. The choice is a SIGNAL PAIR
+    // (greenhouse decisions/0202): `composer.mode` is the VALUE every turn sends and `composer.mode.label`
+    // its label — the chip and the topbar badge read the label, runTurn reads the value; both persist, and the
+    // choice persists server-side too (a partial settings post that merges — greenhouse decisions/0483). The
+    // menu and /mode both go through applyMode, so the two signals never disagree.
     var modeChip = document.getElementById('milpa-mode-chip');
     var modeMenu = document.getElementById('milpa-mode-menu');
+    function modeLabelFor(key) {
+      var opt = modeMenu ? modeMenu.querySelector('.milpa-mode-opt[data-mode="' + key + '"]') : null;
+      return opt ? (opt.getAttribute('data-label') || key) : key;
+    }
+    function applyMode(key) {
+      setSig('composer.mode', key);
+      setSig('composer.mode.label', modeLabelFor(key));
+      if (modeMenu) {
+        modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (o) {
+          if (o.getAttribute('data-mode') === key) { o.setAttribute('aria-current', 'true'); } else { o.removeAttribute('aria-current'); }
+        });
+      }
+      fetch('/desktop/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: key })
+      });
+    }
     if (modeChip && modeMenu) {
       modeChip.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -1384,22 +1596,22 @@ HTML;
       document.addEventListener('click', function () {
         modeMenu.hidden = true;
         modeChip.setAttribute('aria-expanded', 'false');
+        cmdHide();
       });
       modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (opt) {
         opt.addEventListener('click', function () {
-          // Set the SHARED signal — the chip and the topbar badge both read it, so both update (0189).
-          if (window.MilpaLive && window.MilpaLive.signal) { window.MilpaLive.signal('composer.mode.label', opt.getAttribute('data-label')); }
-          modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (o) { o.removeAttribute('aria-current'); });
-          opt.setAttribute('aria-current', 'true');
+          applyMode(opt.getAttribute('data-mode'));
           modeMenu.hidden = true;
           modeChip.setAttribute('aria-expanded', 'false');
-          fetch('/desktop/settings', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: opt.getAttribute('data-mode') })
-          });
         });
       });
     }
+    // Once everything booted (Alpine's store included) the chip's label follows the VALUE the turn will send —
+    // a remembered label never outranks the remembered mode: the value is the truth, the label its projection.
+    window.addEventListener('load', function () {
+      var m = (window.MilpaLive && MilpaLive.signal) ? MilpaLive.signal('composer.mode') : null;
+      if (MODES.indexOf(m) !== -1) { setSig('composer.mode.label', modeLabelFor(m)); }
+    });
 
     // Register a passkey: only navigate if this app actually mounts the passkey door; otherwise say so
     // in place instead of replacing the whole app with a 404 (the door is the app's to configure).
@@ -1513,8 +1725,9 @@ HTML;
      and remote runtimes register their Alpine factories BEFORE Alpine boots. Served from the package. -->
 <script id="milpa-live-boot" type="application/json"><!--LIVEBOOT--></script>
 <script id="milpa-live-signals" type="application/json"><!--LIVESIGNALS--></script>
-<!-- The mode is remembered across reloads; the session summary is DERIVED from the state and turn signals. -->
-<script id="milpa-live-persist" type="application/json">["composer.mode.label"]</script>
+<!-- The mode (its label AND the value the turn sends) is remembered across reloads; the session summary is
+     DERIVED from the state and turn signals. -->
+<script id="milpa-live-persist" type="application/json">["composer.mode.label","composer.mode"]</script>
 <script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"},"session.counters":{"template":"{session.turns} turns · {session.tool_calls} tools"},"context.usage":{"template":"{context.used}/{context.window}"},"session.status":{"template":"{session.turns} turns · {session.steps} steps · {session.tokens} tokens · {session.tool_calls} tool calls"}}</script>
 <script src="/desktop/assets/milpa-live.js"></script>
 <script src="/desktop/assets/milpa-live-remote.js"></script>
