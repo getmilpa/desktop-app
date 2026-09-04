@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.43.0](https://github.com/getmilpa/desktop-app/compare/v0.42.0...v0.43.0) (2026-09-04)
+
+
+### Features
+
+* a Skills surface — the skills the agent carries, and who may invoke each ([#77](https://github.com/getmilpa/desktop-app/issues/77)) ([dc9784d](https://github.com/getmilpa/desktop-app/commit/dc9784da6544f129dcd4897432c8d924da632e79))
+
 ## [0.42.0](https://github.com/getmilpa/desktop-app/compare/v0.41.0...v0.42.0) (2026-09-04)
 
 
