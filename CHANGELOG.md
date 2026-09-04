@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.33.0](https://github.com/getmilpa/desktop-app/compare/v0.32.0...v0.33.0) (2026-09-04)
+
+
+### Features
+
+* the agent message is a component with foot tools (copy, regenerate) ([#52](https://github.com/getmilpa/desktop-app/issues/52)) ([e42ff9d](https://github.com/getmilpa/desktop-app/commit/e42ff9d16c0f8ea288f287918f95aa238bc87c35))
+
 ## [0.32.0](https://github.com/getmilpa/desktop-app/compare/v0.31.0...v0.32.0) (2026-09-04)
 
 
