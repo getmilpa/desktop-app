@@ -239,8 +239,8 @@ final class ShellController
       </span>
       <span style="margin-inline-start:auto;display:flex;align-items:center;gap:var(--space-2);font-family:var(--font-mono);font-size:var(--text-2xs)">
         <span id="milpa-charcount" aria-live="polite" style="color:var(--text-muted);min-width:0"></span>
-        <button type="button" class="composer-chip" data-open-panel="session" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ {$c['turns']} turns · {$c['tool_calls']} tools</button>
-        <button type="button" class="composer-chip" data-open-panel="context" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ {$tokens}/{$window}</button>
+        <button type="button" class="composer-chip" data-open-panel="session" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ <span x-data x-text="\$store.milpa['session.counters']">{$c['turns']} turns · {$c['tool_calls']} tools</span></button>
+        <button type="button" class="composer-chip" data-open-panel="context" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ <span x-data x-text="\$store.milpa['context.usage']">{$tokens}/{$window}</span></button>
         <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" id="milpa-send" aria-label="continue session" disabled style="border-radius:var(--radius-full)">↑</button>
       </span>
     </div>
@@ -286,29 +286,35 @@ HTML;
         $settings = $this->data?->settings() ?? [];
         $mode = \is_string($settings['mode'] ?? null) && isset($modeLabels[$settings['mode']]) ? $modeLabels[$settings['mode']] : 'Ask before changing';
         $counters = $this->data?->counters();
+        $ctx = $this->data?->context() ?? ['tokens' => 0, 'window' => 32768];
 
+        // Every counter the UI shows is a SIGNAL — one truth, projected to the composer chips, the status bar
+        // and the panels alike (greenhouse decisions/0191, Rod). The live feed and the turn update these; every
+        // place that reads them updates at once. A value shown that is not a signal is a value that goes stale.
         return (string) json_encode([
             'composer.mode.label' => $mode,
             'session.state.label' => ucfirst(\is_array($counters) ? (string) $counters['state'] : 'idle'),
             'session.turns' => \is_array($counters) ? (int) $counters['turns'] : 0,
+            'session.steps' => \is_array($counters) ? (int) $counters['steps'] : 0,
+            'session.tokens' => \is_array($counters) ? (int) $counters['tokens'] : 0,
+            'session.tool_calls' => \is_array($counters) ? (int) $counters['tool_calls'] : 0,
+            'context.used' => $this->kfmt((int) $ctx['tokens']),
+            'context.window' => $this->kfmt((int) $ctx['window']),
             'desktop.nav' => 'sessions',
             'desktop.tab' => 'chat',
             'desktop.gate.open' => false,
         ], \JSON_UNESCAPED_SLASHES);
     }
 
-    /** The status bar's counters, from the current session (greenhouse decisions/0482). */
+    /** The status bar's counters — bound to the shared `session.status` signal so they update live with the
+     *  composer chips and the panels (one truth, greenhouse decisions/0191). Seeded from the session (0482). */
     private function statusCounters(): string
     {
         $c = $this->data?->counters() ?? ['turns' => 0, 'steps' => 0, 'tokens' => 0, 'tool_calls' => 0, 'state' => 'idle'];
 
-        return sprintf(
-            '%d turns · %d steps · %d tokens · %d tool calls',
-            $c['turns'],
-            $c['steps'],
-            $c['tokens'],
-            $c['tool_calls'],
-        );
+        $seed = sprintf('%d turns · %d steps · %d tokens · %d tool calls', $c['turns'], $c['steps'], $c['tokens'], $c['tool_calls']);
+
+        return '<span x-data x-text="$store.milpa[\'session.status\']">' . $seed . '</span>';
     }
 
     /** The Work board, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's fourth
@@ -389,6 +395,11 @@ HTML;
           var st = (env.activity && env.activity.state) || '';
           if (st === 'thinking') { this.emit('session.state', { state: 'working' }); }
           else if (st === 'ready') { this.emit('session.state', { state: 'idle' }); }
+          else if (st === 'tool') {
+            // A tool ran: show it in the conversation and count it into the shared tool_calls signal.
+            this.emit('tool.call', { name: (env.activity && env.activity.detail) || 'tool', result: (env.activity && env.activity.result) || '' });
+            if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal('session.tool_calls', (parseInt(MilpaLive.signal('session.tool_calls'), 10) || 0) + 1); }
+          }
         } else if (kind === 'message') {
           this.emit('agent.message', { text: (env.message && env.message.content) || '' });
         } else if (kind === 'reasoning') {
@@ -857,7 +868,27 @@ HTML;
         if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
         else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
         else if (res && res.error) { appendMessage('system', { text: res.error }); }
+        // Update the shared counters from what the turn reported (greenhouse decisions/0191): one truth, and
+        // every place that shows turns/steps/tools/tokens — the composer chips, the status bar, the panels —
+        // is a projection of these signals, so they all move at once.
+        if (res && res.ok) { updateCounters(res); }
       }).catch(function () { appendMessage('system', { text: 'The turn could not be reached.' }); });
+    }
+    // The counters as signals, updated from the turn and the stream — the single source projected everywhere.
+    function sig(key) { return (window.MilpaLive && MilpaLive.signal) ? (MilpaLive.signal(key) || 0) : 0; }
+    function setSig(key, val) { if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal(key, val); } }
+    function estimateContextTokens() {
+      var total = 0;
+      if (chat) { chat.querySelectorAll('.msg').forEach(function (m) { total += (m.textContent || '').length; }); }
+      return Math.ceil(total / 4);
+    }
+    function kfmt(n) { return (n / 1000).toFixed(2) + 'K'; }
+    function updateCounters(res) {
+      setSig('session.turns', (parseInt(sig('session.turns'), 10) || 0) + 1);
+      if (typeof res.steps === 'number') { setSig('session.steps', (parseInt(sig('session.steps'), 10) || 0) + res.steps); }
+      // Context usage: a client estimate from the conversation's size (~4 chars/token) until the turn reports
+      // the session's real token usage — a projected estimate beats a frozen zero.
+      setSig('context.used', kfmt(estimateContextTokens()));
     }
     function send() {
       if (!composerInput) { return; }
@@ -1107,7 +1138,7 @@ HTML;
 <script id="milpa-live-signals" type="application/json"><!--LIVESIGNALS--></script>
 <!-- The mode is remembered across reloads; the session summary is DERIVED from the state and turn signals. -->
 <script id="milpa-live-persist" type="application/json">["composer.mode.label"]</script>
-<script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"}}</script>
+<script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"},"session.counters":{"template":"{session.turns} turns · {session.tool_calls} tools"},"context.usage":{"template":"{context.used}/{context.window}"},"session.status":{"template":"{session.turns} turns · {session.steps} steps · {session.tokens} tokens · {session.tool_calls} tool calls"}}</script>
 <script src="/desktop/assets/milpa-live.js"></script>
 <script src="/desktop/assets/milpa-live-remote.js"></script>
 <script src="/desktop/assets/alpine.min.js"></script>
