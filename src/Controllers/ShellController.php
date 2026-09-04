@@ -503,6 +503,16 @@ HTML;
   .msg--user { display: flex; justify-content: flex-end; }
   .msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
   .msg--agent > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
+  /* The agent's answer is rendered markdown (safe subset): headings, lists, code, emphasis — legible, not raw. */
+  .msg__md { margin-top: var(--space-2); font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
+  .msg__md p { margin: 0 0 var(--space-2); }
+  .msg__md p:last-child { margin-bottom: 0; }
+  .msg__md .md-h { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-base); font-weight: var(--weight-medium); }
+  .msg__md .md-ul { margin: 0 0 var(--space-2); padding-inline-start: var(--space-5); display: flex; flex-direction: column; gap: 2px; }
+  .msg__md .md-code { font-family: var(--font-mono); font-size: var(--text-xs); padding: 1px 5px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); }
+  .msg__md .md-pre { margin: var(--space-2) 0; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); overflow-x: auto; }
+  .msg__md .md-pre code { font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); }
+  .msg__md a { color: var(--accent-text); text-decoration: underline; }
   /* Agent message tools: a quiet row of icon buttons at the foot of the answer — copy, regenerate. They stay
      dim until the message is hovered, then come forward; a copied tool flashes the accent. */
   .msg__tools { display: flex; gap: var(--space-1); margin-top: var(--space-2); opacity: 0; transition: opacity var(--dur-fast, 120ms) ease-out; }
@@ -777,11 +787,39 @@ HTML;
         refreshCount();
       });
     }
+    // A SAFE markdown renderer for the agent's message (greenhouse decisions/0191, Rod: the answer shows
+    // markdown intent). It ESCAPES the model's text first — the model's output is never injected as raw HTML —
+    // then applies a small, known-safe subset (fenced/inline code, bold, italic, links with a safe scheme,
+    // headings, lists). Every tag it emits is one it wrote; the only text that survives is escaped.
+    function renderMarkdown(src) {
+      src = String(src == null ? '' : src);
+      function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      var blocks = [];
+      src = src.replace(/```[^\n]*\n?([\s\S]*?)```/g, function (_, code) { blocks.push('<pre class="md-pre"><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>'); return ' B' + (blocks.length - 1) + ' '; });
+      var out = esc(src);
+      out = out.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
+      out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+      out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      var lines = out.split('\n'), html = '', inList = false;
+      for (var i = 0; i < lines.length; i++) {
+        var ln = lines[i], h = ln.match(/^(#{1,3})\s+(.*)$/), li = ln.match(/^\s*[-*]\s+(.*)$/);
+        if (li) { if (!inList) { html += '<ul class="md-ul">'; inList = true; } html += '<li>' + li[1] + '</li>'; continue; }
+        if (inList) { html += '</ul>'; inList = false; }
+        if (h) { var lvl = h[1].length + 2; html += '<h' + lvl + ' class="md-h">' + h[2] + '</h' + lvl + '>'; continue; }
+        if (ln.trim() === '') { continue; }
+        html += '<p>' + ln + '</p>';
+      }
+      if (inList) { html += '</ul>'; }
+      html = html.replace(/<p> B(\d+) <\/p>/g, function (_, i) { return blocks[i]; });
+      html = html.replace(/ B(\d+) /g, function (_, i) { return blocks[i]; });
+      return html;
+    }
     // Every message is a Milpa Component (greenhouse decisions/0191): the conversation CLONES the prototype for
     // its kind and fills the instance's data regions — no more createElement. The backend's stream routes here
     // by event type; the user's own message uses it too. (Running the turn is the agent runtime, decisions/0254.)
     var MSG_PROTOS = {
-      agent: { id: 'milpa-agent-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-agent-body]'); if (b) { b.textContent = o.text || ''; } } },
+      agent: { id: 'milpa-agent-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-agent-body]'); if (b) { b.innerHTML = renderMarkdown(o.text || ''); } } },
       user: { id: 'milpa-user-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-user-body]'); if (b) { b.textContent = o.text || ''; } } },
       tool: { id: 'milpa-tool-msg-proto', fill: function (r, o) {
         var n = r.querySelector('[data-tool-name]'); if (n) { n.textContent = o.name || 'tool'; }

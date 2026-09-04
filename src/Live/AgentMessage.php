@@ -65,7 +65,7 @@ final class AgentMessage
         // delegated handler on the conversation, so a cloned instance needs no per-instance wiring.
         return '<div class="msg msg--agent" data-milpa-component="desktop-agent-message" data-milpa-component-id="' . self::COMPONENT_ID . '">'
             . '<span class="msg__meta">agent · local</span>'
-            . '<p data-agent-body></p>'
+            . '<div class="msg__md" data-agent-body></div>'
             . '<div class="msg__tools" role="group" aria-label="message tools">'
             . $this->tool('data-agent-copy', 'Copy', $this->copyIcon())
             . $this->tool('data-agent-regenerate', 'Regenerate', $this->regenerateIcon())

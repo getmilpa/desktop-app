@@ -392,6 +392,9 @@ final class ShellControllerTest extends TestCase
         // instead of a separate status line under the box.
         self::assertStringContainsString('id="milpa-charcount"', $body);
         self::assertStringContainsString("charCount.textContent = n > 0 ? ('~' + toks + ' tokens') : ''", $body);
+        // The agent's answer is rendered markdown (safe subset), not raw text (greenhouse decisions/0191, Rod).
+        self::assertStringContainsString('function renderMarkdown(', $body);
+        self::assertStringContainsString('b.innerHTML = renderMarkdown(o.text', $body);
         // The session projection maps activity thinking/ready to the working badge, message to a bubble.
         self::assertStringContainsString("this.emit('session.state', { state: 'working' })", $body);
         self::assertStringContainsString("this.emit('agent.message'", $body);
