@@ -100,6 +100,14 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $this->container->registerService(DataController::class, new DataController($data));
 
         $mercure = $this->mercure();
+        // Expose the Mercure hub to the runtime under milpa/mercure's own name, so a governed agent turn run
+        // over the HTTP surface streams its session.* events — reasoning included — to the SAME hub the shell
+        // reads (greenhouse decisions/0190). AgentOperations' broadcaster() finds it here and BroadcastingEventStore
+        // publishes to `milpa/sessions/<id>`; the shell subscribes to that topic. A Desktop with no hub configured
+        // registers nothing and the turn simply does not stream, which is the honest default.
+        if ($mercure !== null) {
+            $this->container->registerService(\Milpa\Mercure\MercureService::class, $mercure->service());
+        }
         // milpa/live — the framework's official UI system — powers the composer field as a real component
         // (greenhouse decisions/0189). The registry is extensible: an agent or a human registers new
         // primitives the same way ComposerField registers the textarea.
