@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.38.0](https://github.com/getmilpa/desktop-app/compare/v0.37.1...v0.38.0) (2026-09-04)
+
+
+### Features
+
+* the status bar shows the real provider token count, not an estimate ([#64](https://github.com/getmilpa/desktop-app/issues/64)) ([ac62a2c](https://github.com/getmilpa/desktop-app/commit/ac62a2c293216cb025ac967167e2e3e8a307de73))
+
 ## [0.37.1](https://github.com/getmilpa/desktop-app/compare/v0.37.0...v0.37.1) (2026-09-04)
 
 
