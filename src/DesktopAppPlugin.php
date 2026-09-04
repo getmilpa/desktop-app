@@ -150,7 +150,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $gate = new \Milpa\DesktopApp\Live\Gate($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Gate::class, $gate);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate));
+        // The conversation's message types become Milpa Components too (greenhouse decisions/0191). The first:
+        // the thinking block — a declared component whose prototype the shell clones per turn and feeds live.
+        $thinking = new \Milpa\DesktopApp\Live\Thinking($this->liveSecret('signing'), $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\Thinking::class, $thinking);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
