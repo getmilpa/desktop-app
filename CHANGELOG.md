@@ -3,6 +3,14 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.39.0](https://github.com/getmilpa/desktop-app/compare/v0.38.1...v0.39.0) (2026-09-04)
+
+
+### Features
+
+* conversation message pass — verdict rides the tool row, agent gets a system-toned bubble ([#70](https://github.com/getmilpa/desktop-app/issues/70)) ([06dc720](https://github.com/getmilpa/desktop-app/commit/06dc720fc846ed6700e25e61c5915eb3b787ce16))
+* the thinking block breathes while the model reasons, then settles ([#68](https://github.com/getmilpa/desktop-app/issues/68)) ([e8802ac](https://github.com/getmilpa/desktop-app/commit/e8802ac14f29df4d794a1ff36fc4e93a9e710795))
+
 ## [0.38.1](https://github.com/getmilpa/desktop-app/compare/v0.38.0...v0.38.1) (2026-09-04)
 
 
