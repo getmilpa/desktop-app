@@ -404,11 +404,18 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString("window.MilpaShell.on('agent.reasoning'", $body);
         self::assertStringContainsString('function appendReasoning(', $body);
         self::assertStringContainsString('function endReasoning(', $body);
+        // The thinking block is the `desktop-thinking` component: the conversation CLONES its prototype and
+        // feeds it by events (greenhouse decisions/0191) — not createElement.
+        self::assertStringContainsString("getElementById('milpa-thinking-proto')", $body);
+        self::assertStringContainsString('content.cloneNode(true)', $body);
+        self::assertStringContainsString('[data-thinking-body]', $body);
+        self::assertStringContainsString("setAttribute('data-open', '0')", $body);
+        // One delegated toggle for every thinking block, now and future.
+        self::assertStringContainsString('[data-thinking-toggle]', $body);
+        // The prototype is present, a real component with its declared behaviour and signed envelope.
+        self::assertStringContainsString('<template id="milpa-thinking-proto">', $body);
+        self::assertStringContainsString('data-milpa-component="desktop-thinking"', $body);
         // The agent's message and the turn ending both close the block.
         self::assertStringContainsString("on('agent.message', function (d) { endReasoning();", $body);
-        self::assertStringContainsString("thought for '", $body);
-        // The block is its own visual voice — a collapsible aside, not the agent's speech.
-        self::assertStringContainsString('milpa-think__toggle', $body);
-        self::assertStringContainsString('milpa-think__body', $body);
     }
 }

@@ -53,6 +53,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Activity $activity = null,
         private readonly ?\Milpa\DesktopApp\Live\Context $context = null,
         private readonly ?\Milpa\DesktopApp\Live\Gate $gate = null,
+        private readonly ?\Milpa\DesktopApp\Live\Thinking $thinking = null,
     ) {
     }
 
@@ -110,11 +111,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--THINKING-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->thinkingHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -328,6 +329,13 @@ HTML;
         return ($this->gate ?? new \Milpa\DesktopApp\Live\Gate('desktop-gate-fallback', $this->events))->render();
     }
 
+    /** The thinking component's prototype (greenhouse decisions/0191): the conversation clones it per turn and
+     *  feeds it the reasoning by events. The first message type made a real Milpa Component. */
+    private function thinkingHtml(): string
+    {
+        return ($this->thinking ?? new \Milpa\DesktopApp\Live\Thinking('desktop-thinking-fallback', $this->events))->render();
+    }
+
     /**
      * The client component runtime, always served (greenhouse decisions/0476, 0478).
      *
@@ -468,6 +476,7 @@ HTML;
   .milpa-think__toggle:hover { color: var(--text-secondary); }
   .milpa-think[data-open="1"] .milpa-think__toggle::after { content: ' ▾'; }
   .milpa-think[data-open="0"] .milpa-think__toggle::after { content: ' ▸'; }
+  .milpa-think[data-open="0"] .milpa-think__body { display: none; }
   .milpa-think__body { margin-top: var(--space-2); max-height: 16rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
   /* Tool call: a compact mono card, the machinery made legible. */
   .msg--tool > div { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); }
@@ -536,6 +545,11 @@ HTML;
            stays put. Shown only on the Conversation tab. -->
       <div id="milpa-composer-dock" :hidden="$store.milpa['desktop.tab'] !== 'chat'" style="flex:none;padding:var(--space-3) var(--space-8) var(--space-5);border-top:1px solid var(--border-subtle);background:var(--bg)"><!--COMPOSER--></div>
       </div><!-- /view session -->
+
+      <!-- The thinking message component's prototype (greenhouse decisions/0191): the conversation clones this
+           per turn — Alpine hydrates each clone — and feeds it the reasoning by `thinking:delta`/`thinking:done`
+           events. A plugin extends every thinking block by hooking the component's render events, once, here. -->
+      <template id="milpa-thinking-proto"><!--THINKING--></template>
 
       <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);align-items:start">
@@ -722,47 +736,43 @@ HTML;
       return el;
     }
 
-    // The live thinking block (greenhouse decisions/0190): reasoning deltas stream in — the words assemble
-    // in front of the user — and when the turn produces its message (or ends) the block COLLAPSES to a
-    // toggle ("thought for Ns"), which re-opens on click. A distinct visual voice from the agent's message.
-    var reasoningEl = null, reasoningBody = null, reasoningStart = 0;
+    // The thinking block is the `desktop-thinking` Milpa Component (greenhouse decisions/0191): the conversation
+    // CLONES its server-rendered prototype per turn and feeds THIS instance — the reasoning into its body, the
+    // elapsed into its head. Its collapse is the component's own (CSS on `data-open`); one delegated toggle
+    // handler (below) flips it. No per-instance imperative wiring, no reliance on Alpine hydrating a clone.
+    var reasoningEl = null, reasoningStart = 0;
     function appendReasoning(delta) {
-      if (!chat || !delta) { return; }
+      if (!chat) { return; }
       if (!reasoningEl) {
+        var proto = document.getElementById('milpa-thinking-proto');
+        if (!proto || !('content' in proto)) { return; }
+        var frag = proto.content.cloneNode(true);
+        reasoningEl = frag.querySelector('.milpa-think');
         reasoningStart = Date.now();
-        // Local refs so each block's toggle keeps working after endReasoning() clears the shared ones.
-        var blockEl = document.createElement('div');
-        blockEl.className = 'msg msg--thinking milpa-think';
-        blockEl.setAttribute('data-open', '1');
-        var head = document.createElement('button');
-        head.type = 'button';
-        head.className = 'milpa-think__toggle';
-        head.textContent = '◈ thinking…';
-        var bodyEl = document.createElement('div');
-        bodyEl.className = 'milpa-think__body';
-        head.addEventListener('click', function () {
-          var open = blockEl.getAttribute('data-open') === '1';
-          blockEl.setAttribute('data-open', open ? '0' : '1');
-          bodyEl.hidden = open;
-        });
-        blockEl.appendChild(head);
-        blockEl.appendChild(bodyEl);
-        chat.appendChild(blockEl);
-        reasoningEl = blockEl;
-        reasoningBody = bodyEl;
+        chat.appendChild(frag);
       }
-      reasoningBody.textContent += delta;
-      reasoningEl.scrollIntoView({ block: 'end' });
+      if (reasoningEl) {
+        var body = reasoningEl.querySelector('[data-thinking-body]');
+        if (body) { body.textContent += (delta || ''); }
+        reasoningEl.scrollIntoView({ block: 'end' });
+      }
     }
     function endReasoning() {
       if (!reasoningEl) { return; }
       var secs = Math.max(1, Math.round((Date.now() - reasoningStart) / 1000));
-      var head = reasoningEl.querySelector('.milpa-think__toggle');
+      var head = reasoningEl.querySelector('[data-thinking-head]');
       if (head) { head.textContent = '◈ thought for ' + secs + 's'; }
       reasoningEl.setAttribute('data-open', '0');
-      if (reasoningBody) { reasoningBody.hidden = true; }
       reasoningEl = null;
-      reasoningBody = null;
+    }
+    // One delegated toggle for every thinking block, now and future (greenhouse decisions/0191).
+    if (chat) {
+      chat.addEventListener('click', function (e) {
+        var t = e.target.closest ? e.target.closest('[data-thinking-toggle]') : null;
+        if (!t) { return; }
+        var block = t.closest('.milpa-think');
+        if (block) { block.setAttribute('data-open', block.getAttribute('data-open') === '1' ? '0' : '1'); }
+      });
     }
 
     // The agent session this Desktop drives (greenhouse decisions/0190): the server minted it, set it in a
