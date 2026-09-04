@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.32.0](https://github.com/getmilpa/desktop-app/compare/v0.31.0...v0.32.0) (2026-09-04)
+
+
+### Features
+
+* the thinking block is a real Milpa Component (conversation-as-components arc) ([#50](https://github.com/getmilpa/desktop-app/issues/50)) ([5ecbe5e](https://github.com/getmilpa/desktop-app/commit/5ecbe5e3f66ee2cb9f3f5ef5f8479c3b7d9f8860))
+
 ## [0.31.0](https://github.com/getmilpa/desktop-app/compare/v0.30.0...v0.31.0) (2026-09-04)
 
 
