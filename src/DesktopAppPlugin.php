@@ -155,7 +155,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $thinking = new \Milpa\DesktopApp\Live\Thinking($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Thinking::class, $thinking);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking));
+        // The agent message is a component too (greenhouse decisions/0191): it carries its foot tools — copy
+        // the answer, regenerate it — and a plugin adds more by hooking its render events.
+        $agentMessage = new \Milpa\DesktopApp\Live\AgentMessage($this->liveSecret('signing'), $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\AgentMessage::class, $agentMessage);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
