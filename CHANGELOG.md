@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.44.0](https://github.com/getmilpa/desktop-app/compare/v0.43.0...v0.44.0) (2026-09-04)
+
+
+### Features
+
+* specialist agent roles, and a live preview of declared screens ([#79](https://github.com/getmilpa/desktop-app/issues/79)) ([b9c803e](https://github.com/getmilpa/desktop-app/commit/b9c803eccb81a423133437038b8296b2cee435af))
+
 ## [0.43.0](https://github.com/getmilpa/desktop-app/compare/v0.42.0...v0.43.0) (2026-09-04)
 
 
