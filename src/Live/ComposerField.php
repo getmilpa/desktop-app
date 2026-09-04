@@ -87,14 +87,12 @@ final class ComposerField
 
         $subject->html = $this->renderer->render($component, new RenderRequest(
             context: $context,
-            // `remote` binds the framework's remote runtime: the field validates on the server on blur and
-            // applies the cross-component effects — no Desktop-specific JS wires the round-trip.
-            props: ['endpoint' => self::ROUTE, 'remote' => true],
+            // A local field: typing is zero-network. The char count lives in the composer footer now
+            // (greenhouse decisions/0191, Rod's minimalist UX) — no separate status line under the box.
+            props: ['endpoint' => self::ROUTE, 'remote' => false],
             state: $state,
             target: RenderTarget::HTML,
         ))->output;
-        // The sibling status the field re-paints on blur (initially neutral). Its id is the effect's target.
-        $subject->html .= '<div style="margin-top:var(--space-2)">' . $this->renderStatus('Ready') . '</div>';
 
         $this->events?->dispatch(self::AFTER_RENDER, ['composer' => $subject]);
 
