@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.35.0](https://github.com/getmilpa/desktop-app/compare/v0.34.0...v0.35.0) (2026-09-04)
+
+
+### Features
+
+* the conversation is a component; minimalist composer with a token count ([#56](https://github.com/getmilpa/desktop-app/issues/56)) ([f174eb0](https://github.com/getmilpa/desktop-app/commit/f174eb028ea85fa6d3e00351058dbc627b5a8108))
+
 ## [0.34.0](https://github.com/getmilpa/desktop-app/compare/v0.33.0...v0.34.0) (2026-09-04)
 
 
