@@ -18,6 +18,7 @@ use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
+use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\ShellEvent;
@@ -116,6 +117,37 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('cap-grid', $body);
         self::assertStringContainsString('Installed ·', $body);
         self::assertStringContainsString('Available ·', $body);
+    }
+
+    public function testCapabilityCatalogueViewRendersCardsAndAOneClickEnable(): void
+    {
+        // Populated catalogue (pure view, greenhouse decisions/0193): an installed capability renders a card
+        // with its badge; an available one renders its exact command as legible consent plus a one-click Enable.
+        $html = (new CapabilityCatalogueView())->html(
+            [['id' => 'agent', 'title' => 'Sessions that outlive the process', 'provides' => 'agent.sessions']],
+            [['package' => 'milpa/data', 'title' => 'Persistence with four backends', 'unlocks' => ['persistence'], 'command' => 'composer require milpa/data']],
+        );
+
+        self::assertStringContainsString('Installed · 1', $html);
+        self::assertStringContainsString('Available · 1', $html);
+        self::assertStringContainsString('Sessions that outlive the process', $html);
+        self::assertStringContainsString('mui-badge--success">installed', $html);
+        self::assertStringContainsString('data-cap-enable="milpa/data"', $html);
+        self::assertStringContainsString('composer require milpa/data', $html);
+        self::assertStringContainsString('Unlocks: persistence', $html);
+        self::assertStringContainsString('agent.sessions', $html);
+    }
+
+    public function testCapabilityCatalogueViewFallsBackToADerivedCommandAndEmptyStates(): void
+    {
+        // No command given → derive `composer require <package>`; empty collections → the two empty states.
+        $derived = (new CapabilityCatalogueView())->html([], [['package' => 'milpa/mcp-server']]);
+        self::assertStringContainsString('composer require milpa/mcp-server', $derived);
+        self::assertStringContainsString('Only the catalogue', $derived);
+
+        $empty = (new CapabilityCatalogueView())->html([['package' => 'milpa/core']], []);
+        self::assertStringContainsString('milpa/core', $empty);
+        self::assertStringContainsString('Everything available is installed', $empty);
     }
 
     public function testWithoutDataTheCapabilitiesViewShowsAnEmptyState(): void

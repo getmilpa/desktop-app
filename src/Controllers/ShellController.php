@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Controllers;
 
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
@@ -131,62 +132,16 @@ final class ShellController
     }
 
     /**
-     * The capability catalogue as HTML — INSTALLED and AVAILABLE, side by side (greenhouse decisions/0193).
+     * The capability catalogue as HTML — INSTALLED and AVAILABLE (greenhouse decisions/0193).
      *
-     * The human sees the same list the agent sees ({@see DesktopData::capabilityCatalogue()}), and each
-     * available one carries a one-click Enable that installs it through the gated `capabilities:enable`
-     * over HTTP — so "the human installs it" and "the agent has it" become one act.
+     * The human sees the same list the agent sees ({@see DesktopData::capabilityCatalogue()}); the render
+     * itself is a pure {@see CapabilityCatalogueView} so its branches are tested with fixtures, not a runtime.
      */
     private function capabilityCatalogueHtml(): string
     {
-        $cat = $this->data?->capabilityCatalogue() ?? ['installed' => [], 'available' => [], 'source' => ''];
-        $installed = $cat['installed'];
-        $available = $cat['available'];
+        $cat = $this->data?->capabilityCatalogue() ?? ['installed' => [], 'available' => []];
 
-        $esc = static fn (mixed $v): string => htmlspecialchars(is_string($v) ? $v : '', ENT_QUOTES);
-        $line = static function (mixed $v) use ($esc): string {
-            if (is_array($v)) {
-                $v = implode(', ', array_filter($v, 'is_string'));
-            }
-
-            return $esc($v);
-        };
-        $named = static function (array $c) use ($esc): string {
-            $id = is_string($c['id'] ?? null) && $c['id'] !== '' ? $c['id'] : (is_string($c['package'] ?? null) ? $c['package'] : '');
-
-            return $esc($id);
-        };
-
-        $instCards = $installed === []
-            ? '<p class="mui-empty" style="color:var(--text-muted)">Only the catalogue — nothing installed reports here.</p>'
-            : implode('', array_map(static function (array $c) use ($named, $line, $esc): string {
-                $title = $esc($c['title'] ?? '');
-                $sub = $line($c['provides'] ?? ($c['unlocks'] ?? ''));
-
-                return '<div class="cap-card"><div class="cap-card__head"><span class="cap-card__name">' . $named($c) . '</span>'
-                    . '<span class="mui-badge mui-badge--success">installed</span></div>'
-                    . ($title !== '' ? '<p class="cap-card__desc">' . $title . '</p>' : '')
-                    . ($sub !== '' ? '<p class="cap-card__sub">' . $sub . '</p>' : '') . '</div>';
-            }, $installed));
-
-        $availCards = $available === []
-            ? '<p class="mui-empty" style="color:var(--text-muted)">Everything available is installed.</p>'
-            : implode('', array_map(static function (array $c) use ($esc, $line): string {
-                $pkg = is_string($c['package'] ?? null) ? $c['package'] : '';
-                $cmd = is_string($c['command'] ?? null) ? $c['command'] : ('composer require ' . $pkg);
-                $title = $esc($c['title'] ?? '');
-                $unlocks = $line($c['unlocks'] ?? '');
-
-                return '<div class="cap-card" data-cap-row="' . $esc($pkg) . '"><div class="cap-card__head"><span class="cap-card__name">' . $esc($pkg) . '</span>'
-                    . '<button type="button" class="mui-btn mui-btn--primary mui-btn--sm" data-cap-enable="' . $esc($pkg) . '" data-cap-cmd="' . $esc($cmd) . '">Enable</button></div>'
-                    . ($title !== '' ? '<p class="cap-card__desc">' . $title . '</p>' : '')
-                    . ($unlocks !== '' ? '<p class="cap-card__sub">Unlocks: ' . $unlocks . '</p>' : '') . '</div>';
-            }, $available));
-
-        return '<div class="cap-grid">'
-            . '<section><p class="cap-col__head">Installed · ' . count($installed) . '</p><div class="cap-stack">' . $instCards . '</div></section>'
-            . '<section><p class="cap-col__head">Available · ' . count($available) . '</p><div class="cap-stack">' . $availCards . '</div></section>'
-            . '</div><p class="cap-msg" id="milpa-cap-msg" role="status" hidden></p>';
+        return (new CapabilityCatalogueView())->html($cat['installed'], $cat['available']);
     }
 
     /** The model endpoint: the persisted setting if saved (0483), else the configured one. */
