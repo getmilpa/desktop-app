@@ -43,7 +43,14 @@ final class MessagePrototypesTest extends TestCase
         $tool = $p->tool();
         self::assertStringContainsString('data-milpa-component="desktop-tool-call"', $tool);
         self::assertStringContainsString('data-tool-name', $tool);
-        self::assertStringContainsString('data-tool-result', $tool);
+        self::assertStringContainsString('data-tool-summary', $tool);
+        self::assertStringContainsString('data-tool-body', $tool);
+        self::assertStringContainsString('data-tool-toggle', $tool);
+
+        $result = $p->resultClaim();
+        self::assertStringContainsString('data-milpa-component="desktop-result-claim"', $result);
+        self::assertStringContainsString('data-result-mark', $result);
+        self::assertStringContainsString('data-result-text', $result);
 
         $task = $p->task();
         self::assertStringContainsString('data-milpa-component="desktop-task"', $task);
@@ -78,6 +85,7 @@ final class MessagePrototypesTest extends TestCase
         self::assertSame('desktop-tool-call', ToolCallComponent::contract()->name);
         self::assertSame('desktop-task', TaskComponent::contract()->name);
         self::assertSame('desktop-system-notice', SystemNoticeComponent::contract()->name);
+        self::assertSame('desktop-result-claim', \Milpa\DesktopApp\Live\ResultClaimComponent::contract()->name);
 
         $tool = new ToolCallComponent();
         $state = $tool->mount(['name' => 'capabilities.list', 'result' => '6 capabilities'], new ComponentContext('tool-call'));
