@@ -104,7 +104,22 @@ hub when one is configured (`desktop.mercure.*`), else through the `/desktop/eve
 
 Configure `desktop.mercure.{hub_url,public_url,publisher_key,subscriber_key}` and the app publishes shell
 changes to the hub (via `milpa/mercure`) while the dashboard subscribes to it — the grid updates with no
-poll. Without a hub, the app runs on the shared-log feed.
+poll. Without a hub, the app runs on the shared-log feed. One more key, `desktop.mercure.cors_origin`, is
+OPTIONAL and declaration-only — read only by the service declaration below, not by the wiring: the origin(s)
+the hub lets subscribe, space-separated when there are several.
+
+The plugin also DECLARES the hub it needs: `DesktopAppPlugin` implements the runtime's
+`StackProviderInterface` (`Milpa\Runtime\Stack`, greenhouse decisions/0201) and returns one
+`ServiceDeclaration` — `dunglas/mercure`, container port 80 published on the port of the URL the browser
+reaches (`public_url`, else `hub_url`, and only when that URL's host is loopback — an in-network
+`http://mercure:80/...` names no host port; 3000 otherwise), `SERVER_NAME=:80`, the publisher/subscriber
+JWT keys as SECRETS that reference `desktop.mercure.publisher_key` / `subscriber_key` (never shown,
+projected as `${NAME}`), and `MERCURE_EXTRA_DIRECTIVES` with `cors_origins` (`desktop.mercure.cors_origin`
+verbatim, default `http://127.0.0.1:8080 http://localhost:8080` — both spellings of the quickstart origin,
+because a credentialed EventSource is refused unless the browser's origin matches exactly) plus
+`anonymous`. An admin panel can list the service, probe its port and project a compose fragment from that
+declaration; nothing in this plugin starts a container. The declaration reads the wiring's keys plus that
+one optional key.
 
 ## The arc
 
