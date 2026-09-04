@@ -395,6 +395,12 @@ final class ShellControllerTest extends TestCase
         // The agent's answer is rendered markdown (safe subset), not raw text (greenhouse decisions/0191, Rod).
         self::assertStringContainsString('function renderMarkdown(', $body);
         self::assertStringContainsString('b.innerHTML = renderMarkdown(o.text', $body);
+        // The token counter is the provider's REAL count (greenhouse decisions/0192), not a "≈" estimate.
+        self::assertStringContainsString("setSig('session.tokens', kfmt(res.tokens))", $body);
+        self::assertStringContainsString("setSig('context.used', kfmt(res.contextTokens))", $body);
+        self::assertStringNotContainsString('≈', $body);
+        // No stray NUL bytes in the rendered shell (a corruption the code-block placeholder once introduced).
+        self::assertStringNotContainsString("\0", $body);
         // The session projection maps activity thinking/ready to the working badge, message to a bubble.
         self::assertStringContainsString("this.emit('session.state', { state: 'working' })", $body);
         self::assertStringContainsString("this.emit('agent.message'", $body);

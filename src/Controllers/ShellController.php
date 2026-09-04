@@ -795,7 +795,7 @@ HTML;
       src = String(src == null ? '' : src);
       function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
       var blocks = [];
-      src = src.replace(/```[^\n]*\n?([\s\S]*?)```/g, function (_, code) { blocks.push('<pre class="md-pre"><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>'); return ' B' + (blocks.length - 1) + ' '; });
+      src = src.replace(/```[^\n]*\n?([\s\S]*?)```/g, function (_, code) { blocks.push('<pre class="md-pre"><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>'); return '�B' + (blocks.length - 1) + '�'; });
       var out = esc(src);
       out = out.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
       out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -811,8 +811,8 @@ HTML;
         html += '<p>' + ln + '</p>';
       }
       if (inList) { html += '</ul>'; }
-      html = html.replace(/<p> B(\d+) <\/p>/g, function (_, i) { return blocks[i]; });
-      html = html.replace(/ B(\d+) /g, function (_, i) { return blocks[i]; });
+      html = html.replace(/<p>�B(\d+)�<\/p>/g, function (_, i) { return blocks[i]; });
+      html = html.replace(/�B(\d+)�/g, function (_, i) { return blocks[i]; });
       return html;
     }
     // Every message is a Milpa Component (greenhouse decisions/0191): the conversation CLONES the prototype for
@@ -963,23 +963,17 @@ HTML;
     // The counters as signals, updated from the turn and the stream — the single source projected everywhere.
     function sig(key) { return (window.MilpaLive && MilpaLive.signal) ? (MilpaLive.signal(key) || 0) : 0; }
     function setSig(key, val) { if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal(key, val); } }
-    function estimateContextTokens() {
-      var total = 0;
-      if (chat) { chat.querySelectorAll('.msg').forEach(function (m) { total += (m.textContent || '').length; }); }
-      return Math.ceil(total / 4);
-    }
     function kfmt(n) { return (n / 1000).toFixed(2) + 'K'; }
     function updateCounters(res) {
       setSig('session.turns', (parseInt(sig('session.turns'), 10) || 0) + 1);
       if (typeof res.steps === 'number') { setSig('session.steps', (parseInt(sig('session.steps'), 10) || 0) + res.steps); }
-      // Tokens: a client ESTIMATE from the conversation's size (~4 chars/token), marked "≈" so it never
-      // masquerades as a counted figure (the house's own doctrine: a token bar that guesses without saying so
-      // is a fabricated number in a real one's clothes — SessionEvent::ModelReturned; its TUI labels the same
-      // estimate "estimado"). The session's REAL provider usage is a framework follow-on (the `agent` op does
-      // not return it yet). One estimate, projected to the status bar and the context chip alike.
-      var est = '≈' + kfmt(estimateContextTokens());
-      setSig('context.used', est);
-      setSig('session.tokens', est);
+      // The REAL token cost, from the provider's own numbers the turn reported (greenhouse decisions/0192) —
+      // a counted figure, not an estimate. `tokens` is the session's cumulative total; `contextTokens` is what the last call
+      // put in the window. Absent when the provider never said (the op omits it), so the seed stands rather
+      // than a fabricated zero — the house's own doctrine (SessionEvent::ModelReturned): a token bar that
+      // guesses is a fabricated number in a real one's clothes. One truth, projected to the status bar and chip.
+      if (typeof res.tokens === 'number') { setSig('session.tokens', kfmt(res.tokens)); }
+      if (typeof res.contextTokens === 'number') { setSig('context.used', kfmt(res.contextTokens)); }
     }
     function send() {
       if (!composerInput) { return; }
