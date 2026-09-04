@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.38.1](https://github.com/getmilpa/desktop-app/compare/v0.38.0...v0.38.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* the composer field is seamless inside its box — one border, one authority ([#66](https://github.com/getmilpa/desktop-app/issues/66)) ([6d32ac1](https://github.com/getmilpa/desktop-app/commit/6d32ac1ad172ec69761f8f8fe39ebaa7ff186a9b))
+
 ## [0.38.0](https://github.com/getmilpa/desktop-app/compare/v0.37.1...v0.38.0) (2026-09-04)
 
 
