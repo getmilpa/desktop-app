@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.36.0](https://github.com/getmilpa/desktop-app/compare/v0.35.0...v0.36.0) (2026-09-04)
+
+
+### Features
+
+* session counters are shared signals, projected live to every UI element ([#58](https://github.com/getmilpa/desktop-app/issues/58)) ([eb2ff6f](https://github.com/getmilpa/desktop-app/commit/eb2ff6f4eec6fe861a858c3b4ac2e972297fbbbc))
+
 ## [0.35.0](https://github.com/getmilpa/desktop-app/compare/v0.34.0...v0.35.0) (2026-09-04)
 
 
