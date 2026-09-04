@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.41.0](https://github.com/getmilpa/desktop-app/compare/v0.40.0...v0.41.0) (2026-09-04)
+
+
+### Features
+
+* the Decisions pane is a live cross-session inbox of parked questions ([#73](https://github.com/getmilpa/desktop-app/issues/73)) ([7a434eb](https://github.com/getmilpa/desktop-app/commit/7a434ebc23d342101e3f10e8fbda2d6c8a89af31))
+
 ## [0.40.0](https://github.com/getmilpa/desktop-app/compare/v0.39.0...v0.40.0) (2026-09-04)
 
 
