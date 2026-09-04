@@ -120,11 +120,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -522,9 +522,20 @@ HTML;
   .milpa-think[data-open="0"] .milpa-think__toggle::after { content: ' ▸'; }
   .milpa-think[data-open="0"] .milpa-think__body { display: none; }
   .milpa-think__body { margin-top: var(--space-2); max-height: 16rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
-  /* Tool call: a compact mono card, the machinery made legible. */
-  .msg--tool > div { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); }
+  /* Tool call: a compact mono card, the machinery made legible — name + summary, the raw result collapsed. */
+  .msg--tool .msg__tool-head { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); cursor: pointer; }
+  .msg--tool .msg__tool-head:hover { border-color: var(--border); }
   .msg--tool .msg__tool-name { color: var(--accent-text); }
+  .msg--tool .msg__tool-summary { color: var(--text-secondary); }
+  .msg--tool[data-open="1"] .msg__tool-head::after { content: ' ▾'; opacity: .5; }
+  .msg--tool[data-open="0"] .msg__tool-head::after { content: ' ▸'; opacity: .5; }
+  .msg--tool[data-open="0"] .msg__tool-raw { display: none; }
+  .msg--tool .msg__tool-raw { margin: var(--space-2) 0 0; max-height: 18rem; overflow: auto; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
+  /* Result claim: the ledger's verdict on the turn — a quiet line, green when verified, warning when disputed. */
+  .msg--result { display: inline-flex; align-items: baseline; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); }
+  .msg--result[data-verified="1"] .msg__result-mark { color: var(--success); }
+  .msg--result[data-verified="0"] .msg__result-mark { color: var(--warning); }
+  .msg--result[data-verified="0"] { color: var(--warning); }
   /* System: a centered, quiet notice — the house speaking, not a participant. */
   .msg--system { align-self: center; text-align: center; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; }
   /* Task: a row the agent added to the plan — a leading mark, monospace title. */
@@ -604,6 +615,7 @@ HTML;
       <template id="milpa-tool-msg-proto"><!--TOOLMSG--></template>
       <template id="milpa-task-msg-proto"><!--TASKMSG--></template>
       <template id="milpa-system-msg-proto"><!--SYSMSG--></template>
+      <template id="milpa-result-msg-proto"><!--RESULTMSG--></template>
 
       <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);align-items:start">
@@ -771,10 +783,35 @@ HTML;
     var MSG_PROTOS = {
       agent: { id: 'milpa-agent-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-agent-body]'); if (b) { b.textContent = o.text || ''; } } },
       user: { id: 'milpa-user-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-user-body]'); if (b) { b.textContent = o.text || ''; } } },
-      tool: { id: 'milpa-tool-msg-proto', fill: function (r, o) { var n = r.querySelector('[data-tool-name]'); if (n) { n.textContent = o.name || 'tool'; } var x = r.querySelector('[data-tool-result]'); if (x) { x.textContent = '→ ' + (o.result || ''); } } },
+      tool: { id: 'milpa-tool-msg-proto', fill: function (r, o) {
+        var n = r.querySelector('[data-tool-name]'); if (n) { n.textContent = o.name || 'tool'; }
+        var raw = String(o.result || '');
+        var sum = r.querySelector('[data-tool-summary]'); if (sum) { sum.textContent = toolSummary(raw); }
+        var body = r.querySelector('[data-tool-body]'); if (body) { body.textContent = prettyMaybe(raw); }
+      } },
       task: { id: 'milpa-task-msg-proto', fill: function (r, o) { var t = r.querySelector('[data-task-title]'); if (t) { t.textContent = o.title || ''; } var s = r.querySelector('[data-task-status]'); if (s) { s.textContent = o.status || 'todo'; } } },
-      system: { id: 'milpa-system-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-system-body]'); if (b) { b.textContent = o.text || ''; } } }
+      system: { id: 'milpa-system-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-system-body]'); if (b) { b.textContent = o.text || ''; } } },
+      result: { id: 'milpa-result-msg-proto', fill: function (r, o) {
+        var ok = o.verified !== false;
+        r.setAttribute('data-verified', ok ? '1' : '0');
+        var mark = r.querySelector('[data-result-mark]'); if (mark) { mark.textContent = ok ? '✓' : '⚠'; }
+        var txt = r.querySelector('[data-result-text]'); if (txt) { txt.textContent = ok ? 'verified' : ('disputed' + (o.reasons ? ': ' + o.reasons : '')); }
+      } }
     };
+    // A tool result's one-line summary (a count for JSON, a truncation otherwise); the raw sits in the
+    // collapsible body below. Milpa Components render the machinery legibly, not as a raw dump (Rod).
+    function toolSummary(raw) {
+      if (!raw) { return ''; }
+      try {
+        var j = JSON.parse(raw);
+        if (Array.isArray(j)) { return '→ ' + j.length + ' items'; }
+        if (j && typeof j === 'object') { return typeof j.ok !== 'undefined' ? ('→ ok · ' + Object.keys(j).length + ' fields') : ('→ ' + Object.keys(j).length + ' fields'); }
+      } catch (e) {}
+      return '→ ' + (raw.length > 60 ? raw.slice(0, 60) + '…' : raw);
+    }
+    function prettyMaybe(raw) {
+      try { return JSON.stringify(JSON.parse(raw), null, 2); } catch (e) { return raw; }
+    }
     function appendMessage(kind, opts) {
       if (!chat) { return; }
       opts = opts || {};
@@ -831,6 +868,12 @@ HTML;
           if (block) { block.setAttribute('data-open', block.getAttribute('data-open') === '1' ? '0' : '1'); }
           return;
         }
+        var toolToggle = e.target.closest('[data-tool-toggle]');
+        if (toolToggle) {
+          var tool = toolToggle.closest('.msg--tool');
+          if (tool) { tool.setAttribute('data-open', tool.getAttribute('data-open') === '1' ? '0' : '1'); }
+          return;
+        }
         var copyBtn = e.target.closest('[data-agent-copy]');
         if (copyBtn) {
           var msg = copyBtn.closest('.msg--agent');
@@ -868,6 +911,11 @@ HTML;
         if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
         else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
         else if (res && res.error) { appendMessage('system', { text: res.error }); }
+        // The closure verdict as a result-claim message (greenhouse decisions/0191, evidence/0442): the ledger
+        // either backs the answer or disputes it. Only show it when the house actually judged the turn.
+        if (res && res.closure) {
+          appendMessage('result', { verified: res.closure.verified !== false, reasons: (res.closure.reasons || []).join('; ') });
+        }
         // Update the shared counters from what the turn reported (greenhouse decisions/0191): one truth, and
         // every place that shows turns/steps/tools/tokens — the composer chips, the status bar, the panels —
         // is a projection of these signals, so they all move at once.

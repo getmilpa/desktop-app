@@ -40,6 +40,8 @@ final class MessagePrototypes
     public const string TASK_AFTER = 'desktop.task.after_render';
     public const string SYSTEM_BEFORE = 'desktop.system_notice.before_render';
     public const string SYSTEM_AFTER = 'desktop.system_notice.after_render';
+    public const string RESULT_BEFORE = 'desktop.result_claim.before_render';
+    public const string RESULT_AFTER = 'desktop.result_claim.after_render';
 
     private readonly SignedXhtmlStateTransferCodec $codec;
 
@@ -60,11 +62,14 @@ final class MessagePrototypes
         return $this->wrap(new UserMessageComponent(), 'user-message', $markup, self::USER_BEFORE, self::USER_AFTER, 'userMessage');
     }
 
-    /** The tool-call prototype (`desktop-tool-call`). */
+    /** The tool-call prototype (`desktop-tool-call`) — the name and a summary, the raw result collapsed. */
     public function tool(): string
     {
-        $markup = '<div class="msg msg--tool" data-milpa-component="desktop-tool-call" data-milpa-component-id="tool-call">'
-            . '<div><span class="msg__tool-name" data-tool-name>tool</span> <span data-tool-result></span></div></div>';
+        $markup = '<div class="msg msg--tool" data-milpa-component="desktop-tool-call" data-milpa-component-id="tool-call" data-open="0">'
+            . '<button type="button" class="msg__tool-head" data-tool-toggle>'
+            . '<span class="msg__tool-name" data-tool-name>tool</span>'
+            . '<span class="msg__tool-summary" data-tool-summary></span></button>'
+            . '<pre class="msg__tool-raw" data-tool-body></pre></div>';
 
         return $this->wrap(new ToolCallComponent(), 'tool-call', $markup, self::TOOL_BEFORE, self::TOOL_AFTER, 'toolCall');
     }
@@ -85,6 +90,15 @@ final class MessagePrototypes
         $markup = '<div class="msg msg--system" data-milpa-component="desktop-system-notice" data-milpa-component-id="system-notice" data-system-body></div>';
 
         return $this->wrap(new SystemNoticeComponent(), 'system-notice', $markup, self::SYSTEM_BEFORE, self::SYSTEM_AFTER, 'systemNotice');
+    }
+
+    /** The result-claim prototype (`desktop-result-claim`) — the closure verdict as a conversation message. */
+    public function resultClaim(): string
+    {
+        $markup = '<div class="msg msg--result" data-milpa-component="desktop-result-claim" data-milpa-component-id="result-claim" data-verified="1">'
+            . '<span class="msg__result-mark" data-result-mark>✓</span> <span data-result-text>verified</span></div>';
+
+        return $this->wrap(new ResultClaimComponent(), 'result-claim', $markup, self::RESULT_BEFORE, self::RESULT_AFTER, 'resultClaim');
     }
 
     /** Mount the component, fire before/after render with a mutable subject, and cap with the signed envelope. */
