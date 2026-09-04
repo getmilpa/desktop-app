@@ -62,6 +62,57 @@ final class DesktopDataTest extends TestCase
         self::assertSame([], (new DesktopData(new DIContainer()))->skills());
     }
 
+    public function testCommandsAreTheHouseOnesWithoutAKernel(): void
+    {
+        // Without a booted kernel there are no skills to turn into commands, but the house's own commands
+        // stand (greenhouse decisions/0202): /goal, /mode and /help are the composer's, not a skill's.
+        $commands = (new DesktopData(new DIContainer()))->commands();
+
+        self::assertSame(['goal', 'mode', 'help'], array_column($commands, 'name'));
+        self::assertSame(['house', 'house', 'house'], array_column($commands, 'kind'));
+        self::assertSame($commands, DesktopData::houseCommands());
+    }
+
+    public function testCommandsForAddsOnlyTheUserInvocableSkills(): void
+    {
+        // A user-invocable skill becomes `/<name> [args]`; a model-only skill is not a command — the human has
+        // no surface for it (greenhouse decisions/0202). The house commands come first, in their order. Each
+        // command carries the METHOD of its http projection: POST for the mutating house ops, GET for a skill
+        // (skill:invoke is a read), none for /help.
+        $commands = DesktopData::commandsFor([
+            ['name' => 'systematic-debugging', 'description' => 'A method for finding a bug by evidence', 'model_invocable' => true, 'user_invocable' => false],
+            ['name' => 'brainstorming', 'description' => 'Frame the question before building', 'model_invocable' => true, 'user_invocable' => true],
+        ]);
+
+        self::assertSame(['goal', 'mode', 'help', 'brainstorming'], array_column($commands, 'name'));
+        self::assertSame(['POST', 'POST', '', 'GET'], array_column($commands, 'method'));
+        self::assertSame(
+            ['name' => 'brainstorming', 'kind' => 'skill', 'description' => 'Frame the question before building', 'usage' => '/brainstorming [args]', 'method' => 'GET'],
+            $commands[3],
+        );
+        foreach ($commands as $c) {
+            self::assertSame(['name', 'kind', 'description', 'usage', 'method'], array_keys($c));
+        }
+    }
+
+    public function testCommandsForKeepsOnlyAddressableNamesThatShadowNoHouseCommand(): void
+    {
+        // The parser addresses `^[a-z0-9-]+$`: a skill named otherwise is no command (it could never be typed
+        // as one, and its name would reach the page verbatim); a skill that calls itself `goal` does not take
+        // the house's `/goal`; a second skill with a taken name is not a second command.
+        $commands = DesktopData::commandsFor([
+            ['name' => 'goal', 'description' => 'shadows the house', 'model_invocable' => true, 'user_invocable' => true],
+            ['name' => 'Bad Name', 'description' => 'has a space and capitals', 'model_invocable' => true, 'user_invocable' => true],
+            ['name' => '../etc', 'description' => 'has a path', 'model_invocable' => true, 'user_invocable' => true],
+            ['name' => 'review-2', 'description' => 'fine', 'model_invocable' => false, 'user_invocable' => true],
+            ['name' => 'review-2', 'description' => 'a twin', 'model_invocable' => false, 'user_invocable' => true],
+        ]);
+
+        self::assertSame(['goal', 'mode', 'help', 'review-2'], array_column($commands, 'name'));
+        self::assertSame('house', $commands[0]['kind'], 'the house keeps /goal');
+        self::assertSame('fine', $commands[3]['description'], 'the first of two twins is the command');
+    }
+
     public function testRolesAreEmptyWithoutAKernel(): void
     {
         // Specialist roles degrade to none without a booted kernel (greenhouse decisions/0197).

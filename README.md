@@ -100,6 +100,29 @@ The client runtime `MilpaShell`: `on(type, cb)` / `onAny(cb)` react to events, `
 panel's body element, `onStatus(cb)` tracks the live connection. Events reach the browser through a Mercure
 hub when one is configured (`desktop.mercure.*`), else through the `/desktop/events` feed.
 
+## Commands
+
+The composer understands slash commands (greenhouse `decisions/0202`). `/goal <text>` sets the session's
+standing goal mid-session, `/goal clear` drops it and `/goal` alone shows it; `/mode ask|acknowledge|auto`
+chooses the autonomy mode, which **applies from the next turn** (every turn carries the chosen mode to the
+agent — there is one writer, the turn itself); `/help` lists what the composer understands; and
+`/<skill-name> [args]` invokes a **user-invocable** skill and starts a turn with its instructions. Typing `/`
+opens a completion list the house serves — its own commands plus every user-invocable skill. Only a real
+command is intercepted: a prompt that merely starts with a slash (`/tmp/app.log has errors`) reaches the model
+unchanged.
+
+Each command is a governed operation of the house — the same operation the CLI, the TUI and the MCP surface
+run (`cli`/`tui`/`mcp`/`http`); the Desktop invents no action, it only calls the operation's HTTP projection
+(`POST /agent/goal`, `GET /skill/invoke`) and reports the operation's own answer. `agent:goal`, `agent:mode`
+and `skill:invoke` are deliberately **off the model's table**: they spend the human's authority, so only a
+human surface fires them. `/goal` and `/<skill>` need `milpa/app-runtime` ≥ 0.116 (the release carrying
+`agent:goal` and `skill:invoke`) and the app exposing those operations in `config/http.php`; when one is not
+exposed, the composer says so instead of failing silently. `milpa/app-runtime` is not a dependency of this
+plugin — the Desktop's coupling to the agent is soft by design — so a Desktop without it simply has no `/goal`.
+
+A goal only bounds what the automatic mode may already pre-consent — it never pre-approves a signature
+(`requiresConfirmation`, the Executable+Privileged ceiling) or third-party egress.
+
 ## Live updates over a Mercure hub
 
 Configure `desktop.mercure.{hub_url,public_url,publisher_key,subscriber_key}` and the app publishes shell

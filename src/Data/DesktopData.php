@@ -191,6 +191,70 @@ final class DesktopData
     }
 
     /**
+     * The composer's commands (greenhouse decisions/0202): the house's own — `/goal`, `/mode`, `/help` — plus
+     * every user-invocable skill as `/<skill-name>`. Each command names a governed OPERATION of the house
+     * (`agent:goal`, `agent:mode`, `skill:invoke`) reached over its http projection, and carries the http
+     * METHOD that projection answers to — `POST` for a mutating op, `GET` for a read, none for `/help`, which
+     * runs no operation. The Desktop invents no action. Read through the same {@see self::skills()} seam, so
+     * an app without the runtime still offers the house commands.
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string, method: string}>
+     */
+    public function commands(): array
+    {
+        return self::commandsFor($this->skills());
+    }
+
+    /**
+     * The house's own commands — what the composer offers even when no skill is user-invocable.
+     *
+     * `/goal` and `/mode` are mutating operations (`POST`); `/help` is the composer's own listing and names no
+     * operation (an empty method).
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string, method: string}>
+     */
+    public static function houseCommands(): array
+    {
+        return [
+            ['name' => 'goal', 'kind' => 'house', 'description' => "Set, show or clear the session's standing goal", 'usage' => '/goal <text> | /goal clear | /goal', 'method' => 'POST'],
+            ['name' => 'mode', 'kind' => 'house', 'description' => 'Choose how much the agent asks', 'usage' => '/mode ask|acknowledge|auto', 'method' => 'POST'],
+            ['name' => 'help', 'kind' => 'house', 'description' => 'List the commands this composer understands', 'usage' => '/help', 'method' => ''],
+        ];
+    }
+
+    /**
+     * The house commands followed by one `/<name>` per user-invocable skill (a model-only skill is not a
+     * command: the human has no surface for it, greenhouse decisions/0202). A skill runs through
+     * `skill:invoke`, a read projected as `GET`. Only a name the parser can address becomes a command
+     * (`^[a-z0-9-]+$`), and never one that shadows a house command — `/goal` stays the house's whatever a
+     * skill calls itself. Pure, so it is tested with fixtures.
+     *
+     * @param list<array{name: string, description: string, model_invocable: bool, user_invocable: bool}> $skills
+     *
+     * @return list<array{name: string, kind: string, description: string, usage: string, method: string}>
+     */
+    public static function commandsFor(array $skills): array
+    {
+        $out = self::houseCommands();
+        $taken = array_column($out, 'name');
+        foreach ($skills as $skill) {
+            if (!$skill['user_invocable'] || preg_match('/^[a-z0-9-]+$/', $skill['name']) !== 1 || \in_array($skill['name'], $taken, true)) {
+                continue;
+            }
+            $taken[] = $skill['name'];
+            $out[] = [
+                'name' => $skill['name'],
+                'kind' => 'skill',
+                'description' => $skill['description'],
+                'usage' => '/' . $skill['name'] . ' [args]',
+                'method' => 'GET',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * The specialist agent roles this app declares (greenhouse decisions/0197): each a named authority with
      * the skills it preloads, the tools it is denied, and what it produces. A role names authority that already
      * governs; the skills only suggest. Read from the same {@see \Milpa\AppRuntime\Agent\Role\RoleRegistry}

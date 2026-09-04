@@ -521,10 +521,13 @@ final class ShellControllerTest extends TestCase
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
         // Send POSTs the prompt to the governed `agent` op's HTTP route with the server-minted session id
-        // and ask mode (greenhouse decisions/0190); the answer comes back, the badge streams over the hub.
+        // (greenhouse decisions/0190); the answer comes back, the badge streams over the hub. The mode it
+        // sends is the chip's VALUE — the `composer.mode` signal — not a hardcoded ask (decisions/0202).
         self::assertStringContainsString("fetch('/agent'", $body);
         self::assertStringContainsString('session: agentSession', $body);
-        self::assertStringContainsString("mode: 'ask'", $body);
+        self::assertStringNotContainsString("mode: 'ask'", $body);
+        self::assertStringContainsString('mode: currentMode()', $body);
+        self::assertStringContainsString("MilpaLive.signal('composer.mode')", $body);
         self::assertStringContainsString("var agentSession = '", $body);
         // Minimalist composer (greenhouse decisions/0191, Rod): the char count lives in the footer, live,
         // instead of a separate status line under the box.
@@ -542,6 +545,90 @@ final class ShellControllerTest extends TestCase
         // The session projection maps activity thinking/ready to the working badge, message to a bubble.
         self::assertStringContainsString("this.emit('session.state', { state: 'working' })", $body);
         self::assertStringContainsString("this.emit('agent.message'", $body);
+    }
+
+    public function testTheComposerServesItsCommandsAndTheModeReachesTheSession(): void
+    {
+        // Composer commands (greenhouse decisions/0202): the house serves the command list as JSON for the
+        // parser AND renders it as the completion popup; the mode is a signal pair seeded from the saved
+        // setting (the one truth on load), and every command is a governed operation reached over its http
+        // projection with the method that projection answers to.
+        $dir = sys_get_temp_dir() . '/milpa-shell-cmds-' . uniqid('', true);
+        mkdir($dir);
+        $store = new DesktopStore($dir . '/sessions', $dir . '/settings.json');
+        $store->saveSettings(['mode' => 'auto']);
+        $data = new DesktopData(new DIContainer(), null, '', $store);
+
+        $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, $data))
+            ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        // The list the house serves: the house commands (no kernel → no skills) as JSON, before the shell script,
+        // each carrying the METHOD of its http projection.
+        self::assertMatchesRegularExpression('#<script id="milpa-commands" type="application/json">\[\{"name":"goal","kind":"house"#', $body);
+        self::assertStringContainsString('"usage":"/mode ask|acknowledge|auto","method":"POST"', $body);
+        self::assertStringContainsString('"name":"help","kind":"house"', $body);
+        self::assertLessThan(strpos($body, "function parseCommand("), strpos($body, 'id="milpa-commands"'), 'the JSON precedes the script that reads it');
+        // The JSON is HEX-encoded: no `<` survives inside the script (the house's own `<text>` placeholder is
+        // the specimen), so no served description can close the element — yet it decodes to the same strings.
+        preg_match('#<script id="milpa-commands" type="application/json">(.*?)</script>#s', $body, $m);
+        self::assertStringNotContainsString('<', $m[1]);
+        self::assertStringContainsString('\\u003Ctext\\u003E', $m[1]);
+        self::assertSame(DesktopData::houseCommands(), json_decode($m[1], true));
+        // The completion popup is the pure CommandListView, closed until a slash is typed; the field announces
+        // it (aria-controls) and the highlighted option (aria-activedescendant on the option's id).
+        self::assertStringContainsString('id="milpa-command-list" class="milpa-cmds" role="listbox" aria-label="Commands" data-open="0"', $body);
+        self::assertStringContainsString('id="milpa-cmd-goal" data-command="goal" data-kind="house"', $body);
+        self::assertStringContainsString("composerInput.setAttribute('aria-controls', 'milpa-command-list')", $body);
+        self::assertStringContainsString("composerInput.setAttribute('aria-activedescendant', opt.id)", $body);
+        self::assertStringContainsString('function refreshCommandList(', $body);
+        self::assertStringContainsString('function commandListHandlesKey(', $body);
+        // Tab completes, Shift+Tab leaves the field; a click in the field does not close the popup.
+        self::assertStringContainsString("(e.key === 'Tab' && !e.shiftKey)", $body);
+        self::assertStringContainsString('if (!(composerInput && e.target === composerInput)) { cmdHide(); }', $body);
+        // The mode is a signal PAIR seeded from the saved setting: the VALUE the turn sends and its label. It is
+        // NOT remembered in the browser — the saved setting is the one truth on load.
+        self::assertStringContainsString('"composer.mode":"auto","composer.mode.label":"Continue automatically"', $body);
+        self::assertStringContainsString('<script id="milpa-live-persist" type="application/json">[]</script>', $body);
+        self::assertStringNotContainsString('"composer.mode"]', $body);
+        self::assertStringContainsString("setSig('composer.mode', key)", $body);
+        // Only a REAL command is intercepted (a house command or a served name); a bare unknown `/name` is told;
+        // anything else reaches the model as a prompt.
+        self::assertStringContainsString("HOUSE_COMMANDS.indexOf(m[1]) === -1 && !commandNamed(m[1])", $body);
+        self::assertStringContainsString('function isBareUnknownCommand(', $body);
+        self::assertStringContainsString('if (isBareUnknownCommand(text))', $body);
+        // Every command is a governed operation over its http projection, called with the method it declares —
+        // no invented action. The op's OWN answer decides: `ok:false` on a 2xx is a refusal.
+        self::assertStringContainsString('ok: r.ok && d.ok !== false', $body);
+        self::assertStringContainsString("callOp('POST', '/agent/goal', body)", $body);
+        // /goal reads the RESPONSE (goal / changed), never echoes the request.
+        self::assertStringContainsString("'no standing goal — /goal <text> sets one'", $body);
+        self::assertStringContainsString("d.changed === false ? 'goal unchanged: ' : 'goal set: '", $body);
+        // /mode writes the chip and the setting; the next turn carries the mode — no agent:mode call.
+        self::assertStringNotContainsString('/agent/mode', $body);
+        self::assertStringContainsString('var key = cmd.args.toLowerCase()', $body);
+        self::assertStringContainsString("'mode ' + key + ' — applies from the next turn'", $body);
+        // A skill is invoked through skill:invoke (GET) and its body enters the turn AS-IS, the args after it.
+        self::assertStringContainsString("callOp('GET', '/skill/invoke', { name: skill.name })", $body);
+        self::assertStringNotContainsString('/skill/load', $body);
+        self::assertStringNotContainsString("by: 'human'", $body);
+        self::assertStringContainsString("runTurn(d.body + (cmd.args !== '' ? '\\n\\n' + cmd.args : ''))", $body);
+        self::assertStringNotContainsString('<skill_content name="', $body);
+        // A refusal is never silent: the status comes back with a hint, and a 428 is reported, not confirmed.
+        self::assertStringContainsString('expose the operation in config/http.php', $body);
+        self::assertStringContainsString('res.status === 428', $body);
+        self::assertStringContainsString("op + ' refused — '", $body);
+
+        unlink($dir . '/settings.json');
+        rmdir($dir);
+    }
+
+    public function testWithoutADataSeamTheComposerStillKnowsTheHouseCommands(): void
+    {
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('"name":"goal","kind":"house"', $body);
+        self::assertStringContainsString('data-command="mode" data-kind="house"', $body);
+        self::assertStringContainsString('"composer.mode":"ask","composer.mode.label":"Ask before changing"', $body);
     }
 
     public function testReasoningStreamsIntoACollapsibleThinkingBlock(): void
