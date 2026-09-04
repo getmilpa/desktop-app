@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.45.0](https://github.com/getmilpa/desktop-app/compare/v0.44.0...v0.45.0) (2026-09-04)
+
+
+### Features
+
+* the Desktop declares the Mercure hub it needs (StackProviderInterface) ([#81](https://github.com/getmilpa/desktop-app/issues/81)) ([f05a449](https://github.com/getmilpa/desktop-app/commit/f05a4494feda6c968b3d71db30699cb625a8418e))
+
 ## [0.44.0](https://github.com/getmilpa/desktop-app/compare/v0.43.0...v0.44.0) (2026-09-04)
 
 
