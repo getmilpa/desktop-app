@@ -571,11 +571,18 @@ HTML;
   .msg--tool[data-open="0"] .msg__tool-head::after { content: ' ▸'; opacity: .5; }
   .msg--tool[data-open="0"] .msg__tool-raw { display: none; }
   .msg--tool .msg__tool-raw { margin: var(--space-2) 0 0; max-height: 18rem; overflow: auto; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
-  /* Result claim: the ledger's verdict on the turn — a quiet line, green when verified, warning when disputed. */
-  .msg--result { display: inline-flex; align-items: baseline; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); }
+  /* Result claim: the ledger's verdict on the turn — a quiet line, green when verified, warning when disputed.
+     An ⓘ affordance + a hover/focus tooltip explain WHAT the ledger judged, so "verified" is never opaque. */
+  .msg--result { position: relative; display: inline-flex; align-items: baseline; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); cursor: help; }
   .msg--result[data-verified="1"] .msg__result-mark { color: var(--success); }
   .msg--result[data-verified="0"] .msg__result-mark { color: var(--warning); }
   .msg--result[data-verified="0"] { color: var(--warning); }
+  .msg__result-info { color: var(--text-muted); opacity: .5; font-size: .95em; transition: opacity .2s ease, color .2s ease; }
+  .msg--result:hover .msg__result-info, .msg--result:focus-visible .msg__result-info { opacity: 1; color: var(--accent-text); }
+  .msg--result:focus-visible { outline: 2px solid var(--accent-subtle); outline-offset: 3px; border-radius: var(--radius-sm); }
+  .msg__result-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: 22rem; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; text-transform: none; white-space: normal; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+  .msg--result:hover .msg__result-tip, .msg--result:focus-visible .msg__result-tip, .msg--result:focus-within .msg__result-tip { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) { .msg__result-tip { transition: none; } }
   /* System: a centered, quiet notice — the house speaking, not a participant. */
   .msg--system { align-self: center; text-align: center; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; }
   /* Task: a row the agent added to the plan — a leading mark, monospace title. */
@@ -863,7 +870,13 @@ HTML;
         var ok = o.verified !== false;
         r.setAttribute('data-verified', ok ? '1' : '0');
         var mark = r.querySelector('[data-result-mark]'); if (mark) { mark.textContent = ok ? '✓' : '⚠'; }
-        var txt = r.querySelector('[data-result-text]'); if (txt) { txt.textContent = ok ? 'verified' : ('disputed' + (o.reasons ? ': ' + o.reasons : '')); }
+        var txt = r.querySelector('[data-result-text]'); if (txt) { txt.textContent = ok ? 'verified' : 'disputed'; }
+        // The tooltip carries WHAT the ledger judged — the reasons go here now, not inline (Rod's minimalism).
+        var tip = ok
+          ? "The ledger backs this turn: every completed step carries evidence, nothing was left open, and no artifact's latest check is red."
+          : ('The ledger disputes this turn — ' + (o.reasons ? o.reasons : 'the completion is not backed by evidence') + '.');
+        var te = r.querySelector('[data-result-tip]'); if (te) { te.textContent = tip; }
+        r.setAttribute('aria-label', (ok ? 'Verified. ' : 'Disputed. ') + tip);
       } }
     };
     // A tool result's one-line summary (a count for JSON, a truncation otherwise); the raw sits in the

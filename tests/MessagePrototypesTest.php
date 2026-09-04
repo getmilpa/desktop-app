@@ -51,6 +51,11 @@ final class MessagePrototypesTest extends TestCase
         self::assertStringContainsString('data-milpa-component="desktop-result-claim"', $result);
         self::assertStringContainsString('data-result-mark', $result);
         self::assertStringContainsString('data-result-text', $result);
+        // The verdict explains itself: a hoverable tooltip (role="tooltip") says WHAT the ledger judged, and
+        // the line is focusable so keyboard users reach it too.
+        self::assertStringContainsString('data-result-tip', $result);
+        self::assertStringContainsString('role="tooltip"', $result);
+        self::assertStringContainsString('tabindex="0"', $result);
 
         $task = $p->task();
         self::assertStringContainsString('data-milpa-component="desktop-task"', $task);
