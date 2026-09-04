@@ -74,6 +74,30 @@ final class DesktopData
     }
 
     /**
+     * The capability catalogue the runtime reports: what is installed, and what is available to install.
+     *
+     * Read server-side from the same {@see \Milpa\AppRuntime\Support\Capabilities} answer the `capabilities`
+     * operation returns — so the human sees EXACTLY what the agent sees, and installing one (through the
+     * gated `capabilities:enable` over HTTP, greenhouse decisions/0193) is instantly available to both.
+     *
+     * @return array{installed: list<array<string, mixed>>, available: list<array<string, mixed>>, source: string}
+     */
+    public function capabilityCatalogue(): array
+    {
+        if (!class_exists(\Milpa\AppRuntime\Support\Capabilities::class)) {
+            return ['installed' => [], 'available' => [], 'source' => ''];
+        }
+
+        $answer = \Milpa\AppRuntime\Support\Capabilities::answer();
+
+        return [
+            'installed' => is_array($answer['installed'] ?? null) ? array_values($answer['installed']) : [],
+            'available' => is_array($answer['available'] ?? null) ? array_values($answer['available']) : [],
+            'source' => is_string($answer['source'] ?? null) ? $answer['source'] : '',
+        ];
+    }
+
+    /**
      * The configured model provider and endpoint (real config, with env fallbacks).
      *
      * @return array{model: string, endpoint: string}

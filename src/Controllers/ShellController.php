@@ -123,33 +123,70 @@ final class ShellController
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
-                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
+                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->endpointValue(),
                 $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
     }
 
-    /** The installed-capabilities table rows, from real runtime data (greenhouse decisions/0481). */
-    private function capabilitiesRows(): string
+    /**
+     * The capability catalogue as HTML — INSTALLED and AVAILABLE, side by side (greenhouse decisions/0193).
+     *
+     * The human sees the same list the agent sees ({@see DesktopData::capabilityCatalogue()}), and each
+     * available one carries a one-click Enable that installs it through the gated `capabilities:enable`
+     * over HTTP — so "the human installs it" and "the agent has it" become one act.
+     */
+    private function capabilityCatalogueHtml(): string
     {
-        $caps = $this->data?->capabilities() ?? [];
-        if ($caps === []) {
-            return '<tr><td colspan="4" class="mui-empty">No capabilities reported by the runtime.</td></tr>';
-        }
+        $cat = $this->data?->capabilityCatalogue() ?? ['installed' => [], 'available' => [], 'source' => ''];
+        $installed = $cat['installed'];
+        $available = $cat['available'];
 
-        $rows = '';
-        foreach ($caps as $cap) {
-            $rows .= sprintf(
-                '<tr><td class="mui-table__lead">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
-                htmlspecialchars($cap['name'], ENT_QUOTES),
-                htmlspecialchars($cap['version'], ENT_QUOTES),
-                htmlspecialchars($cap['type'], ENT_QUOTES),
-                htmlspecialchars($cap['author'], ENT_QUOTES),
-            );
-        }
+        $esc = static fn (mixed $v): string => htmlspecialchars(is_string($v) ? $v : '', ENT_QUOTES);
+        $line = static function (mixed $v) use ($esc): string {
+            if (is_array($v)) {
+                $v = implode(', ', array_filter($v, 'is_string'));
+            }
 
-        return $rows;
+            return $esc($v);
+        };
+        $named = static function (array $c) use ($esc): string {
+            $id = is_string($c['id'] ?? null) && $c['id'] !== '' ? $c['id'] : (is_string($c['package'] ?? null) ? $c['package'] : '');
+
+            return $esc($id);
+        };
+
+        $instCards = $installed === []
+            ? '<p class="mui-empty" style="color:var(--text-muted)">Only the catalogue — nothing installed reports here.</p>'
+            : implode('', array_map(static function (array $c) use ($named, $line, $esc): string {
+                $title = $esc($c['title'] ?? '');
+                $sub = $line($c['provides'] ?? ($c['unlocks'] ?? ''));
+
+                return '<div class="cap-card"><div class="cap-card__head"><span class="cap-card__name">' . $named($c) . '</span>'
+                    . '<span class="mui-badge mui-badge--success">installed</span></div>'
+                    . ($title !== '' ? '<p class="cap-card__desc">' . $title . '</p>' : '')
+                    . ($sub !== '' ? '<p class="cap-card__sub">' . $sub . '</p>' : '') . '</div>';
+            }, $installed));
+
+        $availCards = $available === []
+            ? '<p class="mui-empty" style="color:var(--text-muted)">Everything available is installed.</p>'
+            : implode('', array_map(static function (array $c) use ($esc, $line): string {
+                $pkg = is_string($c['package'] ?? null) ? $c['package'] : '';
+                $cmd = is_string($c['command'] ?? null) ? $c['command'] : ('composer require ' . $pkg);
+                $title = $esc($c['title'] ?? '');
+                $unlocks = $line($c['unlocks'] ?? '');
+
+                return '<div class="cap-card" data-cap-row="' . $esc($pkg) . '"><div class="cap-card__head"><span class="cap-card__name">' . $esc($pkg) . '</span>'
+                    . '<button type="button" class="mui-btn mui-btn--primary mui-btn--sm" data-cap-enable="' . $esc($pkg) . '" data-cap-cmd="' . $esc($cmd) . '">Enable</button></div>'
+                    . ($title !== '' ? '<p class="cap-card__desc">' . $title . '</p>' : '')
+                    . ($unlocks !== '' ? '<p class="cap-card__sub">Unlocks: ' . $unlocks . '</p>' : '') . '</div>';
+            }, $available));
+
+        return '<div class="cap-grid">'
+            . '<section><p class="cap-col__head">Installed · ' . count($installed) . '</p><div class="cap-stack">' . $instCards . '</div></section>'
+            . '<section><p class="cap-col__head">Available · ' . count($available) . '</p><div class="cap-stack">' . $availCards . '</div></section>'
+            . '</div><p class="cap-msg" id="milpa-cap-msg" role="status" hidden></p>';
     }
 
     /** The model endpoint: the persisted setting if saved (0483), else the configured one. */
@@ -487,6 +524,20 @@ HTML;
   .milpa-grainmark:hover .g { animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
   @keyframes milpa-grain-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
   .milpa-search-hit { display: none !important; }
+  /* Capabilities catalogue: installed vs available, the same list the agent reads (greenhouse decisions/0193). */
+  .cap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); align-items: start; }
+  @media (max-width: 760px) { .cap-grid { grid-template-columns: 1fr; } }
+  .cap-col__head { margin: 0 0 var(--space-3); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+  .cap-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+  .cap-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-3) var(--space-4); }
+  .cap-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .cap-card__name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); word-break: break-all; }
+  .cap-card__desc { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--text-secondary); }
+  .cap-card__sub { margin: var(--space-1) 0 0; font-size: var(--text-2xs); color: var(--text-muted); }
+  .cap-confirm { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
+  .cap-confirm__cmd { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--accent-text); word-break: break-all; }
+  .cap-confirm__row { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+  .cap-msg { margin-top: var(--space-4); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
   .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
@@ -724,13 +775,8 @@ HTML;
       </div>
 
       <div class="view" data-view="capabilities" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
-        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Capabilities installed in this app — read from the runtime.</p>
-        <div class="mui-table-wrap">
-          <table class="mui-table">
-            <thead><tr><th scope="col">Capability</th><th scope="col">Version</th><th scope="col">Type</th><th scope="col">Author</th></tr></thead>
-            <tbody id="milpa-capabilities"><!--CAPABILITIES--></tbody>
-          </table>
-        </div>
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">What this app can do today, and what it could — the same catalogue the agent reads.</p>
+        <div id="milpa-capabilities"><!--CAPABILITIES--></div>
       </div>
 
       <div class="view" data-view="decisions" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
@@ -804,6 +850,44 @@ HTML;
     }
     var discardBtn = document.getElementById('milpa-discard');
     if (discardBtn) { discardBtn.addEventListener('click', function () { location.reload(); }); }
+
+    // Capabilities catalogue actions (greenhouse decisions/0193): the click on a named capability shows its
+    // exact command, and confirming runs the two-step gate over HTTP; on success the page reloads.
+    var capHost = document.getElementById('milpa-capabilities');
+    if (capHost) {
+      capHost.addEventListener('click', function (e) {
+        var t = e.target.closest ? e.target.closest('[data-cap-enable]') : null;
+        if (!t) { return; }
+        var pkg = t.getAttribute('data-cap-enable'), cmd = t.getAttribute('data-cap-cmd') || '';
+        var card = t.closest('.cap-card'); if (!card || card.querySelector('.cap-confirm')) { return; }
+        var box = document.createElement('div'); box.className = 'cap-confirm';
+        box.innerHTML = '<p class="cap-confirm__cmd"></p><div class="cap-confirm__row"><button type="button" class="mui-btn mui-btn--primary mui-btn--sm" data-cap-go>Confirm</button><button type="button" class="mui-btn mui-btn--sm" data-cap-cancel>Cancel</button></div>';
+        box.querySelector('.cap-confirm__cmd').textContent = cmd;
+        t.disabled = true; card.appendChild(box);
+        box.querySelector('[data-cap-cancel]').addEventListener('click', function () { box.remove(); t.disabled = false; });
+        box.querySelector('[data-cap-go]').addEventListener('click', function () {
+          var go = box.querySelector('[data-cap-go]'); go.disabled = true; go.textContent = 'Working…';
+          capEnable(pkg).then(function (r) {
+            if (r && r.ok) {
+              box.innerHTML = '<p class="cap-confirm__cmd">Done: ' + pkg + '. Reloading…</p>';
+              setTimeout(function () { location.reload(); }, 900);
+            } else {
+              box.innerHTML = '<p class="cap-confirm__cmd">Could not: ' + ((r && r.error) || 'refused') + '</p>';
+            }
+          });
+        });
+      });
+    }
+    function capEnable(pkg) {
+      var url = '/capabilities/enable', hdr = { 'Content-Type': 'application/json' }, body = JSON.stringify({ capability: pkg });
+      return fetch(url, { method: 'POST', headers: hdr, body: body }).then(function (r) { return r.json(); }).then(function (a) {
+        if (!a || !a.confirm_token) { return (a && a.ok) ? a : { ok: false, error: (a && a.error) || 'no token' }; }
+        var h2 = { 'Content-Type': 'application/json', 'Confirm-Token': a.confirm_token };
+        return fetch(url, { method: 'POST', headers: h2, body: body }).then(function (r2) {
+          return r2.json().then(function (d) { return (d && typeof d.ok === 'boolean') ? d : { ok: r2.ok, error: d && d.error }; });
+        });
+      }).catch(function (err) { return { ok: false, error: String(err) }; });
+    }
 
     // Composer floating panels (wireframe 3a): open on their figures, close as you type.
     var composerPanels = document.querySelectorAll('.composer-panel');

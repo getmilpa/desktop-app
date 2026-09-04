@@ -101,9 +101,10 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-theme-set="light"', $body);
     }
 
-    public function testTheCapabilitiesViewShowsRealInstalledPlugins(): void
+    public function testTheCapabilitiesViewShowsInstalledAndAvailable(): void
     {
-        // Real backend data (0481): the capabilities table lists the booted plugins, read from the runtime.
+        // Real backend data (0193): the catalogue shows what is installed and what is available, the same
+        // answer the agent reads — installed as a section, available as another.
         $kernel = Kernel::boot(['root' => sys_get_temp_dir(), 'plugins' => [DesktopAppPlugin::class]]);
         $kernel->container()->registerService(Kernel::class, $kernel);
         $controller = new ShellController(new EventDispatcher(new NullLogger()), null, new DesktopData($kernel->container()));
@@ -112,17 +113,18 @@ final class ShellControllerTest extends TestCase
 
         self::assertStringContainsString('data-view="capabilities"', $body);
         self::assertStringContainsString('id="milpa-capabilities"', $body);
-        // The real DesktopApp plugin appears in the table (name + version + type from its #[PluginMetadata]).
-        self::assertStringContainsString('DesktopApp', $body);
-        self::assertStringContainsString('mui-table__lead', $body);
+        self::assertStringContainsString('cap-grid', $body);
+        self::assertStringContainsString('Installed ·', $body);
+        self::assertStringContainsString('Available ·', $body);
     }
 
-    public function testWithoutDataTheCapabilitiesTableShowsAnEmptyState(): void
+    public function testWithoutDataTheCapabilitiesViewShowsAnEmptyState(): void
     {
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
         self::assertStringContainsString('data-view="capabilities"', $body);
-        self::assertStringContainsString('No capabilities reported', $body);
+        self::assertStringContainsString('cap-grid', $body);
+        self::assertStringContainsString('mui-empty', $body);
     }
 
     public function testTheScreensRenderRealSessionWorkAndAudit(): void
