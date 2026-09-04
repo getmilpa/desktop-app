@@ -42,7 +42,14 @@ final class ThinkingTest extends TestCase
         self::assertStringContainsString('data-thinking-toggle', $html);
         self::assertStringContainsString('data-thinking-head', $html);
         self::assertStringContainsString('data-thinking-body', $html);
-        self::assertStringContainsString('◈ thinking…', $html);
+        // The block starts LIVE (data-thinking-active="1") — the animation keys off it — and its head is a
+        // breathing spark + a label + typing dots, so the elapsed can replace only the words, never the motion.
+        self::assertStringContainsString('data-thinking-active="1"', $html);
+        self::assertStringContainsString('data-thinking-spark', $html);
+        self::assertStringContainsString('◈', $html);
+        self::assertStringContainsString('data-thinking-label', $html);
+        self::assertStringContainsString('thinking', $html);
+        self::assertStringContainsString('milpa-think__dots', $html);
     }
 
     public function testItEmitsRenderEventsSoPluginsCanExtendIt(): void
