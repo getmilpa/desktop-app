@@ -121,11 +121,11 @@ final class ShellController
     {
         return str_replace(
             [
-                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--DECISIONS-->', '<!--ENDPOINT-->',
+                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
-                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->decisionsInboxHtml(), $this->endpointValue(),
+                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
                 $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
@@ -154,6 +154,26 @@ final class ShellController
     private function decisionsInboxHtml(): string
     {
         return (new DecisionsInboxView())->html($this->data?->pendingDecisions() ?? []);
+    }
+
+    /**
+     * A notice when the current session was left mid-run (greenhouse decisions/0196).
+     *
+     * A fresh page load has no live run of its own, so a session whose recorded state is still a running one
+     * (working / thinking / running / busy) is a run that did not finish — reported, never silently
+     * auto-resumed (the lesson of greenhouse decisions/0132). Empty for a settled session.
+     */
+    private function interruptedNoticeHtml(): string
+    {
+        $state = strtolower($this->data?->counters()['state'] ?? '');
+        if (!\in_array($state, ['working', 'thinking', 'running', 'busy'], true)) {
+            return '';
+        }
+
+        return '<div class="milpa-interrupted" role="note">'
+            . '<span class="milpa-interrupted__mark" aria-hidden="true">⚠</span>'
+            . '<span>A prior run was interrupted — it was left mid-turn and did not finish. Send again to continue; nothing was auto-resumed.</span>'
+            . '</div>';
     }
 
     /** The model endpoint: the persisted setting if saved (0483), else the configured one. */
@@ -391,6 +411,31 @@ HTML;
         anyHandlers.forEach(function (cb) { cb(type, data); });
       },
       status: function (state) { statusHandlers.forEach(function (cb) { cb(state); }); },
+      // Live decisions inbox (greenhouse decisions/0196): tick the nav badge and prepend a card when an agent
+      // parks a question, so it shows without a reload. The full card (goal/facts) is rendered on next load.
+      addDecision: function (question) {
+        var badge = document.querySelector('[data-nav="decisions"] .mui-sidebar__item-badge');
+        if (!badge) {
+          var nav = document.querySelector('[data-nav="decisions"]');
+          if (nav) { badge = document.createElement('span'); badge.className = 'mui-sidebar__item-badge mui-badge mui-badge--warning'; badge.style.marginInlineStart = 'auto'; badge.textContent = '0'; nav.appendChild(badge); }
+        }
+        if (badge) { badge.textContent = String((parseInt(badge.textContent, 10) || 0) + 1); badge.hidden = false; }
+        var view = document.querySelector('[data-view="decisions"]');
+        if (!view) { return; }
+        var list = document.getElementById('milpa-decisions-list');
+        if (!list) {
+          var empty = document.getElementById('milpa-decisions-empty');
+          if (empty) { empty.remove(); }
+          list = document.createElement('ol'); list.className = 'mui-replay__stream'; list.id = 'milpa-decisions-list'; list.setAttribute('aria-live', 'polite');
+          view.appendChild(list);
+        }
+        var li = document.createElement('li'); li.className = 'decision-card';
+        var p = document.createElement('p'); p.className = 'decision-card__q'; p.textContent = question || 'A question is waiting for you.';
+        li.appendChild(p);
+        var hint = document.createElement('p'); hint.className = 'decision-card__facts'; hint.textContent = 'just now · open the conversation to answer';
+        li.appendChild(hint);
+        list.insertBefore(li, list.firstChild);
+      },
       // A governed turn's session.* projection (greenhouse decisions/0190), translated to the events the
       // shell already handles — so one set of listeners renders both the desktop feed and the agent stream.
       session: function (env) {
@@ -409,7 +454,11 @@ HTML;
         } else if (kind === 'reasoning') {
           this.emit('agent.reasoning', { text: (env.reasoning && (env.reasoning.delta || env.reasoning.text)) || '' });
         } else if (kind === 'waiting') {
-          this.emit('system.notice', { text: 'Waiting on you: ' + ((env.ended && env.ended.question) || '') });
+          var q = (env.ended && env.ended.question) || '';
+          this.emit('system.notice', { text: 'Waiting on you: ' + q });
+          // Live decisions inbox (greenhouse decisions/0196): a parked question shows up without a reload —
+          // the nav badge ticks up and a card is prepended. The full card (goal/facts) lands on next load.
+          if (this.addDecision) { this.addDecision(q); }
         }
       },
       panel: function (id) {
@@ -512,6 +561,9 @@ HTML;
   .decision-card__q { margin: 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text); text-wrap: pretty; }
   .decision-card__facts { margin: var(--space-2) 0 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
   .decision-card__open { margin-top: var(--space-3); }
+  /* Interrupted-run notice (greenhouse decisions/0196): a prior run left mid-turn, reported not auto-resumed. */
+  .milpa-interrupted { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--warning-border, var(--border)); border-radius: var(--radius-md); background: var(--warning-bg, var(--surface)); font-size: var(--text-sm); color: var(--text-secondary); }
+  .milpa-interrupted__mark { color: var(--warning); }
   .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
@@ -661,6 +713,7 @@ HTML;
              components' prototypes, and the consent gate lives here too. Its empty state hides once a
              message lands. -->
         <section class="tabpane milpa-chat" data-pane="chat" id="milpa-chat" data-milpa-component="desktop-conversation" data-milpa-component-id="conversation" :hidden="$store.milpa['desktop.tab'] !== 'chat'">
+          <!--INTERRUPTED-->
           <!--CONVERSATION-->
 
           <!-- The consent gate is the `desktop-gate` component (greenhouse decisions/0189): hidden until an
@@ -1187,10 +1240,23 @@ HTML;
       });
     }
 
-    // Theme toggle (dark-first; the design system reads data-theme on <html>).
+    // Theme (dark-first; the design system reads data-theme on <html>). The choice PERSISTS across reloads
+    // (greenhouse decisions/0196): 'system' drops the attribute so prefers-color-scheme decides, 'dark'/'light'
+    // pin it. localStorage is wrapped in try/catch — a private window that throws must not break the shell.
+    function persistTheme(v) { try { if (v === 'system') { localStorage.removeItem('milpa.theme'); } else { localStorage.setItem('milpa.theme', v); } } catch (e) {} }
+    function applyTheme(v) {
+      var html = document.documentElement;
+      if (v === 'system') { html.removeAttribute('data-theme'); } else { html.setAttribute('data-theme', v); }
+      document.querySelectorAll('[data-theme-set]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-theme-set') === v)); });
+    }
+    (function restoreTheme() {
+      var v = null; try { v = localStorage.getItem('milpa.theme'); } catch (e) {}
+      if (v === 'dark' || v === 'light') { applyTheme(v); } else { applyTheme('system'); }
+    })();
     document.getElementById('milpa-theme').addEventListener('click', function () {
       var html = document.documentElement;
-      html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      applyTheme(next); persistTheme(next);
     });
 
     // Tabs are the `desktop-tabs` Milpa Component (greenhouse decisions/0189): the tablist sets the shared
@@ -1291,12 +1357,8 @@ HTML;
     // Appearance theme buttons in Settings (dark / light / system).
     document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var choice = btn.getAttribute('data-theme-set');
-        var theme = choice === 'system'
-          ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-          : choice;
-        document.documentElement.setAttribute('data-theme', theme);
-        document.querySelectorAll('[data-theme-set]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === btn)); });
+        var choice = btn.getAttribute('data-theme-set'); // 'system' | 'dark' | 'light'
+        applyTheme(choice); persistTheme(choice);
       });
     });
 

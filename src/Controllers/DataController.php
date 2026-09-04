@@ -50,7 +50,10 @@ final class DataController
         if (isset($params['session']) && is_string($params['session'])) {
             $this->data->select($params['session']);
         }
-        $dump = $this->data->export();
+        // The agent runs under a minted id kept in the milpa_agent_sid cookie (greenhouse decisions/0190); pass
+        // it so the export's token budget is the run the browser drove, not the DesktopStore session id.
+        $agentSid = $request->getCookieParams()['milpa_agent_sid'] ?? '';
+        $dump = $this->data->export(is_string($agentSid) ? $agentSid : '');
         $id = $dump['id'] !== '' ? $dump['id'] : 'session';
 
         return new Response(
