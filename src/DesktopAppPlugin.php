@@ -160,7 +160,11 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
         $agentMessage = new \Milpa\DesktopApp\Live\AgentMessage($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\AgentMessage::class, $agentMessage);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage));
+        // The plainer message types (user, tool, task, system) as components too (greenhouse decisions/0191).
+        $messages = new \Milpa\DesktopApp\Live\MessagePrototypes($this->liveSecret('signing'), $events);
+        $this->container->registerService(\Milpa\DesktopApp\Live\MessagePrototypes::class, $messages);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 

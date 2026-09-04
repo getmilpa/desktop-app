@@ -55,7 +55,14 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Gate $gate = null,
         private readonly ?\Milpa\DesktopApp\Live\Thinking $thinking = null,
         private readonly ?\Milpa\DesktopApp\Live\AgentMessage $agentMessage = null,
+        private readonly ?\Milpa\DesktopApp\Live\MessagePrototypes $messages = null,
     ) {
+    }
+
+    /** The plainer message prototypes (user/tool/task/system), or a fallback set (greenhouse decisions/0191). */
+    private function messages(): \Milpa\DesktopApp\Live\MessagePrototypes
+    {
+        return $this->messages ?? new \Milpa\DesktopApp\Live\MessagePrototypes('desktop-messages-fallback', $this->events);
     }
 
     /** Serve the dashboard, composed with every plugin's contributed panels. */
@@ -112,11 +119,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -570,6 +577,13 @@ HTML;
            its body, its foot tools (copy, regenerate) acting through the conversation's delegated handler. -->
       <template id="milpa-agent-msg-proto"><!--AGENTMSG--></template>
 
+      <!-- The plainer message components' prototypes (greenhouse decisions/0191): the conversation clones the
+           one for each message kind and fills its data regions. Each a declared, event-emitting component. -->
+      <template id="milpa-user-msg-proto"><!--USERMSG--></template>
+      <template id="milpa-tool-msg-proto"><!--TOOLMSG--></template>
+      <template id="milpa-task-msg-proto"><!--TASKMSG--></template>
+      <template id="milpa-system-msg-proto"><!--SYSMSG--></template>
+
       <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);align-items:start">
 
@@ -719,54 +733,30 @@ HTML;
         refreshSend();
       });
     }
-    // One renderer, a distinct voice per kind. The backend's stream routes into this by event type; the
-    // user's own message uses it too. (Persisting and running the turn is the agent runtime, decisions/0254.)
+    // Every message is a Milpa Component (greenhouse decisions/0191): the conversation CLONES the prototype for
+    // its kind and fills the instance's data regions — no more createElement. The backend's stream routes here
+    // by event type; the user's own message uses it too. (Running the turn is the agent runtime, decisions/0254.)
+    var MSG_PROTOS = {
+      agent: { id: 'milpa-agent-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-agent-body]'); if (b) { b.textContent = o.text || ''; } } },
+      user: { id: 'milpa-user-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-user-body]'); if (b) { b.textContent = o.text || ''; } } },
+      tool: { id: 'milpa-tool-msg-proto', fill: function (r, o) { var n = r.querySelector('[data-tool-name]'); if (n) { n.textContent = o.name || 'tool'; } var x = r.querySelector('[data-tool-result]'); if (x) { x.textContent = '→ ' + (o.result || ''); } } },
+      task: { id: 'milpa-task-msg-proto', fill: function (r, o) { var t = r.querySelector('[data-task-title]'); if (t) { t.textContent = o.title || ''; } var s = r.querySelector('[data-task-status]'); if (s) { s.textContent = o.status || 'todo'; } } },
+      system: { id: 'milpa-system-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-system-body]'); if (b) { b.textContent = o.text || ''; } } }
+    };
     function appendMessage(kind, opts) {
       if (!chat) { return; }
       opts = opts || {};
-      // The agent's message is the `desktop-agent-message` component (greenhouse decisions/0191): clone its
-      // prototype, fill the answer, and its foot tools (copy, regenerate) ride the delegated handler below.
-      if (kind === 'agent') {
-        var aproto = document.getElementById('milpa-agent-msg-proto');
-        if (aproto && 'content' in aproto) {
-          var afrag = aproto.content.cloneNode(true);
-          var aroot = afrag.querySelector('.msg--agent');
-          var abody = aroot && aroot.querySelector('[data-agent-body]');
-          if (abody) { abody.textContent = opts.text || ''; }
-          chat.appendChild(afrag);
-          if (aroot) { aroot.scrollIntoView({ block: 'end' }); }
-          return aroot;
-        }
-      }
-      var el = document.createElement('div');
-      el.className = 'msg msg--' + kind;
-      function meta(t) { var s = document.createElement('span'); s.className = 'msg__meta'; s.textContent = t; return s; }
-      function para(t, cls) { var p = document.createElement('p'); if (cls) { p.className = cls; } p.textContent = t; return p; }
-      if (kind === 'user') {
-        var box = document.createElement('div');
-        box.appendChild(meta('you · now'));
-        var p = para(opts.text || ''); p.style.cssText = 'margin:var(--space-2) 0 0;font-size:var(--text-sm);white-space:pre-wrap';
-        box.appendChild(p); el.appendChild(box);
-      } else if (kind === 'agent' || kind === 'thinking') {
-        el.appendChild(meta(kind === 'thinking' ? 'agent · thinking' : 'agent · local'));
-        el.appendChild(para(opts.text || ''));
-      } else if (kind === 'tool') {
-        var d = document.createElement('div');
-        var n = document.createElement('span'); n.className = 'msg__tool-name'; n.textContent = opts.name || 'tool';
-        var r = document.createElement('span'); r.textContent = '→ ' + (opts.result || '');
-        d.appendChild(n); d.appendChild(r); el.appendChild(d);
-      } else if (kind === 'task') {
-        var td = document.createElement('div');
-        var mk = document.createElement('span'); mk.className = 'msg__mark'; mk.textContent = '+';
-        var ti = document.createElement('span'); ti.className = 'msg__title'; ti.textContent = opts.title || '';
-        var bd = document.createElement('span'); bd.className = 'mui-badge'; bd.style.marginInlineStart = 'auto'; bd.textContent = opts.status || 'todo';
-        td.appendChild(mk); td.appendChild(ti); td.appendChild(bd); el.appendChild(td);
-      } else { // system
-        el.textContent = opts.text || '';
-      }
-      chat.appendChild(el);
-      el.scrollIntoView({ block: 'end' });
-      return el;
+      // A discrete "thinking" message reuses the thinking component (streamed thinking uses appendReasoning).
+      if (kind === 'thinking') { appendReasoning(opts.text || ''); endReasoning(); return; }
+      var spec = MSG_PROTOS[kind] || MSG_PROTOS.system;
+      var proto = document.getElementById(spec.id);
+      if (!proto || !('content' in proto)) { return; }
+      var frag = proto.content.cloneNode(true);
+      var root = frag.querySelector('.msg');
+      if (root) { spec.fill(root, opts); }
+      chat.appendChild(frag);
+      if (root) { root.scrollIntoView({ block: 'end' }); }
+      return root;
     }
 
     // The thinking block is the `desktop-thinking` Milpa Component (greenhouse decisions/0191): the conversation
