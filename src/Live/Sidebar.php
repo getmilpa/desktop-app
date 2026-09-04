@@ -39,6 +39,7 @@ final class Sidebar
         ['key' => 'decisions', 'label' => 'Decisions', 'icon' => '◈'],
         ['key' => 'capabilities', 'label' => 'Capabilities', 'icon' => '▩'],
         ['key' => 'skills', 'label' => 'Skills', 'icon' => '✦'],
+        ['key' => 'preview', 'label' => 'Preview', 'icon' => '◱'],
         ['key' => 'settings', 'label' => 'Settings', 'icon' => '⚙'],
     ];
 

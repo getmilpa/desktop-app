@@ -191,6 +191,88 @@ final class DesktopData
     }
 
     /**
+     * The specialist agent roles this app declares (greenhouse decisions/0197): each a named authority with
+     * the skills it preloads, the tools it is denied, and what it produces. A role names authority that already
+     * governs; the skills only suggest. Read from the same {@see \Milpa\AppRuntime\Agent\Role\RoleRegistry}
+     * (`<root>/.milpa/agents/*.md`) the `agent:role:list` operation reads. Guarded → none without the runtime.
+     *
+     * @return list<array{name: string, produces: string, deny: list<string>, skills: list<string>}>
+     *
+     * @codeCoverageIgnore reads through to the app-runtime RoleRegistry; exercised by integration on a booted
+     *                     app (greenhouse evidence/0512), not by the standalone unit suite
+     */
+    public function roles(): array
+    {
+        if (!class_exists(\Milpa\AppRuntime\Agent\Role\RoleRegistry::class)) {
+            return [];
+        }
+        $kernel = $this->container->has(Kernel::class) ? $this->container->get(Kernel::class) : null;
+        if (!$kernel instanceof Kernel) {
+            return [];
+        }
+
+        $registry = new \Milpa\AppRuntime\Agent\Role\RoleRegistry();
+        $registry->loadFrom($kernel->root() . '/.milpa/agents');
+
+        $out = [];
+        foreach ($registry->all() as $role) {
+            $row = $role->toArray();
+            $out[] = [
+                'name' => is_string($row['name'] ?? null) ? $row['name'] : '',
+                'produces' => is_string($row['produces'] ?? null) ? $row['produces'] : '',
+                'deny' => array_values(array_filter(is_array($row['deny'] ?? null) ? $row['deny'] : [], 'is_string')),
+                'skills' => array_values(array_filter(is_array($row['skills'] ?? null) ? $row['skills'] : [], 'is_string')),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The live screens the agent declared (greenhouse decisions/0197): each served by the live wire at its own
+     * path, previewable with no code deploy. Read from the same {@see \Milpa\AppRuntime\Web\ScreenStore} the
+     * `screen:declare` operation writes. Guarded → none without the live wire.
+     *
+     * @return list<array{name: string, type: string, served_at: string}>
+     *
+     * @codeCoverageIgnore reads through to the app-runtime ScreenStore; exercised by integration on a booted
+     *                     app (greenhouse evidence/0512), not by the standalone unit suite
+     */
+    public function declaredScreens(): array
+    {
+        if (!class_exists(\Milpa\AppRuntime\Web\ScreenStore::class)) {
+            return [];
+        }
+        $kernel = $this->container->has(Kernel::class) ? $this->container->get(Kernel::class) : null;
+        if (!$kernel instanceof Kernel) {
+            return [];
+        }
+        $config = $this->container->has(Config::class) ? $this->container->get(Config::class) : null;
+        $live = $config instanceof Config && is_array($config->get('live')) ? $config->get('live') : [];
+
+        $out = [];
+        foreach (\Milpa\AppRuntime\Web\ScreenStore::fromConfig($live, $kernel->root())->catalogue() as $row) {
+            $out[] = [
+                'name' => is_string($row['name'] ?? null) ? $row['name'] : '',
+                'type' => is_string($row['type'] ?? null) ? $row['type'] : '',
+                'served_at' => is_string($row['servedAt'] ?? null) ? $row['servedAt'] : '',
+            ];
+        }
+
+        return $out;
+    }
+
+    /** The route the live wire is mounted on (config `live.route`, default `/live`) — the Preview iframe's base. */
+    public function liveRoute(): string
+    {
+        $config = $this->container->has(Config::class) ? $this->container->get(Config::class) : null;
+        $live = $config instanceof Config ? $config->get('live') : null;
+        $route = is_array($live) && is_string($live['route'] ?? null) && $live['route'] !== '' ? $live['route'] : '/live';
+
+        return $route;
+    }
+
+    /**
      * The configured model provider and endpoint (real config, with env fallbacks).
      *
      * @return array{model: string, endpoint: string}

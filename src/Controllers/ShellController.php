@@ -18,6 +18,8 @@ use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\Live\MercureConfig;
+use Milpa\DesktopApp\Live\RolesView;
+use Milpa\DesktopApp\Live\ScreenPreviewView;
 use Milpa\DesktopApp\Live\SkillsView;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
@@ -122,11 +124,11 @@ final class ShellController
     {
         return str_replace(
             [
-                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
+                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--ROLES-->', '<!--SCREENS-->', '<!--LIVEROUTE-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
-                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
+                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
                 $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
@@ -164,6 +166,24 @@ final class ShellController
     private function skillsHtml(): string
     {
         return (new SkillsView())->html($this->data?->skills() ?? []);
+    }
+
+    /**
+     * The specialist agent roles as HTML (greenhouse decisions/0197): the roles the app declares, each with the
+     * skills it preloads and the tools it is denied. A pure {@see RolesView} tested with fixtures, not a runtime.
+     */
+    private function rolesHtml(): string
+    {
+        return (new RolesView())->html($this->data?->roles() ?? []);
+    }
+
+    /**
+     * The declared-screen preview chips as HTML (greenhouse decisions/0197): pick one to render its live screen
+     * in the preview iframe. A pure {@see ScreenPreviewView} tested with fixtures, not a runtime.
+     */
+    private function screenPreviewHtml(): string
+    {
+        return (new ScreenPreviewView())->html($this->data?->declaredScreens() ?? []);
     }
 
     /**
@@ -580,6 +600,17 @@ HTML;
   .skill-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
   .skill-card__name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); }
   .skill-card__desc { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text-secondary); text-wrap: pretty; }
+  .role-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); max-width: 72ch; }
+  .role-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-3) var(--space-4); }
+  .role-card__name { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); }
+  .role-card__line { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+  .role-card__key { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+  /* Declared-screen preview chips (greenhouse decisions/0197). */
+  .screen-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+  .screen-chip { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+  .screen-chip:hover { border-color: var(--accent); }
+  .screen-chip__name { font-family: var(--font-mono); font-size: var(--text-xs); }
+  .screen-chip__type { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
   .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
@@ -825,6 +856,19 @@ HTML;
       <div class="view" data-view="skills" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
         <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">The skills the agent carries — each guides judgment, it is not a tool that runs. The same list the agent reaches for.</p>
         <div id="milpa-skills"><!--SKILLS--></div>
+        <p class="agent-section__head" style="margin:var(--space-8) 0 var(--space-4);font-family:var(--font-mono);font-size:var(--text-2xs);letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)">Specialist roles</p>
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">Specialist agents this app declares — each a named authority with the skills it preloads and the tools it is denied.</p>
+        <div id="milpa-roles"><!--ROLES--></div>
+      </div>
+
+      <div class="view" data-view="preview" hidden style="flex:1;min-height:0;overflow:hidden;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-4)">
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0">See what the agent is building — a screen it declared, rendered live and hosted here. "How does it look?", answered.</p>
+        <div class="mui-cluster mui-cluster--sm" style="align-items:center;gap:var(--space-3);flex:none">
+          <input class="mui-input mui-input--sm" id="milpa-preview-name" placeholder="screen name" style="max-width:26ch;font-family:var(--font-mono);font-size:var(--text-xs)">
+          <button type="button" class="mui-btn mui-btn--primary mui-btn--sm" id="milpa-preview-go" data-live-route="<!--LIVEROUTE-->">Preview</button>
+          <span id="milpa-screens"><!--SCREENS--></span>
+        </div>
+        <iframe id="milpa-preview-frame" title="Live screen preview" style="flex:1;min-height:0;width:100%;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--surface)"></iframe>
       </div>
 
       <div class="view" data-view="decisions" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
@@ -1289,7 +1333,7 @@ HTML;
 
     // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
     var navItems = document.querySelectorAll('.mui-sidebar__item[data-nav]');
-    var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', skills: 'skills', settings: 'settings' };
+    var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', skills: 'skills', preview: 'preview', settings: 'settings' };
     function showView(view) {
       // Swap the whole main between its views — same shell, not a window. The auth overlay is a `.view`
       // too but is opened on demand, so it is never toggled by navigation. The sidebar's active-nav highlight
@@ -1382,6 +1426,30 @@ HTML;
         applyTheme(choice); persistTheme(choice);
       });
     });
+
+    // Declared-screen preview (greenhouse decisions/0197): point the iframe at the live wire's page route for a
+    // screen the agent declared — same-origin, so its own runtime/Alpine boot inside the frame. A chip carries
+    // the exact path it is served at; the manual box builds it from the live route + the typed name.
+    (function () {
+      var frame = document.getElementById('milpa-preview-frame');
+      var input = document.getElementById('milpa-preview-name');
+      var go = document.getElementById('milpa-preview-go');
+      if (!frame || !input || !go) { return; }
+      function preview(src) { if (src) { frame.src = src; } }
+      go.addEventListener('click', function () {
+        var name = (input.value || '').trim();
+        if (name === '') { return; }
+        var route = go.getAttribute('data-live-route') || '/live';
+        preview(route + '/page?component=' + encodeURIComponent(name));
+      });
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { go.click(); } });
+      document.querySelectorAll('#milpa-screens [data-screen-name]').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          input.value = chip.getAttribute('data-screen-name') || '';
+          preview(chip.getAttribute('data-screen-src') || '');
+        });
+      });
+    })();
 
     // Connection status → status bar + top badge.
     var conn = document.getElementById('milpa-conn');

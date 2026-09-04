@@ -62,6 +62,21 @@ final class DesktopDataTest extends TestCase
         self::assertSame([], (new DesktopData(new DIContainer()))->skills());
     }
 
+    public function testRolesAreEmptyWithoutAKernel(): void
+    {
+        // Specialist roles degrade to none without a booted kernel (greenhouse decisions/0197).
+        self::assertSame([], (new DesktopData(new DIContainer()))->roles());
+    }
+
+    public function testDeclaredScreensAreEmptyAndLiveRouteDefaultsWithoutAKernel(): void
+    {
+        // The preview degrades to none without a booted kernel; the live route falls back to /live
+        // (greenhouse decisions/0197).
+        $data = new DesktopData(new DIContainer());
+        self::assertSame([], $data->declaredScreens());
+        self::assertSame('/live', $data->liveRoute());
+    }
+
     public function testTheModelComesFromConfigWithEnvFallback(): void
     {
         $kernel = Kernel::boot([

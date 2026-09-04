@@ -20,6 +20,8 @@ use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
+use Milpa\DesktopApp\Live\RolesView;
+use Milpa\DesktopApp\Live\ScreenPreviewView;
 use Milpa\DesktopApp\Live\SkillsView;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
@@ -208,6 +210,50 @@ final class ShellControllerTest extends TestCase
 
         self::assertStringContainsString('mui-empty', $html);
         self::assertStringContainsString('SKILL.md', $html);
+    }
+
+    public function testTheRolesViewRendersASpecialistWithItsSkillsAndDenies(): void
+    {
+        // Populated (pure view, greenhouse decisions/0197): a role card with what it produces, the skills it
+        // preloads, and the tools it is denied.
+        $html = (new RolesView())->html([
+            ['name' => 'reviewer', 'produces' => 'a review report', 'deny' => ['shell'], 'skills' => ['systematic-debugging']],
+        ]);
+
+        self::assertStringContainsString('reviewer', $html);
+        self::assertStringContainsString('a review report', $html);
+        self::assertStringContainsString('systematic-debugging', $html);
+        self::assertStringContainsString('shell', $html);
+        self::assertStringContainsString('denied', $html);
+    }
+
+    public function testTheRolesViewShowsAnEmptyStateWhenThereAreNone(): void
+    {
+        $html = (new RolesView())->html([]);
+
+        self::assertStringContainsString('mui-empty', $html);
+        self::assertStringContainsString('agent:role:declare', $html);
+    }
+
+    public function testTheScreenPreviewRendersAChipCarryingItsServedPath(): void
+    {
+        // Populated (pure view, greenhouse decisions/0197): a chip per declared screen, carrying the exact path
+        // the live wire serves it at, so the preview iframe points straight there.
+        $html = (new ScreenPreviewView())->html([
+            ['name' => 'tasks', 'type' => 'data-table', 'served_at' => '/live/page?component=tasks'],
+        ]);
+
+        self::assertStringContainsString('data-screen-name="tasks"', $html);
+        self::assertStringContainsString('data-screen-src="/live/page?component=tasks"', $html);
+        self::assertStringContainsString('data-table', $html);
+    }
+
+    public function testTheScreenPreviewShowsAnEmptyStateWhenNoScreensAreDeclared(): void
+    {
+        $html = (new ScreenPreviewView())->html([]);
+
+        self::assertStringContainsString('mui-empty', $html);
+        self::assertStringContainsString('screen:declare', $html);
     }
 
     public function testTheScreensRenderRealSessionWorkAndAudit(): void
