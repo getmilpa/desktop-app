@@ -20,12 +20,15 @@ use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\Eventing\EventDispatcher;
 use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
+use Milpa\Runtime\Config;
+use Milpa\Runtime\Stack\StackProviderInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
  * The plugin mounts the shell route and registers its controller (greenhouse decisions/0188): a Milpa
- * app that installs this plugin serves its own shell over HTTP.
+ * app that installs this plugin serves its own shell over HTTP. It also declares the Mercure hub it
+ * needs through the runtime's stack contract (greenhouse decisions/0201).
  */
 final class DesktopAppPluginTest extends TestCase
 {
@@ -60,6 +63,30 @@ final class DesktopAppPluginTest extends TestCase
 
         // The router resolves the handler's class from the container; after boot it is the shell controller.
         self::assertInstanceOf(ShellController::class, $container->get(ShellController::class));
+    }
+
+    public function testItDeclaresTheMercureHubItNeeds(): void
+    {
+        $plugin = new DesktopAppPlugin(new DIContainer());
+
+        self::assertInstanceOf(StackProviderInterface::class, $plugin, 'the first real declarant of the stack contract (decisions/0201)');
+        $services = $plugin->services();
+        self::assertCount(1, $services, 'one service: the hub');
+        self::assertSame('mercure', $services[0]->name);
+        self::assertSame('dunglas/mercure', $services[0]->image);
+        self::assertSame(3000, $services[0]->probePort(), 'no hub url configured: the default published port');
+    }
+
+    public function testTheDeclaredHubPublishesThePortTheAppPublishesTo(): void
+    {
+        $container = new DIContainer();
+        $container->registerService(Config::class, new Config([
+            'desktop' => ['mercure' => ['hub_url' => 'http://127.0.0.1:3010/.well-known/mercure']],
+        ]));
+
+        $services = (new DesktopAppPlugin($container))->services();
+
+        self::assertSame(3010, $services[0]->probePort(), 'the declaration reads the same config the wiring does');
     }
 
     public function testItExposesItsContainer(): void

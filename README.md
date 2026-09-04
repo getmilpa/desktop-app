@@ -106,6 +106,16 @@ Configure `desktop.mercure.{hub_url,public_url,publisher_key,subscriber_key}` an
 changes to the hub (via `milpa/mercure`) while the dashboard subscribes to it — the grid updates with no
 poll. Without a hub, the app runs on the shared-log feed.
 
+The plugin also DECLARES the hub it needs: `DesktopAppPlugin` implements the runtime's
+`StackProviderInterface` (`Milpa\Runtime\Stack`, greenhouse decisions/0201) and returns one
+`ServiceDeclaration` — `dunglas/mercure`, container port 80 published on the port `hub_url` carries (3000
+when it carries none), `SERVER_NAME=:80`, the publisher/subscriber JWT keys as SECRETS that reference
+`desktop.mercure.publisher_key` / `subscriber_key` (never shown, projected as `${NAME}`), and
+`MERCURE_EXTRA_DIRECTIVES` with `cors_origins` (`desktop.mercure.cors_origin`, default
+`http://localhost:8080`) plus `anonymous`. An admin panel can list the service, probe its port and project a
+compose fragment from that declaration; nothing in this plugin starts a container, and the config keys stay
+the same.
+
 ## The arc
 
 The Desktop is a Milpa plugin: the app hosts its own dashboard, built from Milpa components, at a real

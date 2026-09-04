@@ -26,6 +26,7 @@ use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\MercurePublisher;
+use Milpa\DesktopApp\Live\MercureServiceDeclaration;
 use Milpa\DesktopApp\Live\ShellChangeRecorder;
 use Milpa\DesktopApp\Live\ShellEvent;
 use Milpa\DesktopApp\Live\ShellEventLog;
@@ -38,6 +39,8 @@ use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Runtime\Config;
 use Milpa\Runtime\Http\RouteProviderInterface;
+use Milpa\Runtime\Stack\ServiceDeclaration;
+use Milpa\Runtime\Stack\StackProviderInterface;
 
 /**
  * The «Desktop App» plugin: a Milpa app SERVES ITS OWN SHELL over HTTP (greenhouse decisions/0188).
@@ -54,6 +57,10 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  * milpa/mercure), the UI events other plugins hook, and the migration of the full renderer are the
  * arc named in 0188. Installing this plugin IS the activation — there is no config to fail closed on;
  * a Milpa without it simply has no desktop shell, which is the honest default.
+ *
+ * It is also the first real declarant of the runtime's stack contract (greenhouse decisions/0201): it
+ * DECLARES the Mercure hub it needs — as data, through {@see StackProviderInterface} — so whoever operates
+ * the host can list it, probe it and project a compose fragment without this plugin knowing who asks.
  */
 #[PluginMetadata(
     version: '0.1.0',
@@ -62,7 +69,7 @@ use Milpa\Runtime\Http\RouteProviderInterface;
     name: 'DesktopApp',
     type: 'Web',
 )]
-final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
+final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface, StackProviderInterface
 {
     /** A plugin dispatches this (with a {@see ShellEvent} in `payload['shellEvent']`) to push a live update. */
     public const CHANGED_EVENT = 'desktop.shell.changed';
@@ -269,6 +276,22 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface
                 handler: new HandlerReference(MutationController::class, 'moveWork'),
             ),
         ];
+    }
+
+    /**
+     * The backing services this plugin needs the host to run (greenhouse decisions/0201): the Mercure hub the
+     * shell and the agent sessions stream through. Declared, not started — an admin panel lists it, probes its
+     * port and projects a compose fragment; running it is the operator's call. The declaration reads the same
+     * `desktop.mercure.*` keys the wiring does, so the hub it describes is the hub the app publishes to; the
+     * keys travel as secret config references, never as values.
+     *
+     * @return list<ServiceDeclaration>
+     */
+    public function services(): array
+    {
+        $config = $this->container->get(Config::class);
+
+        return [MercureServiceDeclaration::fromConfig($config instanceof Config ? $config : null)];
     }
 
     /** The Mercure hub wiring, when the app configured `desktop.mercure.*`; null otherwise (log-only). */
