@@ -20,6 +20,7 @@ use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
+use Milpa\DesktopApp\Live\SkillsView;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\ShellEvent;
@@ -184,6 +185,29 @@ final class ShellControllerTest extends TestCase
 
         self::assertStringContainsString('milpa-decisions-empty', $html);
         self::assertStringContainsString('No decisions to make', $html);
+    }
+
+    public function testTheSkillsViewRendersEachSkillWithWhoMayInvokeIt(): void
+    {
+        // Populated (pure view, greenhouse decisions/0197): a card per skill, its description, and who may
+        // reach for it — the agent, the human, or both.
+        $html = (new SkillsView())->html([
+            ['name' => 'systematic-debugging', 'description' => 'A method for finding a bug by evidence', 'model_invocable' => true, 'user_invocable' => false],
+            ['name' => 'brainstorming', 'description' => 'Frame the question before building', 'model_invocable' => true, 'user_invocable' => true],
+        ]);
+
+        self::assertStringContainsString('systematic-debugging', $html);
+        self::assertStringContainsString('A method for finding a bug by evidence', $html);
+        self::assertStringContainsString('agent &amp; you', $html, 'both-invocable badge');
+        self::assertStringContainsString('>agent<', $html, 'agent-only badge');
+    }
+
+    public function testTheSkillsViewShowsAnEmptyStateWhenThereAreNone(): void
+    {
+        $html = (new SkillsView())->html([]);
+
+        self::assertStringContainsString('mui-empty', $html);
+        self::assertStringContainsString('SKILL.md', $html);
     }
 
     public function testTheScreensRenderRealSessionWorkAndAudit(): void

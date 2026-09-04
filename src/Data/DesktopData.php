@@ -157,6 +157,40 @@ final class DesktopData
     }
 
     /**
+     * The skills the agent carries — each one's name, description, and who may invoke it (greenhouse
+     * decisions/0197). A skill guides judgment; it is not a tool that runs. Read from the same
+     * {@see \Milpa\AppRuntime\Agent\Skill\SkillRegistry} (`<root>/skills/*​/SKILL.md`) the agent reads, so
+     * the human sees exactly what the agent can reach for. Guarded so an app without the runtime degrades to none.
+     *
+     * @return list<array{name: string, description: string, model_invocable: bool, user_invocable: bool}>
+     *
+     * @codeCoverageIgnore reads through to the app-runtime SkillRegistry; exercised by integration on a booted
+     *                     app (greenhouse evidence/0511), not by the standalone unit suite
+     */
+    public function skills(): array
+    {
+        if (!class_exists(\Milpa\AppRuntime\Agent\Skill\SkillRegistry::class)) {
+            return [];
+        }
+        $kernel = $this->container->has(Kernel::class) ? $this->container->get(Kernel::class) : null;
+        if (!$kernel instanceof Kernel) {
+            return [];
+        }
+
+        $out = [];
+        foreach ((new \Milpa\AppRuntime\Agent\Skill\SkillRegistry($kernel->root()))->all() as $skill) {
+            $out[] = [
+                'name' => $skill->name,
+                'description' => $skill->description,
+                'model_invocable' => $skill->modelInvocable,
+                'user_invocable' => $skill->userInvocable,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * The configured model provider and endpoint (real config, with env fallbacks).
      *
      * @return array{model: string, endpoint: string}

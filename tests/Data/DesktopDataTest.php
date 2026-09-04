@@ -55,6 +55,13 @@ final class DesktopDataTest extends TestCase
         self::assertSame([], (new DesktopData(new DIContainer()))->pendingDecisions());
     }
 
+    public function testSkillsAreEmptyWithoutAKernel(): void
+    {
+        // Skills degrade to none without a booted kernel (greenhouse decisions/0197) — an app without the
+        // runtime shows nothing rather than failing.
+        self::assertSame([], (new DesktopData(new DIContainer()))->skills());
+    }
+
     public function testTheModelComesFromConfigWithEnvFallback(): void
     {
         $kernel = Kernel::boot([

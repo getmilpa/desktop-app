@@ -18,6 +18,7 @@ use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\Live\MercureConfig;
+use Milpa\DesktopApp\Live\SkillsView;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Nyholm\Psr7\Response;
@@ -121,11 +122,11 @@ final class ShellController
     {
         return str_replace(
             [
-                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
+                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
-                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
+                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
                 $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
@@ -154,6 +155,15 @@ final class ShellController
     private function decisionsInboxHtml(): string
     {
         return (new DecisionsInboxView())->html($this->data?->pendingDecisions() ?? []);
+    }
+
+    /**
+     * The agent's skills as HTML (greenhouse decisions/0197): the same list the agent reaches for, each with
+     * who may invoke it. The render is a pure {@see SkillsView} tested with fixtures, not a runtime.
+     */
+    private function skillsHtml(): string
+    {
+        return (new SkillsView())->html($this->data?->skills() ?? []);
     }
 
     /**
@@ -564,6 +574,12 @@ HTML;
   /* Interrupted-run notice (greenhouse decisions/0196): a prior run left mid-turn, reported not auto-resumed. */
   .milpa-interrupted { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--warning-border, var(--border)); border-radius: var(--radius-md); background: var(--warning-bg, var(--surface)); font-size: var(--text-sm); color: var(--text-secondary); }
   .milpa-interrupted__mark { color: var(--warning); }
+  /* Skills: what the agent carries — each guides judgment, not a tool that runs (greenhouse decisions/0197). */
+  .skill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); max-width: 72ch; }
+  .skill-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-3) var(--space-4); }
+  .skill-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .skill-card__name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); }
+  .skill-card__desc { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text-secondary); text-wrap: pretty; }
   .milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
@@ -804,6 +820,11 @@ HTML;
       <div class="view" data-view="capabilities" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
         <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">What this app can do today, and what it could — the same catalogue the agent reads.</p>
         <div id="milpa-capabilities"><!--CAPABILITIES--></div>
+      </div>
+
+      <div class="view" data-view="skills" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
+        <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">The skills the agent carries — each guides judgment, it is not a tool that runs. The same list the agent reaches for.</p>
+        <div id="milpa-skills"><!--SKILLS--></div>
       </div>
 
       <div class="view" data-view="decisions" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
@@ -1268,7 +1289,7 @@ HTML;
 
     // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
     var navItems = document.querySelectorAll('.mui-sidebar__item[data-nav]');
-    var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', settings: 'settings' };
+    var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', skills: 'skills', settings: 'settings' };
     function showView(view) {
       // Swap the whole main between its views — same shell, not a window. The auth overlay is a `.view`
       // too but is opened on demand, so it is never toggled by navigation. The sidebar's active-nav highlight
