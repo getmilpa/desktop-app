@@ -972,9 +972,14 @@ HTML;
     function updateCounters(res) {
       setSig('session.turns', (parseInt(sig('session.turns'), 10) || 0) + 1);
       if (typeof res.steps === 'number') { setSig('session.steps', (parseInt(sig('session.steps'), 10) || 0) + res.steps); }
-      // Context usage: a client estimate from the conversation's size (~4 chars/token) until the turn reports
-      // the session's real token usage — a projected estimate beats a frozen zero.
-      setSig('context.used', kfmt(estimateContextTokens()));
+      // Tokens: a client ESTIMATE from the conversation's size (~4 chars/token), marked "≈" so it never
+      // masquerades as a counted figure (the house's own doctrine: a token bar that guesses without saying so
+      // is a fabricated number in a real one's clothes — SessionEvent::ModelReturned; its TUI labels the same
+      // estimate "estimado"). The session's REAL provider usage is a framework follow-on (the `agent` op does
+      // not return it yet). One estimate, projected to the status bar and the context chip alike.
+      var est = '≈' + kfmt(estimateContextTokens());
+      setSig('context.used', est);
+      setSig('session.tokens', est);
     }
     function send() {
       if (!composerInput) { return; }
