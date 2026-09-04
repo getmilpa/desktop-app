@@ -69,10 +69,18 @@ final class ShellController
         $composition = new ShellComposition();
         $this->events->dispatch(self::COMPOSE_EVENT, ['composition' => $composition]);
 
+        // The agent session this Desktop drives (greenhouse decisions/0190): a stable id, kept in a cookie so
+        // reloads continue the SAME governed session. Its `session.*` events ride the exact topic below.
+        $agentSid = $request->getCookieParams()['milpa_agent_sid'] ?? null;
+        $agentSid = \is_string($agentSid) && $agentSid !== '' ? $agentSid : 'desk-' . bin2hex(random_bytes(8));
+
         $cookies = [];
         if ($this->mercure !== null) {
-            // The hub reads the subscriber JWT from this cookie; the browser sends it with EventSource.
-            $cookies[] = 'mercureAuthorization=' . $this->mercure->subscriberJwt() . '; Path=/; SameSite=Lax';
+            $cookies[] = 'milpa_agent_sid=' . $agentSid . '; Path=/; SameSite=Lax';
+            // The hub reads the subscriber JWT from this cookie; the browser sends it with EventSource. It is
+            // scoped to the shell topic AND this session's exact stream topic (greenhouse decisions/0190).
+            $jwt = $this->mercure->subscriberJwt([\Milpa\DesktopApp\Live\MercureConfig::sessionTopic($agentSid)]);
+            $cookies[] = 'mercureAuthorization=' . $jwt . '; Path=/; SameSite=Lax';
         }
 
         // The milpa/live boot payload the client runtime reads (#milpa-live-boot): the endpoint, the session
@@ -94,19 +102,19 @@ final class ShellController
             $headers['Set-Cookie'] = \count($cookies) === 1 ? $cookies[0] : $cookies;
         }
 
-        return new Response(200, $headers, $this->html($composition, $liveBoot));
+        return new Response(200, $headers, $this->html($composition, $liveBoot, $agentSid));
     }
 
-    private function html(ShellComposition $composition, string $liveBoot = ''): string
+    private function html(ShellComposition $composition, string $liveBoot = '', string $agentSid = ''): string
     {
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript(), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -341,6 +349,22 @@ HTML;
         anyHandlers.forEach(function (cb) { cb(type, data); });
       },
       status: function (state) { statusHandlers.forEach(function (cb) { cb(state); }); },
+      // A governed turn's session.* projection (greenhouse decisions/0190), translated to the events the
+      // shell already handles — so one set of listeners renders both the desktop feed and the agent stream.
+      session: function (env) {
+        var kind = env && env.kind;
+        if (kind === 'activity') {
+          var st = (env.activity && env.activity.state) || '';
+          if (st === 'thinking') { this.emit('session.state', { state: 'working' }); }
+          else if (st === 'ready') { this.emit('session.state', { state: 'idle' }); }
+        } else if (kind === 'message') {
+          this.emit('agent.message', { text: (env.message && env.message.content) || '' });
+        } else if (kind === 'reasoning') {
+          this.emit('agent.reasoning', { text: (env.reasoning && (env.reasoning.delta || env.reasoning.text)) || '' });
+        } else if (kind === 'waiting') {
+          this.emit('system.notice', { text: 'Waiting on you: ' + ((env.ended && env.ended.question) || '') });
+        }
+      },
       panel: function (id) {
         var p = document.querySelector('[data-panel="' + id + '"]');
         return p ? p.querySelector('[data-panel-body]') : null;
@@ -352,13 +376,20 @@ HTML;
     }
 
     /** Connect the runtime to the Mercure hub when one is wired; otherwise report an offline status. */
-    private function connectScript(): string
+    private function connectScript(string $agentSid = ''): string
     {
         if ($this->mercure === null) {
             return "<script>window.MilpaShell.status('offline');</script>";
         }
 
-        $url = json_encode($this->mercure->publicUrl . '?topic=' . rawurlencode($this->mercure->topic), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        // Subscribe to TWO exact topics on one connection: the shell topic (desktop ShellEvents) and this
+        // session's stream (a governed turn's session.* events, greenhouse decisions/0190). Exact topics —
+        // not a URI template — so the hub authorizes and delivers them without matching ambiguity.
+        $url = json_encode(
+            $this->mercure->publicUrl . '?topic=' . rawurlencode($this->mercure->topic)
+            . '&topic=' . rawurlencode(\Milpa\DesktopApp\Live\MercureConfig::sessionTopic($agentSid)),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+        );
 
         return <<<HTML
 <script>
@@ -368,7 +399,10 @@ HTML;
     es.onerror = function () { window.MilpaShell.status('offline'); };
     es.onmessage = function (e) {
       var env; try { env = JSON.parse(e.data); } catch (err) { return; }
-      window.MilpaShell.emit(env.event, env.data);
+      // Two shapes on one connection: a desktop ShellEvent carries `event`; a governed turn's session
+      // projection carries `kind` (activity/message/waiting). Map the session ones to the shell's UI.
+      if (env && typeof env.event === 'string') { window.MilpaShell.emit(env.event, env.data); return; }
+      if (env && typeof env.kind === 'string') { window.MilpaShell.session(env); }
     };
   })();
 </script>
@@ -427,6 +461,14 @@ HTML;
   /* Thinking: the agent reasoning aloud — dimmed and italic, clearly not final speech. */
   .msg--thinking { color: var(--text-muted); font-style: italic; }
   .msg--thinking > p { margin: var(--space-1) 0 0; font-size: var(--text-xs); line-height: var(--leading-relaxed); white-space: pre-wrap; }
+  /* Live thinking block: the words assemble in front of the user, then collapse to a toggle. A quiet,
+     bordered aside — visibly the model's private reasoning, never mistaken for its answer. */
+  .milpa-think { font-style: normal; border-inline-start: 2px solid var(--border); padding-inline-start: var(--space-3); }
+  .milpa-think__toggle { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 0; background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; }
+  .milpa-think__toggle:hover { color: var(--text-secondary); }
+  .milpa-think[data-open="1"] .milpa-think__toggle::after { content: ' ▾'; }
+  .milpa-think[data-open="0"] .milpa-think__toggle::after { content: ' ▸'; }
+  .milpa-think__body { margin-top: var(--space-2); max-height: 16rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
   /* Tool call: a compact mono card, the machinery made legible. */
   .msg--tool > div { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); }
   .msg--tool .msg__tool-name { color: var(--accent-text); }
@@ -679,6 +721,55 @@ HTML;
       el.scrollIntoView({ block: 'end' });
       return el;
     }
+
+    // The live thinking block (greenhouse decisions/0190): reasoning deltas stream in — the words assemble
+    // in front of the user — and when the turn produces its message (or ends) the block COLLAPSES to a
+    // toggle ("thought for Ns"), which re-opens on click. A distinct visual voice from the agent's message.
+    var reasoningEl = null, reasoningBody = null, reasoningStart = 0;
+    function appendReasoning(delta) {
+      if (!chat || !delta) { return; }
+      if (!reasoningEl) {
+        reasoningStart = Date.now();
+        // Local refs so each block's toggle keeps working after endReasoning() clears the shared ones.
+        var blockEl = document.createElement('div');
+        blockEl.className = 'msg msg--thinking milpa-think';
+        blockEl.setAttribute('data-open', '1');
+        var head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'milpa-think__toggle';
+        head.textContent = '◈ thinking…';
+        var bodyEl = document.createElement('div');
+        bodyEl.className = 'milpa-think__body';
+        head.addEventListener('click', function () {
+          var open = blockEl.getAttribute('data-open') === '1';
+          blockEl.setAttribute('data-open', open ? '0' : '1');
+          bodyEl.hidden = open;
+        });
+        blockEl.appendChild(head);
+        blockEl.appendChild(bodyEl);
+        chat.appendChild(blockEl);
+        reasoningEl = blockEl;
+        reasoningBody = bodyEl;
+      }
+      reasoningBody.textContent += delta;
+      reasoningEl.scrollIntoView({ block: 'end' });
+    }
+    function endReasoning() {
+      if (!reasoningEl) { return; }
+      var secs = Math.max(1, Math.round((Date.now() - reasoningStart) / 1000));
+      var head = reasoningEl.querySelector('.milpa-think__toggle');
+      if (head) { head.textContent = '◈ thought for ' + secs + 's'; }
+      reasoningEl.setAttribute('data-open', '0');
+      if (reasoningBody) { reasoningBody.hidden = true; }
+      reasoningEl = null;
+      reasoningBody = null;
+    }
+
+    // The agent session this Desktop drives (greenhouse decisions/0190): the server minted it, set it in a
+    // cookie, and scoped the hub JWT + the EventSource to its exact stream topic — so a governed turn's
+    // session.* events reach this shell live.
+    var agentSession = '<!--AGENTSID-->';
+
     function send() {
       if (!composerInput) { return; }
       var text = composerInput.value.trim();
@@ -689,6 +780,17 @@ HTML;
       composerInput.dispatchEvent(new Event('input', { bubbles: true }));
       refreshSend();
       composerInput.focus();
+      // Start a governed turn over the HTTP surface (greenhouse decisions/0190). The working/idle badge
+      // and (once projected) the reasoning stream arrive live over the hub on this session's topic; the
+      // final answer comes back here. `mode: ask` keeps mutating tools behind their gate.
+      fetch('/agent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text, session: agentSession, mode: 'ask' })
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
+        else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
+        else if (res && res.error) { appendMessage('system', { text: res.error }); }
+      }).catch(function () { appendMessage('system', { text: 'The turn could not be reached.' }); });
     }
     // While the agent works, the send button becomes Stop; the topbar state follows. "Working" is the
     // backend's to declare (it arrives as a `session.state` event) — the Desktop reflects and signals, it
@@ -871,12 +973,14 @@ HTML;
     });
 
     // The conversation stream: the backend's turn arrives as typed events, each rendered in its own voice.
-    window.MilpaShell.on('agent.message', function (d) { appendMessage('agent', { text: (d && d.text) || '' }); });
+    // Reasoning deltas stream into the live thinking block; the agent's message (or the turn ending) closes it.
+    window.MilpaShell.on('agent.reasoning', function (d) { appendReasoning((d && d.text) || ''); });
+    window.MilpaShell.on('agent.message', function (d) { endReasoning(); appendMessage('agent', { text: (d && d.text) || '' }); });
     window.MilpaShell.on('agent.thinking', function (d) { appendMessage('thinking', { text: (d && d.text) || '' }); });
     window.MilpaShell.on('tool.call', function (d) { appendMessage('tool', { name: (d && d.name) || 'tool', result: (d && d.result) || '' }); });
     window.MilpaShell.on('task.added', function (d) { appendMessage('task', { title: (d && d.title) || '', status: (d && d.status) || 'todo' }); });
     window.MilpaShell.on('system.notice', function (d) { appendMessage('system', { text: (d && d.text) || '' }); });
-    window.MilpaShell.on('session.state', function (d) { setWorking(d && d.state === 'working'); });
+    window.MilpaShell.on('session.state', function (d) { if (d && d.state !== 'working') { endReasoning(); } setWorking(d && d.state === 'working'); });
 
     // Activity / audit stream: prepend each live fact as a mui-replay event.
     var list = document.getElementById('milpa-activity');

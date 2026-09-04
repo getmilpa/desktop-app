@@ -65,9 +65,23 @@ final class MercureConfig
         return new MercureService($this->hubUrl, $this->publicUrl, $this->publisherKey, $this->subscriberKey);
     }
 
-    /** A subscriber JWT scoped to the shell topic, for the browser to present to the hub. */
-    public function subscriberJwt(): string
+    /** The exact topic a governed agent turn's `session.*` events ride, for `$id` (greenhouse decisions/0190). */
+    public static function sessionTopic(string $id): string
     {
-        return $this->service()->generateSubscriberJwt([$this->topic]);
+        return 'milpa/sessions/' . $id;
+    }
+
+    /**
+     * A subscriber JWT scoped to the shell topic plus any `$extraTopics`, for the browser to present to the
+     * hub. The shell adds the exact agent session topic ({@see sessionTopic()}) so a governed turn's
+     * `session.*` events (activity/thinking, message, waiting) reach the shell on the SAME hub it already
+     * reads (greenhouse decisions/0190) — no second credential. Exact topics, not a URI template: the hub
+     * authorizes and delivers them without template-matching ambiguity.
+     *
+     * @param list<string> $extraTopics
+     */
+    public function subscriberJwt(array $extraTopics = []): string
+    {
+        return $this->service()->generateSubscriberJwt(array_merge([$this->topic], $extraTopics));
     }
 }

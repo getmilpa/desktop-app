@@ -365,10 +365,50 @@ final class ShellControllerTest extends TestCase
 
         // The hub reads the subscriber JWT from this cookie.
         self::assertStringContainsString('mercureAuthorization=', $res->getHeaderLine('Set-Cookie'));
-        // The client subscribes to the hub's PUBLIC url on the shell topic — no poll.
+        // The client subscribes to the hub's PUBLIC url on the shell topic AND this session's EXACT stream
+        // topic on ONE connection — no poll, no template ambiguity (greenhouse decisions/0190).
         self::assertStringContainsString('new EventSource(', $body);
         self::assertStringContainsString('https://public.example/.well-known/mercure?topic=desktop%2Fshell', $body);
+        self::assertStringContainsString('&topic=' . rawurlencode('milpa/sessions/'), $body);
+        // The hub cookie is scoped to the session too, and the session id is pinned in its own cookie.
+        self::assertStringContainsString('milpa_agent_sid=', $res->getHeaderLine('Set-Cookie'));
         // The connection feeds the component runtime rather than dumping raw text.
         self::assertStringContainsString('MilpaShell.emit(', $body);
+        // A session projection (kind) is translated to the shell's own events by MilpaShell.session.
+        self::assertStringContainsString('MilpaShell.session(env)', $body);
+    }
+
+    public function testTheComposerStartsAGovernedTurnOverTheHttpSurface(): void
+    {
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        // Send POSTs the prompt to the governed `agent` op's HTTP route with the server-minted session id
+        // and ask mode (greenhouse decisions/0190); the answer comes back, the badge streams over the hub.
+        self::assertStringContainsString("fetch('/agent'", $body);
+        self::assertStringContainsString('session: agentSession', $body);
+        self::assertStringContainsString("mode: 'ask'", $body);
+        self::assertStringContainsString("var agentSession = '", $body);
+        // The session projection maps activity thinking/ready to the working badge, message to a bubble.
+        self::assertStringContainsString("this.emit('session.state', { state: 'working' })", $body);
+        self::assertStringContainsString("this.emit('agent.message'", $body);
+    }
+
+    public function testReasoningStreamsIntoACollapsibleThinkingBlock(): void
+    {
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        // Reasoning deltas map to agent.reasoning and stream into a live thinking block (greenhouse
+        // decisions/0190); the block collapses to a toggle when the turn produces its message or ends.
+        self::assertStringContainsString("this.emit('agent.reasoning'", $body);
+        self::assertStringContainsString("env.reasoning.delta", $body);
+        self::assertStringContainsString("window.MilpaShell.on('agent.reasoning'", $body);
+        self::assertStringContainsString('function appendReasoning(', $body);
+        self::assertStringContainsString('function endReasoning(', $body);
+        // The agent's message and the turn ending both close the block.
+        self::assertStringContainsString("on('agent.message', function (d) { endReasoning();", $body);
+        self::assertStringContainsString("thought for '", $body);
+        // The block is its own visual voice — a collapsible aside, not the agent's speech.
+        self::assertStringContainsString('milpa-think__toggle', $body);
+        self::assertStringContainsString('milpa-think__body', $body);
     }
 }
