@@ -19,14 +19,32 @@ namespace Milpa\DesktopApp\Live;
  *
  * One option per command: the house's own (`/goal`, `/mode`, `/help`) and every user-invocable skill
  * (`/<skill-name>`), each with its description and usage. The popup is CSS state (`data-open`) driven by one
- * delegated handler in the shell — no per-instance x-data (Alpine double-inits dynamic x-data). The list is
- * the same one {@see \Milpa\DesktopApp\Data\DesktopData::commands()} serves as JSON to the parser, so what
- * completes is exactly what runs. Pure, so it is tested directly with fixtures.
+ * delegated handler in the shell — no per-instance x-data (Alpine double-inits dynamic x-data). The same list
+ * ({@see \Milpa\DesktopApp\Data\DesktopData::commands()}) has two projections here: the popup HTML and the
+ * JSON the parser reads ({@see self::json()}), so what completes is exactly what runs. Pure, so it is tested
+ * directly with fixtures.
  */
 final class CommandListView
 {
     /** The popup's element id — the shell's delegated handler and its CSS address it. */
     public const string ID = 'milpa-command-list';
+
+    /** The prefix of each option's element id (`milpa-cmd-<name>`) — what `aria-activedescendant` points at. */
+    public const string OPTION_ID_PREFIX = 'milpa-cmd-';
+
+    /**
+     * The command list as JSON for the `#milpa-commands` script the parser reads.
+     *
+     * Encoded with the HEX flags so a description or usage can never close the script element or open a tag
+     * (`<`, `>`, `&` and both quotes become JSON unicode escapes — the same strings once parsed): the JSON
+     * sits inline in the page, and a skill's description is text the house did not write.
+     *
+     * @param list<array{name: string, kind: string, description: string, usage: string, method: string}> $commands
+     */
+    public static function json(array $commands): string
+    {
+        return (string) json_encode($commands, \JSON_HEX_TAG | \JSON_HEX_AMP | \JSON_HEX_APOS | \JSON_HEX_QUOT | \JSON_UNESCAPED_SLASHES);
+    }
 
     /**
      * The completion popup as HTML — one option per command, or nothing when there are no commands.
@@ -42,6 +60,7 @@ final class CommandListView
         $options = '';
         foreach ($commands as $c) {
             $options .= '<button type="button" role="option" class="milpa-cmd" aria-selected="false"'
+                . ' id="' . self::OPTION_ID_PREFIX . $this->esc($c['name']) . '"'
                 . ' data-command="' . $this->esc($c['name']) . '" data-kind="' . $this->esc($c['kind']) . '">'
                 . '<span class="milpa-cmd__name">/' . $this->esc($c['name']) . '</span>'
                 . '<span class="milpa-cmd__desc">' . $this->esc($c['description']) . '</span>'

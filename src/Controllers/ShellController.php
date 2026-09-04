@@ -130,7 +130,7 @@ final class ShellController
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), str_replace('</', '<\/', $this->commandsJson()),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
             ],
             $this->template(),
         );
@@ -174,17 +174,20 @@ final class ShellController
      * from {@see DesktopData::commands()} — or the house's alone when no data seam is wired, so the composer
      * always knows `/goal`, `/mode` and `/help`. One list feeds both the completion popup and the parser.
      *
-     * @return list<array{name: string, kind: string, description: string, usage: string}>
+     * @return list<array{name: string, kind: string, description: string, usage: string, method: string}>
      */
     private function commands(): array
     {
         return $this->data?->commands() ?? DesktopData::houseCommands();
     }
 
-    /** The command list as JSON — the `#milpa-commands` payload the composer's parser reads. */
+    /**
+     * The command list as JSON — the `#milpa-commands` payload the composer's parser reads. HEX-encoded by
+     * {@see CommandListView::json()}, so a skill's description can never close the script element.
+     */
     private function commandsJson(): string
     {
-        return (string) json_encode($this->commands(), \JSON_UNESCAPED_SLASHES);
+        return CommandListView::json($this->commands());
     }
 
     /**
@@ -368,7 +371,8 @@ HTML;
         // and the panels alike (greenhouse decisions/0191, Rod). The live feed and the turn update these; every
         // place that reads them updates at once. A value shown that is not a signal is a value that goes stale.
         // The mode is a signal PAIR (greenhouse decisions/0202): the VALUE every turn sends to the agent
-        // (ask | acknowledge | auto) and its label for the chip. Seeded from the saved setting, both persist.
+        // (ask | acknowledge | auto) and its label for the chip. Seeded from the SAVED setting on every load —
+        // the server's copy is the one truth; nothing about the mode is remembered in the browser.
         return (string) json_encode([
             'composer.mode' => $modeKey,
             'composer.mode.label' => $modeLabels[$modeKey],
@@ -1275,13 +1279,16 @@ HTML;
     }
     // ── Composer commands (greenhouse decisions/0202) ────────────────────────────────────────────────────
     // The house SERVES the command list (#milpa-commands): its own commands (goal / mode / help) and every
-    // user-invocable skill. Each command is an OPERATION the agent could fire too — the Desktop invents no
-    // action; it calls the runtime's http projection of the op: `agent:goal` → /agent/goal, `agent:mode` →
-    // /agent/mode, `skill:load` → /skill/load (the projector derives the path from the name: `:` → `/`,
-    // `_` → `-`). The doctrine's boundary holds here: a goal or a mode never pre-consents a signature
-    // (requiresConfirmation, the Executable+Privileged ceiling) nor third-party egress — the goal only
-    // bounds what the automatic mode may already pre-consent.
+    // user-invocable skill. Each command is a governed OPERATION of the house — the Desktop invents no
+    // action; it calls the runtime's http projection of the op with the METHOD the list declares:
+    // `agent:goal` → POST /agent/goal, `skill:invoke` → GET /skill/invoke (a read projects as GET; the
+    // projector derives the path from the name: `:` → `/`, `_` → `-`). `/mode` writes the chip and the
+    // saved setting; the next turn carries the mode through POST /agent — one writer, no second call. The
+    // doctrine's boundary holds here: a goal or a mode never pre-consents a signature (requiresConfirmation,
+    // the Executable+Privileged ceiling) nor third-party egress — the goal only bounds what the automatic
+    // mode may already pre-consent.
     var MODES = ['ask', 'acknowledge', 'auto'];
+    var HOUSE_COMMANDS = ['goal', 'mode', 'help'];
     var COMMANDS = (function () {
       var el = document.getElementById('milpa-commands');
       try { var v = el ? JSON.parse(el.textContent || '[]') : []; return Array.isArray(v) ? v : []; } catch (e) { return []; }
@@ -1290,11 +1297,17 @@ HTML;
       for (var i = 0; i < COMMANDS.length; i++) { if (COMMANDS[i].name === name) { return COMMANDS[i]; } }
       return null;
     }
-    // `/name [args]` — the name is [a-z0-9-]+, the rest (trimmed) is its argument text. Not a command → null.
+    // `/name [args]` — the name is [a-z0-9-]+, the rest (trimmed) is its argument text. Only a REAL command
+    // is intercepted: a house command, or a name the served list carries. Anything else is the model's —
+    // "/tmp/app.log has errors" is a prompt, not a command — so it returns null and the turn runs unchanged.
     function parseCommand(text) {
       var m = /^\/([a-z0-9-]+)(?:\s+([\s\S]*))?$/.exec(text);
-      return m ? { name: m[1], args: (m[2] || '').trim() } : null;
+      if (!m || (HOUSE_COMMANDS.indexOf(m[1]) === -1 && !commandNamed(m[1]))) { return null; }
+      return { name: m[1], args: (m[2] || '').trim() };
     }
+    // Exactly `/name` — no args — that names no command: almost surely a mistyped command, so it is told
+    // rather than sent to the model. With args it is a prompt.
+    function isBareUnknownCommand(text) { return /^\/[a-z0-9-]+$/.test(text) && !parseCommand(text); }
     function notice(text) { appendMessage('system', { text: text }); }
     // The mode every turn sends is the `composer.mode` signal — the chip's VALUE, never a hardcoded 'ask'.
     // Unset or unknown → ask: the mode that asks is the default.
@@ -1302,25 +1315,36 @@ HTML;
       var m = (window.MilpaLive && MilpaLive.signal) ? MilpaLive.signal('composer.mode') : null;
       return MODES.indexOf(m) !== -1 ? m : 'ask';
     }
-    // Call an operation over its http projection. The op's own status is the answer: 2xx carries its result;
-    // 404/405 mean the app does not expose it (config/http.php); 428 is the house's confirm gate — reported,
-    // never confirmed from a command. A non-mutating op is projected as GET, so a 405 on POST is retried once
-    // as GET with the same fields. Never a silent failure: every outcome comes back as a status + body.
-    function callOp(path, body) {
-      function read(r) { return r.text().then(function (t) { var d = null; try { d = JSON.parse(t); } catch (e) {} return { status: r.status, ok: r.ok, data: d }; }); }
-      return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(read).then(function (res) {
-        if (res.status !== 405) { return res; }
+    // Call an operation over its http projection with the method the projection answers to: a mutating op
+    // POSTs a JSON body, a read GETs its fields as the query string. The op's OWN answer decides: the
+    // projector answers 2xx (201 for a mutation) even when the op refused, so `ok` is the transport's ok AND
+    // the body's `ok` not being false. 404/405 mean the app does not expose it (config/http.php); 428 is the
+    // house's confirm gate — reported, never confirmed from a command. Never a silent failure.
+    function callOp(method, path, body) {
+      function read(r) {
+        return r.text().then(function (t) {
+          var d = null; try { d = JSON.parse(t); } catch (e) {}
+          d = (d && typeof d === 'object') ? d : {};
+          return { status: r.status, ok: r.ok && d.ok !== false, data: d };
+        });
+      }
+      var req;
+      if (method === 'GET') {
         var qs = Object.keys(body).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(String(body[k])); }).join('&');
-        return fetch(path + (qs ? '?' + qs : ''), { method: 'GET' }).then(read);
-      }).catch(function (err) { return { status: 0, ok: false, data: { error: String(err) } }; });
+        req = fetch(path + (qs ? '?' + qs : ''), { method: 'GET' });
+      } else {
+        req = fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+      return req.then(read).catch(function (err) { return { status: 0, ok: false, data: { error: String(err) } }; });
     }
-    // A failed call as one legible line: the op, the status, and what to do about it.
+    // A failed call as one legible line: the op, what happened, and what to do about it.
     function opFailure(op, res) {
       var d = res.data || {}, err = d.error || (d.errors ? JSON.stringify(d.errors) : '');
+      if (res.status >= 200 && res.status < 300) { return op + ' refused — ' + (err || 'no reason given'); }
       var hint = (res.status === 404 || res.status === 405) ? ('the app does not expose ' + op + ' over HTTP — expose the operation in config/http.php')
         : res.status === 428 ? (op + ' asks for confirmation — the house\'s gate stands; a command does not confirm it')
         : res.status === 0 ? 'the operation could not be reached'
-        : 'the operation refused';
+        : 'the operation failed';
       return op + ' → HTTP ' + res.status + ' — ' + hint + (err ? ' (' + err + ')' : '');
     }
     function runCommand(cmd) {
@@ -1329,48 +1353,57 @@ HTML;
         return;
       }
       if (cmd.name === 'goal') {
-        // agent:goal — set (`goal`), clear (`clear`), or show (neither) the session's standing goal.
+        // agent:goal — set (`goal`), clear (`clear`), or show (neither) the session's standing goal. The
+        // notice reads the RESPONSE (`goal`, `changed`), never the request: what the session holds now.
         var body = { session: agentSession };
         if (cmd.args === 'clear') { body.clear = true; } else if (cmd.args !== '') { body.goal = cmd.args; }
-        callOp('/agent/goal', body).then(function (res) {
+        callOp('POST', '/agent/goal', body).then(function (res) {
           if (!res.ok) { notice(opFailure('agent:goal', res)); return; }
-          var d = res.data || {}, goal = typeof d.goal === 'string' ? d.goal : (body.goal || '');
-          notice(body.clear ? 'goal cleared' : (goal !== '' ? ((body.goal ? 'goal set: ' : 'goal: ') + goal) : 'no goal set — /goal <text> sets one'));
+          var d = res.data, goal = typeof d.goal === 'string' ? d.goal : '';
+          if (goal === '') { notice(d.changed === true ? 'goal cleared' : 'no standing goal — /goal <text> sets one'); return; }
+          notice((d.changed === false ? 'goal unchanged: ' : 'goal set: ') + goal);
         });
         return;
       }
       if (cmd.name === 'mode') {
-        if (MODES.indexOf(cmd.args) === -1) { notice('usage: /mode ask|acknowledge|auto'); return; }
-        // The chip and the setting follow at once (the next turn sends it); agent:mode changes the REAL mode
-        // of the running session — not just the chip.
-        applyMode(cmd.args);
-        callOp('/agent/mode', { session: agentSession, mode: cmd.args }).then(function (res) {
-          if (!res.ok) { notice(opFailure('agent:mode', res)); return; }
-          notice('mode: ' + cmd.args + ' — the session\'s autonomy mode' + (cmd.args === 'auto' ? ' (a signature or third-party egress still asks)' : ''));
-        });
+        var key = cmd.args.toLowerCase();
+        if (MODES.indexOf(key) === -1) { notice('usage: /mode ask|acknowledge|auto'); return; }
+        // The chip and the saved setting change now; the mode reaches the session with the next turn, which
+        // sends it (POST /agent carries `mode`). One writer — no separate agent:mode call.
+        applyMode(key);
+        notice('mode ' + key + ' — applies from the next turn' + (key === 'auto' ? ' (a signature or third-party egress still asks)' : ''));
         return;
       }
       var skill = commandNamed(cmd.name);
       if (skill && skill.kind === 'skill') {
-        // skill:load by the human: the skill's body enters the turn as <skill_content>, the args after it.
-        callOp('/skill/load', { name: skill.name, by: 'human' }).then(function (res) {
-          var d = res.data || {};
-          if (!res.ok || d.ok === false || typeof d.body !== 'string') { notice(opFailure('skill:load', res)); return; }
-          runTurn('<skill_content name="' + skill.name + '">\n' + d.body + '\n</skill_content>\n\n' + cmd.args);
+        // skill:invoke — the human's path to a user-invocable skill, a read projected as GET. Its `body` is
+        // already the wrapped <skill_content> form: it enters the turn AS-IS, the args after it.
+        callOp('GET', '/skill/invoke', { name: skill.name }).then(function (res) {
+          var d = res.data;
+          if (!res.ok || typeof d.body !== 'string') { notice(opFailure('skill:invoke', res)); return; }
+          runTurn(d.body + (cmd.args !== '' ? '\n\n' + cmd.args : ''));
         });
-        return;
       }
-      notice('unknown command /' + cmd.name + ' — commands: ' + COMMANDS.map(function (c) { return '/' + c.name; }).join(', '));
     }
     // The completion popup (#milpa-command-list, a pure CommandListView): opens while the field holds only a
     // command name being typed (`/go…`), lists the commands that start with it, and fills the name on click or
-    // Enter. CSS state on `data-open` + one delegated handler — no per-instance x-data.
+    // Enter. CSS state on `data-open` + one delegated handler — no per-instance x-data. The field announces
+    // the popup it controls and the option it highlights (aria-controls / aria-activedescendant).
     var cmdList = document.getElementById('milpa-command-list');
+    if (cmdList && composerInput) { composerInput.setAttribute('aria-controls', 'milpa-command-list'); }
     function cmdOptions() { return cmdList ? Array.prototype.slice.call(cmdList.querySelectorAll('.milpa-cmd')) : []; }
     function cmdVisible() { return cmdOptions().filter(function (o) { return !o.hidden; }); }
-    function cmdSelect(opt) { cmdOptions().forEach(function (o) { o.setAttribute('aria-selected', o === opt ? 'true' : 'false'); }); }
+    function cmdSelect(opt) {
+      cmdOptions().forEach(function (o) { o.setAttribute('aria-selected', o === opt ? 'true' : 'false'); });
+      if (composerInput) {
+        if (opt && opt.id) { composerInput.setAttribute('aria-activedescendant', opt.id); } else { composerInput.removeAttribute('aria-activedescendant'); }
+      }
+    }
     function cmdOpen() { return !!cmdList && cmdList.getAttribute('data-open') === '1'; }
-    function cmdHide() { if (cmdList) { cmdList.setAttribute('data-open', '0'); } }
+    function cmdHide() {
+      if (cmdList) { cmdList.setAttribute('data-open', '0'); }
+      if (composerInput) { composerInput.removeAttribute('aria-activedescendant'); }
+    }
     function refreshCommandList() {
       if (!cmdList || !composerInput) { return; }
       var m = /^\/([a-z0-9-]*)$/.exec(composerInput.value);
@@ -1410,7 +1443,7 @@ HTML;
         if (shown.length) { cmdSelect(shown[(idx + (e.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length]); }
         return true;
       }
-      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+      if ((e.key === 'Enter' && !e.shiftKey) || (e.key === 'Tab' && !e.shiftKey)) {
         var pick = shown[idx] || shown[0];
         var name = pick ? (pick.getAttribute('data-command') || '') : '';
         if (e.key === 'Enter' && composerInput && composerInput.value === '/' + name) { cmdHide(); return false; }
@@ -1432,9 +1465,14 @@ HTML;
       cmdHide();
       composerInput.focus();
       // A slash command is the house's, not the model's (greenhouse decisions/0202): parsed here and run as
-      // the operation it names; only a skill's body reaches the turn.
+      // the operation it names; only a skill's body reaches the turn. A bare `/name` that names nothing is
+      // told; anything else that is not a real command is a prompt and reaches the model unchanged.
       var cmd = parseCommand(text);
       if (cmd) { runCommand(cmd); return; }
+      if (isBareUnknownCommand(text)) {
+        notice('unknown command ' + text + ' — commands: ' + COMMANDS.map(function (c) { return '/' + c.name; }).join(', '));
+        return;
+      }
       runTurn(text);
     }
     // While the agent works, the send button becomes Stop; the topbar state follows. "Working" is the
@@ -1563,9 +1601,10 @@ HTML;
 
     // Composer mode chip: open a menu to switch ask / acknowledge / auto quickly. The choice is a SIGNAL PAIR
     // (greenhouse decisions/0202): `composer.mode` is the VALUE every turn sends and `composer.mode.label`
-    // its label — the chip and the topbar badge read the label, runTurn reads the value; both persist, and the
-    // choice persists server-side too (a partial settings post that merges — greenhouse decisions/0483). The
-    // menu and /mode both go through applyMode, so the two signals never disagree.
+    // its label — the chip and the topbar badge read the label, runTurn reads the value. The choice persists
+    // SERVER-SIDE only (a partial settings post that merges — greenhouse decisions/0483) and the page seeds
+    // both signals from that saved setting on load: one truth, no browser copy to disagree with it. The menu
+    // and /mode both go through applyMode, so the two signals never disagree either.
     var modeChip = document.getElementById('milpa-mode-chip');
     var modeMenu = document.getElementById('milpa-mode-menu');
     function modeLabelFor(key) {
@@ -1593,10 +1632,11 @@ HTML;
         modeChip.setAttribute('aria-expanded', String(willOpen));
       });
       modeMenu.addEventListener('click', function (e) { e.stopPropagation(); });
-      document.addEventListener('click', function () {
+      document.addEventListener('click', function (e) {
         modeMenu.hidden = true;
         modeChip.setAttribute('aria-expanded', 'false');
-        cmdHide();
+        // A click inside the composer's field is the typist placing the caret — the popup stays.
+        if (!(composerInput && e.target === composerInput)) { cmdHide(); }
       });
       modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (opt) {
         opt.addEventListener('click', function () {
@@ -1606,13 +1646,6 @@ HTML;
         });
       });
     }
-    // Once everything booted (Alpine's store included) the chip's label follows the VALUE the turn will send —
-    // a remembered label never outranks the remembered mode: the value is the truth, the label its projection.
-    window.addEventListener('load', function () {
-      var m = (window.MilpaLive && MilpaLive.signal) ? MilpaLive.signal('composer.mode') : null;
-      if (MODES.indexOf(m) !== -1) { setSig('composer.mode.label', modeLabelFor(m)); }
-    });
-
     // Register a passkey: only navigate if this app actually mounts the passkey door; otherwise say so
     // in place instead of replacing the whole app with a 404 (the door is the app's to configure).
     var enroll = document.getElementById('milpa-enroll-link');
@@ -1725,9 +1758,9 @@ HTML;
      and remote runtimes register their Alpine factories BEFORE Alpine boots. Served from the package. -->
 <script id="milpa-live-boot" type="application/json"><!--LIVEBOOT--></script>
 <script id="milpa-live-signals" type="application/json"><!--LIVESIGNALS--></script>
-<!-- The mode (its label AND the value the turn sends) is remembered across reloads; the session summary is
-     DERIVED from the state and turn signals. -->
-<script id="milpa-live-persist" type="application/json">["composer.mode.label","composer.mode"]</script>
+<!-- Nothing is remembered in the browser: the mode is seeded from the SAVED setting on every load (one truth,
+     server-side — greenhouse decisions/0202); the session summary is DERIVED from the state and turn signals. -->
+<script id="milpa-live-persist" type="application/json">[]</script>
 <script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"},"session.counters":{"template":"{session.turns} turns · {session.tool_calls} tools"},"context.usage":{"template":"{context.used}/{context.window}"},"session.status":{"template":"{session.turns} turns · {session.steps} steps · {session.tokens} tokens · {session.tool_calls} tool calls"}}</script>
 <script src="/desktop/assets/milpa-live.js"></script>
 <script src="/desktop/assets/milpa-live-remote.js"></script>
