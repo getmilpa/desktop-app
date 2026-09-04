@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.46.0](https://github.com/getmilpa/desktop-app/compare/v0.45.0...v0.46.0) (2026-09-04)
+
+
+### Features
+
+* composer commands — /goal, /mode, /help and user-invocable skills; the mode chip reaches the session ([#83](https://github.com/getmilpa/desktop-app/issues/83)) ([dd849a1](https://github.com/getmilpa/desktop-app/commit/dd849a101657e6369e6fd69a458ec3aaac15cbb7))
+
 ## [0.45.0](https://github.com/getmilpa/desktop-app/compare/v0.44.0...v0.45.0) (2026-09-04)
 
 
