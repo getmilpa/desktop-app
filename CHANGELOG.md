@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.42.0](https://github.com/getmilpa/desktop-app/compare/v0.41.0...v0.42.0) (2026-09-04)
+
+
+### Features
+
+* desktop polish — theme persists, inbox goes live, export shows the token budget, interrupted runs are flagged ([#75](https://github.com/getmilpa/desktop-app/issues/75)) ([773aa38](https://github.com/getmilpa/desktop-app/commit/773aa38da429f4ac28f09cc65232220ba3169856))
+
 ## [0.41.0](https://github.com/getmilpa/desktop-app/compare/v0.40.0...v0.41.0) (2026-09-04)
 
 
