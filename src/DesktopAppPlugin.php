@@ -281,9 +281,9 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
     /**
      * The backing services this plugin needs the host to run (greenhouse decisions/0201): the Mercure hub the
      * shell and the agent sessions stream through. Declared, not started — an admin panel lists it, probes its
-     * port and projects a compose fragment; running it is the operator's call. The declaration reads the same
-     * `desktop.mercure.*` keys the wiring does, so the hub it describes is the hub the app publishes to; the
-     * keys travel as secret config references, never as values.
+     * port and projects a compose fragment; running it is the operator's call. The declaration reads the
+     * wiring's `desktop.mercure.*` keys (plus the optional, declaration-only `cors_origin`), so the hub it
+     * describes is the hub the app publishes to; the keys travel as secret config references, never as values.
      *
      * @return list<ServiceDeclaration>
      */
