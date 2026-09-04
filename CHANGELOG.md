@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.31.0](https://github.com/getmilpa/desktop-app/compare/v0.30.0...v0.31.0) (2026-09-04)
+
+
+### Features
+
+* run agent turns over HTTP with a live, collapsible thinking block ([#48](https://github.com/getmilpa/desktop-app/issues/48)) ([0075eaa](https://github.com/getmilpa/desktop-app/commit/0075eaaf6a044e67dcd3a6ac9414337bc9130b03))
+
 ## [0.30.0](https://github.com/getmilpa/desktop-app/compare/v0.29.0...v0.30.0) (2026-09-03)
 
 
