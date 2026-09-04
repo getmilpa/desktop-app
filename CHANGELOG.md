@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.37.1](https://github.com/getmilpa/desktop-app/compare/v0.37.0...v0.37.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* the token counter shows a labeled estimate, not a frozen zero ([#62](https://github.com/getmilpa/desktop-app/issues/62)) ([faa54e7](https://github.com/getmilpa/desktop-app/commit/faa54e7aa0bd46cf828660565d73287a3b5d690e))
+
 ## [0.37.0](https://github.com/getmilpa/desktop-app/compare/v0.36.0...v0.37.0) (2026-09-04)
 
 
