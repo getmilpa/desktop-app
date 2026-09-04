@@ -38,6 +38,7 @@ final class Sidebar
         ['key' => 'sessions', 'label' => 'Sessions', 'icon' => '▤'],
         ['key' => 'decisions', 'label' => 'Decisions', 'icon' => '◈'],
         ['key' => 'capabilities', 'label' => 'Capabilities', 'icon' => '▩'],
+        ['key' => 'skills', 'label' => 'Skills', 'icon' => '✦'],
         ['key' => 'settings', 'label' => 'Settings', 'icon' => '⚙'],
     ];
 
