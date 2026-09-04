@@ -54,6 +54,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Context $context = null,
         private readonly ?\Milpa\DesktopApp\Live\Gate $gate = null,
         private readonly ?\Milpa\DesktopApp\Live\Thinking $thinking = null,
+        private readonly ?\Milpa\DesktopApp\Live\AgentMessage $agentMessage = null,
     ) {
     }
 
@@ -111,11 +112,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--THINKING-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->thinkingHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -336,6 +337,13 @@ HTML;
         return ($this->thinking ?? new \Milpa\DesktopApp\Live\Thinking('desktop-thinking-fallback', $this->events))->render();
     }
 
+    /** The agent-message component's prototype (greenhouse decisions/0191): the conversation clones it per
+     *  answer, fills the body, and its foot tools (copy, regenerate) act through a delegated handler. */
+    private function agentMessageHtml(): string
+    {
+        return ($this->agentMessage ?? new \Milpa\DesktopApp\Live\AgentMessage('desktop-agent-message-fallback', $this->events))->render();
+    }
+
     /**
      * The client component runtime, always served (greenhouse decisions/0476, 0478).
      *
@@ -466,6 +474,13 @@ HTML;
   .msg--user { display: flex; justify-content: flex-end; }
   .msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
   .msg--agent > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
+  /* Agent message tools: a quiet row of icon buttons at the foot of the answer — copy, regenerate. They stay
+     dim until the message is hovered, then come forward; a copied tool flashes the accent. */
+  .msg__tools { display: flex; gap: var(--space-1); margin-top: var(--space-2); opacity: 0; transition: opacity var(--dur-fast, 120ms) ease-out; }
+  .msg--agent:hover .msg__tools, .msg__tools:focus-within { opacity: 1; }
+  .msg__tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: none; border-radius: var(--radius-sm); background: none; color: var(--text-muted); cursor: pointer; transition: color var(--dur-fast, 120ms) ease-out, background var(--dur-fast, 120ms) ease-out; }
+  .msg__tool-btn:hover { color: var(--text); background: var(--surface); }
+  .msg__tool-btn.is-done { color: var(--accent-text); }
   /* Thinking: the agent reasoning aloud — dimmed and italic, clearly not final speech. */
   .msg--thinking { color: var(--text-muted); font-style: italic; }
   .msg--thinking > p { margin: var(--space-1) 0 0; font-size: var(--text-xs); line-height: var(--leading-relaxed); white-space: pre-wrap; }
@@ -550,6 +565,10 @@ HTML;
            per turn — Alpine hydrates each clone — and feeds it the reasoning by `thinking:delta`/`thinking:done`
            events. A plugin extends every thinking block by hooking the component's render events, once, here. -->
       <template id="milpa-thinking-proto"><!--THINKING--></template>
+
+      <!-- The agent-message component's prototype (greenhouse decisions/0191): cloned per answer, filled into
+           its body, its foot tools (copy, regenerate) acting through the conversation's delegated handler. -->
+      <template id="milpa-agent-msg-proto"><!--AGENTMSG--></template>
 
       <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);align-items:start">
@@ -705,6 +724,20 @@ HTML;
     function appendMessage(kind, opts) {
       if (!chat) { return; }
       opts = opts || {};
+      // The agent's message is the `desktop-agent-message` component (greenhouse decisions/0191): clone its
+      // prototype, fill the answer, and its foot tools (copy, regenerate) ride the delegated handler below.
+      if (kind === 'agent') {
+        var aproto = document.getElementById('milpa-agent-msg-proto');
+        if (aproto && 'content' in aproto) {
+          var afrag = aproto.content.cloneNode(true);
+          var aroot = afrag.querySelector('.msg--agent');
+          var abody = aroot && aroot.querySelector('[data-agent-body]');
+          if (abody) { abody.textContent = opts.text || ''; }
+          chat.appendChild(afrag);
+          if (aroot) { aroot.scrollIntoView({ block: 'end' }); }
+          return aroot;
+        }
+      }
       var el = document.createElement('div');
       el.className = 'msg msg--' + kind;
       function meta(t) { var s = document.createElement('span'); s.className = 'msg__meta'; s.textContent = t; return s; }
@@ -765,13 +798,32 @@ HTML;
       reasoningEl.setAttribute('data-open', '0');
       reasoningEl = null;
     }
-    // One delegated toggle for every thinking block, now and future (greenhouse decisions/0191).
+    // One set of delegated handlers for every message component, now and future (greenhouse decisions/0191):
+    // the thinking block's toggle, and the agent message's foot tools (copy the answer, regenerate it).
     if (chat) {
       chat.addEventListener('click', function (e) {
-        var t = e.target.closest ? e.target.closest('[data-thinking-toggle]') : null;
-        if (!t) { return; }
-        var block = t.closest('.milpa-think');
-        if (block) { block.setAttribute('data-open', block.getAttribute('data-open') === '1' ? '0' : '1'); }
+        if (!e.target.closest) { return; }
+        var toggle = e.target.closest('[data-thinking-toggle]');
+        if (toggle) {
+          var block = toggle.closest('.milpa-think');
+          if (block) { block.setAttribute('data-open', block.getAttribute('data-open') === '1' ? '0' : '1'); }
+          return;
+        }
+        var copyBtn = e.target.closest('[data-agent-copy]');
+        if (copyBtn) {
+          var msg = copyBtn.closest('.msg--agent');
+          var bodyEl = msg && msg.querySelector('[data-agent-body]');
+          var textToCopy = bodyEl ? bodyEl.textContent : '';
+          if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(textToCopy).catch(function () {}); }
+          copyBtn.classList.add('is-done');
+          setTimeout(function () { copyBtn.classList.remove('is-done'); }, 1200);
+          return;
+        }
+        var regenBtn = e.target.closest('[data-agent-regenerate]');
+        if (regenBtn) {
+          if (lastPrompt) { runTurn(lastPrompt); }
+          return;
+        }
       });
     }
 
@@ -780,6 +832,22 @@ HTML;
     // session.* events reach this shell live.
     var agentSession = '<!--AGENTSID-->';
 
+    // The last prompt sent — so the agent message's Regenerate tool can re-run the same turn.
+    var lastPrompt = '';
+    // Start a governed turn over the HTTP surface (greenhouse decisions/0190). The working/idle badge and the
+    // reasoning stream arrive live over the hub on this session's topic; the final answer comes back here.
+    // `mode: ask` keeps mutating tools behind their gate.
+    function runTurn(text) {
+      lastPrompt = text;
+      fetch('/agent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text, session: agentSession, mode: 'ask' })
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
+        else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
+        else if (res && res.error) { appendMessage('system', { text: res.error }); }
+      }).catch(function () { appendMessage('system', { text: 'The turn could not be reached.' }); });
+    }
     function send() {
       if (!composerInput) { return; }
       var text = composerInput.value.trim();
@@ -790,17 +858,7 @@ HTML;
       composerInput.dispatchEvent(new Event('input', { bubbles: true }));
       refreshSend();
       composerInput.focus();
-      // Start a governed turn over the HTTP surface (greenhouse decisions/0190). The working/idle badge
-      // and (once projected) the reasoning stream arrive live over the hub on this session's topic; the
-      // final answer comes back here. `mode: ask` keeps mutating tools behind their gate.
-      fetch('/agent', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text, session: agentSession, mode: 'ask' })
-      }).then(function (r) { return r.json(); }).then(function (res) {
-        if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
-        else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
-        else if (res && res.error) { appendMessage('system', { text: res.error }); }
-      }).catch(function () { appendMessage('system', { text: 'The turn could not be reached.' }); });
+      runTurn(text);
     }
     // While the agent works, the send button becomes Stop; the topbar state follows. "Working" is the
     // backend's to declare (it arrives as a `session.state` event) — the Desktop reflects and signals, it
