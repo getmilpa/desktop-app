@@ -56,6 +56,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Thinking $thinking = null,
         private readonly ?\Milpa\DesktopApp\Live\AgentMessage $agentMessage = null,
         private readonly ?\Milpa\DesktopApp\Live\MessagePrototypes $messages = null,
+        private readonly ?\Milpa\DesktopApp\Live\Conversation $conversation = null,
     ) {
     }
 
@@ -119,11 +120,11 @@ final class ShellController
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilitiesRows(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -237,6 +238,7 @@ final class ShellController
         <div id="milpa-mode-menu" hidden role="menu" style="position:absolute;bottom:calc(100% + 8px);left:0;z-index:60;min-width:15rem;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:4px">{$modeMenu}</div>
       </span>
       <span style="margin-inline-start:auto;display:flex;align-items:center;gap:var(--space-2);font-family:var(--font-mono);font-size:var(--text-2xs)">
+        <span id="milpa-charcount" aria-live="polite" style="color:var(--text-muted);min-width:0"></span>
         <button type="button" class="composer-chip" data-open-panel="session" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ {$c['turns']} turns · {$c['tool_calls']} tools</button>
         <button type="button" class="composer-chip" data-open-panel="context" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ {$tokens}/{$window}</button>
         <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" id="milpa-send" aria-label="continue session" disabled style="border-radius:var(--radius-full)">↑</button>
@@ -335,6 +337,13 @@ HTML;
     private function gateHtml(): string
     {
         return ($this->gate ?? new \Milpa\DesktopApp\Live\Gate('desktop-gate-fallback', $this->events))->render();
+    }
+
+    /** The conversation's inner content (greenhouse decisions/0191): the empty state + envelope. The chat is a
+     *  component that composes the message components; this fills its container. */
+    private function conversationHtml(): string
+    {
+        return ($this->conversation ?? new \Milpa\DesktopApp\Live\Conversation('desktop-conversation-fallback', $this->events))->render();
     }
 
     /** The thinking component's prototype (greenhouse decisions/0191): the conversation clones it per turn and
@@ -477,6 +486,8 @@ HTML;
   /* The message stream: one visual language, a distinct voice per kind. New messages arrive at the bottom
      and the composer is docked below (sticky), so the thread reads top→down and the box never moves. */
   #milpa-chat { display: flex; flex-direction: column; gap: var(--space-5); max-width: 88ch; }
+  /* The conversation's empty state hides itself the moment a message component is cloned in. */
+  #milpa-chat:has(.msg) .milpa-empty-convo { display: none; }
   .msg__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); display: block; }
   .msg--user { display: flex; justify-content: flex-end; }
   .msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
@@ -535,13 +546,12 @@ HTML;
 
       <div style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
 
-        <section class="tabpane" data-pane="chat" id="milpa-chat" :hidden="$store.milpa['desktop.tab'] !== 'chat'">
-          <div class="msg msg--system">session opened · nothing runs on open</div>
-          <div class="msg msg--user"><div><span class="msg__meta">you · now</span><p style="margin:var(--space-2) 0 0;font-size:var(--text-sm)">Enable the devtools capability on this app.</p></div></div>
-          <div class="msg msg--thinking"><span class="msg__meta">agent · thinking</span><p>Reading the app's capabilities and the parked gate before acting…</p></div>
-          <div class="msg msg--tool"><div><span class="msg__tool-name">capabilities.list</span><span>→ 6 capabilities</span></div></div>
-          <div class="msg msg--agent"><span class="msg__meta">agent · local</span><p>When an agent needs your decision, it parks a gate here — a durable question, not a modal. Approve it with your passkey, in this origin.</p></div>
-          <div class="msg msg--task"><div><span class="msg__mark">+</span><span class="msg__title">Enable devtools capability</span><span class="mui-badge" style="margin-inline-start:auto">todo</span></div></div>
+        <!-- The conversation is a Milpa Component that COMPOSES the message components (greenhouse
+             decisions/0191): user/agent/thinking/tool/task/system messages are cloned in from their own
+             components' prototypes, and the consent gate lives here too. Its empty state hides once a
+             message lands. -->
+        <section class="tabpane milpa-chat" data-pane="chat" id="milpa-chat" data-milpa-component="desktop-conversation" data-milpa-component-id="conversation" :hidden="$store.milpa['desktop.tab'] !== 'chat'">
+          <!--CONVERSATION-->
 
           <!-- The consent gate is the `desktop-gate` component (greenhouse decisions/0189): hidden until an
                agent parks a question; its visibility is the shared `desktop.gate.open` signal. -->
@@ -727,10 +737,21 @@ HTML;
     function refreshSend() {
       if (sendBtn) { sendBtn.disabled = !composerInput || composerInput.value.trim() === ''; }
     }
+    // The draft's token count lives in the composer footer now (Rod's minimalist UX): live, quiet, empty at
+    // zero. A client-side estimate (~4 chars/token — there is no tokenizer in the browser); the real usage is
+    // the context figure. The unit is "tokens", not "chars", because that is what the budget is spent in.
+    var charCount = document.getElementById('milpa-charcount');
+    function refreshCount() {
+      if (!charCount) { return; }
+      var n = composerInput ? composerInput.value.length : 0;
+      var toks = Math.ceil(n / 4);
+      charCount.textContent = n > 0 ? ('~' + toks + ' tokens') : '';
+    }
     if (composerInput) {
       composerInput.addEventListener('input', function () {
         composerPanels.forEach(function (p) { p.hidden = true; });
         refreshSend();
+        refreshCount();
       });
     }
     // Every message is a Milpa Component (greenhouse decisions/0191): the conversation CLONES the prototype for

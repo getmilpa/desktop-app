@@ -388,6 +388,10 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('session: agentSession', $body);
         self::assertStringContainsString("mode: 'ask'", $body);
         self::assertStringContainsString("var agentSession = '", $body);
+        // Minimalist composer (greenhouse decisions/0191, Rod): the char count lives in the footer, live,
+        // instead of a separate status line under the box.
+        self::assertStringContainsString('id="milpa-charcount"', $body);
+        self::assertStringContainsString("charCount.textContent = n > 0 ? ('~' + toks + ' tokens') : ''", $body);
         // The session projection maps activity thinking/ready to the working badge, message to a bubble.
         self::assertStringContainsString("this.emit('session.state', { state: 'working' })", $body);
         self::assertStringContainsString("this.emit('agent.message'", $body);
