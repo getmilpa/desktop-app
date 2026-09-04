@@ -300,6 +300,9 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-open-panel="context"', $body);
         self::assertStringContainsString('8.19K', $body, 'real token count');
         self::assertStringContainsString('mui-progress__bar', $body);
+        // One border, one authority: the field inside the composer box renders seamless (no border of its
+        // own) so the box is the only frame — a double border reads as double authority (Rod's doctrine).
+        self::assertMatchesRegularExpression('/\.milpa-composer-box \.mui-textarea[^{]*\{[^}]*border:\s*0/', $body);
 
         unlink($dir . '/s.json');
         rmdir($dir);

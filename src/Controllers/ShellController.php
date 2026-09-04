@@ -491,6 +491,15 @@ HTML;
   /* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
      the rounded container with its padding as breathing room, instead of hugging the typed text. */
   .milpa-composer-box:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-subtle); }
+  /* One border, one authority: the milpa/live field renders its own border by default, but here it lives
+     INSIDE the composer box — a second border reads as a second authority (Rod's doctrine). The box owns
+     the frame and the focus ring; the field is seamless — no border, no background, no ring of its own. */
+  .milpa-composer-box .mui-field { margin: 0; }
+  .milpa-composer-box .mui-textarea,
+  .milpa-composer-box .mui-textarea:focus,
+  .milpa-composer-box .mui-textarea:focus-visible {
+    border: 0; outline: 0; background: transparent; box-shadow: none; padding: 0;
+  }
   /* No visible scrollbars anywhere — scrolling still works. */
   * { scrollbar-width: none; -ms-overflow-style: none; }
   *::-webkit-scrollbar { width: 0; height: 0; display: none; }
