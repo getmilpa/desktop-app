@@ -30,6 +30,10 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  * (`session.state.label`, `session.summary`, `composer.mode.label`) so the same truth shows here and in the
  * composer's chip. Selecting the mode elsewhere re-paints this topbar with no wiring.
  *
+ * Since the Desktop stands behind the same door as the admin (greenhouse decisions/0209) the topbar also
+ * carries the door's two chips: who the gate let in (`principal`, empty when nobody) and the gate in effect
+ * (`gate`, its label; `gateKind`, its kind — a `fallback` wears the warning badge).
+ *
  * @phpstan-type TopbarSession array{id: string, goal: string}
  */
 final class TopbarComponent implements ComponentDefinitionInterface
@@ -48,13 +52,16 @@ final class TopbarComponent implements ComponentDefinitionInterface
                 'mode' => ['type' => 'string', 'default' => 'Ask before changing'],
                 'state' => ['type' => 'string', 'default' => 'idle'],
                 'hasSession' => ['type' => 'bool', 'default' => false],
+                'principal' => ['type' => 'string', 'default' => ''],
+                'gate' => ['type' => 'string', 'default' => 'loopback'],
+                'gateKind' => ['type' => 'string', 'default' => 'loopback'],
             ],
             stateSchema: ['state' => ['type' => 'string'], 'mode' => ['type' => 'string']],
             actions: [],
         );
     }
 
-    /** Mount from props: the live state and mode in state; the goal, id and session flag in meta. */
+    /** Mount from props: the live state and mode in state; the goal, id, session flag, principal and gate in meta. */
     public function mount(array $props, ComponentContext $context): StateSnapshot
     {
         return new StateSnapshot(
@@ -69,6 +76,9 @@ final class TopbarComponent implements ComponentDefinitionInterface
                 'goal' => (string) ($props['goal'] ?? ''),
                 'sessionId' => (string) ($props['sessionId'] ?? ''),
                 'hasSession' => (bool) ($props['hasSession'] ?? false),
+                'principal' => (string) ($props['principal'] ?? ''),
+                'gate' => (string) ($props['gate'] ?? 'loopback'),
+                'gateKind' => (string) ($props['gateKind'] ?? 'loopback'),
             ],
         );
     }

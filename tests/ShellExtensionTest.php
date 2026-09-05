@@ -40,7 +40,7 @@ final class ShellExtensionTest extends TestCase
         ]);
 
         $body = (string) (new RequestHandler($kernel, $psr17))
-            ->handle(new ServerRequest('GET', '/desktop'))
+            ->handle(new ServerRequest('GET', '/desktop', [], null, '1.1', ['REMOTE_ADDR' => '127.0.0.1']))
             ->getBody();
 
         self::assertStringContainsString(DemoSectionPlugin::MARKER, $body, 'the foreign plugin modified the shell UI');
@@ -58,7 +58,7 @@ final class ShellExtensionTest extends TestCase
         ]);
 
         $body = (string) (new RequestHandler($kernel, $psr17))
-            ->handle(new ServerRequest('GET', '/desktop'))
+            ->handle(new ServerRequest('GET', '/desktop', [], null, '1.1', ['REMOTE_ADDR' => '127.0.0.1']))
             ->getBody();
 
         self::assertStringNotContainsString(DemoSectionPlugin::MARKER, $body);

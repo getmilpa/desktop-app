@@ -24,6 +24,7 @@ use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Live\ComposerField;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
+use Milpa\DesktopApp\Http\LoopbackOnlyMiddleware;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\MercurePublisher;
 use Milpa\DesktopApp\Live\MercureServiceDeclaration;
@@ -61,6 +62,11 @@ use Milpa\Runtime\Stack\StackProviderInterface;
  * It is also the first real declarant of the runtime's stack contract (greenhouse decisions/0201): it
  * DECLARES the Mercure hub it needs — as data, through {@see StackProviderInterface} — so whoever operates
  * the host can list it, probe it and project a compose fragment without this plugin knowing who asks.
+ *
+ * The Desktop stands behind the same door as the admin (greenhouse decisions/0209): every shell route carries
+ * the middleware the app declared under `desktop.middleware` — judged by {@see DesktopSettings}, loopback-only
+ * by default, `[]` open on purpose, anything misdeclared falling to loopback-only — except the assets, which
+ * stay public package files: a JSON 401 to a `<link>` or `<script>` would break the page silently.
  */
 #[PluginMetadata(
     version: '0.1.0',
@@ -96,6 +102,17 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $events = $this->container->get(MilpaEventDispatcherInterface::class);
         assert($events instanceof MilpaEventDispatcherInterface);
 
+        // The door (greenhouse decisions/0209): the declared gate, judged once; the catalog in the declared
+        // locale; and the strict gate registered under its class name so the router can resolve it from the
+        // container — unless the app registered its own instance first. «Absent» is asked of the underlying
+        // PSR-11 container: the wrapper's has() also says yes to anything it could auto-wire, and an auto-wired
+        // gate would speak English whatever the app declared.
+        $settings = $this->settings();
+        $catalog = $settings->catalog();
+        if (!$this->container->getContainer()->has(LoopbackOnlyMiddleware::class)) {
+            $this->container->registerService(LoopbackOnlyMiddleware::class, new LoopbackOnlyMiddleware($catalog));
+        }
+
         $log = new ShellEventLog($this->logPath());
 
         $store = new DesktopStore($this->sessionsPath(), $this->settingsPath());
@@ -128,8 +145,9 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $this->container->registerService(\Milpa\DesktopApp\Live\Sidebar::class, $sidebar);
 
         // The topbar is the shell's second pure-Milpa-Components surface (greenhouse decisions/0189): a
-        // projection surface reading shared signals, with a signed envelope and lifecycle events.
-        $topbar = new \Milpa\DesktopApp\Live\Topbar($this->liveSecret('signing'), $data, $events);
+        // projection surface reading shared signals, with a signed envelope and lifecycle events. It carries the
+        // door's chips too (decisions/0209), so it reads the judged settings and speaks the declared locale.
+        $topbar = new \Milpa\DesktopApp\Live\Topbar($this->liveSecret('signing'), $data, $events, $settings, $catalog);
         $this->container->registerService(\Milpa\DesktopApp\Live\Topbar::class, $topbar);
 
         // The main tablist is the shell's third pure-Milpa-Components surface (greenhouse decisions/0189): the
@@ -175,7 +193,7 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $conversation = new \Milpa\DesktopApp\Live\Conversation($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Conversation::class, $conversation);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation));
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
@@ -193,20 +211,30 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         });
     }
 
-    /** The shell and its live event feed — both served over HTTP for a host to load at a real origin. */
+    /**
+     * The shell and its live event feed — both served over HTTP for a host to load at a real origin — each
+     * carrying the EFFECTIVE gate ({@see DesktopSettings::effectiveMiddleware()}, greenhouse decisions/0209):
+     * the declared stack when every entry names a PSR-15 middleware class (an empty list included), loopback-only
+     * the moment the declaration is anything else. The assets (`/desktop/assets/*`) carry none: public package
+     * files, and a JSON refusal to a `<link>` or `<script>` would break the page silently. The export is gated.
+     */
     public function routes(): array
     {
+        $middleware = $this->settings()->effectiveMiddleware();
+
         return [
             new Route(
                 path: '/desktop',
                 methods: HttpMethod::GET,
                 name: 'desktop.shell',
+                middleware: $middleware,
                 handler: new HandlerReference(ShellController::class, 'shell'),
             ),
             new Route(
                 path: '/desktop/events',
                 methods: HttpMethod::GET,
                 name: 'desktop.events',
+                middleware: $middleware,
                 handler: new HandlerReference(EventsController::class, 'events'),
             ),
             new Route(
@@ -225,18 +253,21 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
                 path: '/desktop/data.json',
                 methods: HttpMethod::GET,
                 name: 'desktop.data',
+                middleware: $middleware,
                 handler: new HandlerReference(DataController::class, 'data'),
             ),
             new Route(
                 path: '/desktop/export',
                 methods: HttpMethod::GET,
                 name: 'desktop.export',
+                middleware: $middleware,
                 handler: new HandlerReference(DataController::class, 'export'),
             ),
             new Route(
                 path: '/desktop/live',
                 methods: HttpMethod::POST,
                 name: 'desktop.live',
+                middleware: $middleware,
                 handler: new HandlerReference(LiveController::class, 'live'),
             ),
             new Route(
@@ -261,21 +292,36 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
                 path: '/desktop/settings',
                 methods: HttpMethod::POST,
                 name: 'desktop.settings.save',
+                middleware: $middleware,
                 handler: new HandlerReference(MutationController::class, 'saveSettings'),
             ),
             new Route(
                 path: '/desktop/sessions',
                 methods: HttpMethod::POST,
                 name: 'desktop.sessions.create',
+                middleware: $middleware,
                 handler: new HandlerReference(MutationController::class, 'createSession'),
             ),
             new Route(
                 path: '/desktop/work',
                 methods: HttpMethod::POST,
                 name: 'desktop.work.move',
+                middleware: $middleware,
                 handler: new HandlerReference(MutationController::class, 'moveWork'),
             ),
         ];
+    }
+
+    /**
+     * The door as the app declared it, judged (greenhouse decisions/0209): `desktop.middleware` and
+     * `desktop.locale` from the runtime's config bag, the defaults when the plugin has no bag (booted
+     * without a kernel, as in unit tests) — read on demand, so `routes()` answers before `boot()` too.
+     */
+    public function settings(): DesktopSettings
+    {
+        $config = $this->container->get(Config::class);
+
+        return DesktopSettings::fromConfig($config instanceof Config ? $config : null);
     }
 
     /**

@@ -15,6 +15,9 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Controllers;
 
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\DesktopSettings;
+use Milpa\DesktopApp\Http\RequestPrincipal;
+use Milpa\DesktopApp\I18n\Catalog;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\CommandListView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
@@ -41,6 +44,11 @@ use Psr\Http\Message\ServerRequestInterface;
  * a plugin contributes through {@see COMPOSE_EVENT} with `addPanel()`, driven live via `MilpaShell.panel()`.
  * When a Mercure hub is wired ({@see MercureConfig}) the UI updates with no poll; the passkey ceremony is
  * same-origin. UI, UX and DX, all Milpa components.
+ *
+ * The Desktop stands behind the same door as the admin (greenhouse decisions/0209): who is signed in is
+ * whatever the gate in front of the route left on the request ({@see RequestPrincipal}) — the shell reads no
+ * cookie and mints no identity — and every `fetch()` the shell makes passes through one client guard, so a
+ * gate's 401 sends the browser to sign in, a 403 is told, and «Saved» is only ever said on a 2xx.
  */
 final class ShellController
 {
@@ -63,7 +71,25 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\AgentMessage $agentMessage = null,
         private readonly ?\Milpa\DesktopApp\Live\MessagePrototypes $messages = null,
         private readonly ?\Milpa\DesktopApp\Live\Conversation $conversation = null,
+        private readonly ?DesktopSettings $settings = null,
+        private readonly ?Catalog $catalog = null,
     ) {
+    }
+
+    /** The catalog the shell speaks in — the injected one, else the declared locale's, else English (greenhouse decisions/0209). */
+    private function catalog(): Catalog
+    {
+        return $this->catalog ?? ($this->settings ?? new DesktopSettings())->catalog();
+    }
+
+    /**
+     * The catalog's messages as JSON for the client script (`#milpa-desktop-i18n`), so the guard's notices and
+     * the settings badge say the same words the server does. HEX-escaped: no `<` survives, so no message can
+     * close the script element.
+     */
+    private function i18nJson(): string
+    {
+        return (string) json_encode($this->catalog()->all(), \JSON_HEX_TAG | \JSON_HEX_AMP | \JSON_HEX_APOS | \JSON_HEX_QUOT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
     }
 
     /** The plainer message prototypes (user/tool/task/system), or a fallback set (greenhouse decisions/0191). */
@@ -118,19 +144,23 @@ final class ShellController
             $headers['Set-Cookie'] = \count($cookies) === 1 ? $cookies[0] : $cookies;
         }
 
-        return new Response(200, $headers, $this->html($composition, $liveBoot, $agentSid));
+        // Who the gate let in (greenhouse decisions/0209): read from the attribute the gate leaves on the request,
+        // never from a cookie — the Desktop invents no identity; the topbar shows the actor, or nobody.
+        return new Response(200, $headers, $this->html($composition, $liveBoot, $agentSid, RequestPrincipal::of($request)));
     }
 
-    private function html(ShellComposition $composition, string $liveBoot = '', string $agentSid = ''): string
+    private function html(ShellComposition $composition, string $liveBoot = '', string $agentSid = '', ?string $principal = null): string
     {
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--ROLES-->', '<!--SCREENS-->', '<!--LIVEROUTE-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->', '<!--COMMANDS-->',
+                '<!--I18N-->', '<!--SAVED-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml(), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
+                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml($principal), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
+                $this->i18nJson(), htmlspecialchars($this->catalog()->tr('settings.saved'), ENT_QUOTES),
             ],
             $this->template(),
         );
@@ -345,10 +375,11 @@ HTML;
     }
 
     /** The topbar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's second
-     *  pure-component surface. A fallback Topbar is built from the same data when none was injected. */
-    private function topbarHtml(): string
+     *  pure-component surface, carrying who the gate let in and the gate in effect (decisions/0209). A
+     *  fallback Topbar is built from the same data and door when none was injected. */
+    private function topbarHtml(?string $principal = null): string
     {
-        return ($this->topbar ?? new \Milpa\DesktopApp\Live\Topbar('desktop-topbar-fallback', $this->data, $this->events))->render();
+        return ($this->topbar ?? new \Milpa\DesktopApp\Live\Topbar('desktop-topbar-fallback', $this->data, $this->events, $this->settings, $this->catalog))->render($principal);
     }
 
     /** The main tablist, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's third
@@ -883,7 +914,7 @@ HTML;
           </div>
 
         </div>
-        <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none;align-items:center"><span id="milpa-settings-saved" class="mui-badge mui-badge--success" hidden>Saved</span><button type="button" class="mui-btn" id="milpa-discard">Discard changes</button><button type="button" class="mui-btn mui-btn--primary" id="milpa-save-settings">Save settings</button></div>
+        <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none;align-items:center"><span id="milpa-settings-saved" class="mui-badge mui-badge--success" hidden><!--SAVED--></span><button type="button" class="mui-btn" id="milpa-discard">Discard changes</button><button type="button" class="mui-btn mui-btn--primary" id="milpa-save-settings">Save settings</button></div>
       </div>
 
       <div class="view" data-view="capabilities" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
@@ -949,8 +980,51 @@ HTML;
 <!-- The composer's commands (greenhouse decisions/0202): the house's own plus every user-invocable skill, the
      same list the completion popup renders. Served BEFORE the shell script, which reads it once on boot. -->
 <script id="milpa-commands" type="application/json"><!--COMMANDS--></script>
+<!-- The Desktop's copy in the declared locale (greenhouse decisions/0209): what the guard says when the door answers. -->
+<script id="milpa-desktop-i18n" type="application/json"><!--I18N--></script>
 <script>
   (function () {
+    // The Desktop's copy, in the declared locale (greenhouse decisions/0209): the server hands it over as JSON
+    // (#milpa-desktop-i18n) so the client says the same words. A key nobody wrote answers as itself.
+    var I18N = (function () {
+      var el = document.getElementById('milpa-desktop-i18n');
+      try { var v = el ? JSON.parse(el.textContent || '{}') : {}; return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; }
+    })();
+    function tr(key, arg) {
+      var s = Object.prototype.hasOwnProperty.call(I18N, key) ? I18N[key] : key;
+      return typeof arg === 'undefined' ? s : s.replace('%s', String(arg));
+    }
+    // Every Desktop fetch() result passes through here (greenhouse decisions/0209): the Desktop sits behind the
+    // same door as the admin, so any call may be answered by the gate instead of the handler. A 401 carrying
+    // `signin` is the passkey gate asking for a session — go there and come back (`next`); the promise never
+    // settles, so no caller paints a result over a page that is leaving. A 403 is a refusal (the address, a
+    // missing scope) — told once as a system notice, then rejected. Any other non-2xx rejects with its status
+    // and the parsed body, so «Saved» and its kin are said only on a 2xx.
+    function guarded(r) {
+      if (r.ok) { return Promise.resolve(r); }
+      return r.text().then(function (t) {
+        var body = null; try { body = JSON.parse(t); } catch (e) {}
+        body = (body && typeof body === 'object') ? body : {};
+        if (r.status === 401 && typeof body.signin === 'string' && body.signin !== '') {
+          location.assign(body.signin + '?next=' + encodeURIComponent(location.pathname + location.search));
+          return new Promise(function () {});
+        }
+        var err = new Error('HTTP ' + r.status); err.status = r.status; err.body = body; err.told = false;
+        if (r.status === 403) {
+          notice((typeof body.error === 'string' && body.error !== '') ? tr('guard.forbidden.reason', body.error) : tr('guard.forbidden'));
+          err.told = true;
+        }
+        return Promise.reject(err);
+      });
+    }
+    // A rejected call, told once: a 403 was already told by guarded(); a status error names the body's error or
+    // the status; anything else — the network — says what the caller passed, if anything.
+    function failed(err, unreachable) {
+      if (err && err.told) { return; }
+      if (err && err.status) { notice((err.body && typeof err.body.error === 'string' && err.body.error !== '') ? err.body.error : tr('guard.failed', err.status)); return; }
+      if (unreachable) { notice(unreachable); }
+    }
+
     // Auth overlay (open the workspace) — creating a session PERSISTS it, then reload shows it (0483).
     var auth = document.getElementById('milpa-auth');
     document.getElementById('milpa-auth-open').addEventListener('click', function () { auth.hidden = false; });
@@ -959,9 +1033,23 @@ HTML;
       fetch('/desktop/sessions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ goal: 'New session · ' + (app ? app.value : '') })
-      }).then(function () { location.reload(); });
+      }).then(guarded).then(function () { location.reload(); }).catch(function (err) {
+        // The door answered instead of the handler: close the overlay so the notice is in view.
+        auth.hidden = true;
+        failed(err, tr('guard.unreachable'));
+      });
     });
 
+    // The settings badge: a green «Saved» on a 2xx, a warning naming the status on anything else — never a
+    // «Saved» the server did not say (greenhouse decisions/0209).
+    var savedBadge = document.getElementById('milpa-settings-saved');
+    function showSaved(ok, text) {
+      if (!savedBadge) { return; }
+      savedBadge.textContent = text;
+      savedBadge.className = 'mui-badge ' + (ok ? 'mui-badge--success' : 'mui-badge--warning');
+      savedBadge.hidden = false;
+      setTimeout(function () { savedBadge.hidden = true; }, ok ? 2000 : 4000);
+    }
     // Settings persistence: Save posts the form, Discard reloads the persisted values.
     var saveBtn = document.getElementById('milpa-save-settings');
     if (saveBtn) {
@@ -974,9 +1062,10 @@ HTML;
             endpoint: end ? end.value : '', stream: stream ? stream.checked : true,
             compact: comp ? comp.checked : true, mode: mode ? mode.value : 'ask'
           })
-        }).then(function () {
-          var badge = document.getElementById('milpa-settings-saved');
-          if (badge) { badge.hidden = false; setTimeout(function () { badge.hidden = true; }, 2000); }
+        }).then(guarded).then(function () {
+          showSaved(true, tr('settings.saved'));
+        }).catch(function (err) {
+          showSaved(false, tr('settings.save_failed', (err && err.status) || 0));
         });
       });
     }
@@ -1012,13 +1101,15 @@ HTML;
     }
     function capEnable(pkg) {
       var url = '/capabilities/enable', hdr = { 'Content-Type': 'application/json' }, body = JSON.stringify({ capability: pkg });
-      return fetch(url, { method: 'POST', headers: hdr, body: body }).then(function (r) { return r.json(); }).then(function (a) {
+      // The first step may answer with the house's confirm gate (428 + the token): that is the flow, not a
+      // refusal, so it passes the guard; a door's 401/403 does not (greenhouse decisions/0209).
+      return fetch(url, { method: 'POST', headers: hdr, body: body }).then(function (r) { return r.status === 428 ? r : guarded(r); }).then(function (r) { return r.json(); }).then(function (a) {
         if (!a || !a.confirm_token) { return (a && a.ok) ? a : { ok: false, error: (a && a.error) || 'no token' }; }
         var h2 = { 'Content-Type': 'application/json', 'Confirm-Token': a.confirm_token };
-        return fetch(url, { method: 'POST', headers: h2, body: body }).then(function (r2) {
+        return fetch(url, { method: 'POST', headers: h2, body: body }).then(guarded).then(function (r2) {
           return r2.json().then(function (d) { return (d && typeof d.ok === 'boolean') ? d : { ok: r2.ok, error: d && d.error }; });
         });
-      }).catch(function (err) { return { ok: false, error: String(err) }; });
+      }).catch(function (err) { return { ok: false, error: (err && err.body && err.body.error) || (err && err.status ? 'HTTP ' + err.status : String(err)) }; });
     }
 
     // Composer floating panels (wireframe 3a): open on their figures, close as you type.
@@ -1245,7 +1336,7 @@ HTML;
       fetch('/agent', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text, session: agentSession, mode: currentMode() })
-      }).then(function (r) { return r.json(); }).then(function (res) {
+      }).then(guarded).then(function (r) { return r.json(); }).then(function (res) {
         if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
         else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
         else if (res && res.error) { appendMessage('system', { text: res.error }); }
@@ -1260,7 +1351,7 @@ HTML;
         // every place that shows turns/steps/tools/tokens — the composer chips, the status bar, the panels —
         // is a projection of these signals, so they all move at once.
         if (res && res.ok) { updateCounters(res); }
-      }).catch(function () { appendMessage('system', { text: 'The turn could not be reached.' }); });
+      }).catch(function (err) { failed(err, tr('guard.unreachable')); });
     }
     // The counters as signals, updated from the turn and the stream — the single source projected everywhere.
     function sig(key) { return (window.MilpaLive && MilpaLive.signal) ? (MilpaLive.signal(key) || 0) : 0; }
@@ -1335,7 +1426,12 @@ HTML;
       } else {
         req = fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
-      return req.then(read).catch(function (err) { return { status: 0, ok: false, data: { error: String(err) } }; });
+      return req.then(guarded).then(read).catch(function (err) {
+        // The door answered (greenhouse decisions/0209): the status and body survive for opFailure; a refusal
+        // guarded() already told is marked, so it is not told twice.
+        if (err && err.status) { return { status: err.status, ok: false, data: err.body || {}, told: !!err.told }; }
+        return { status: 0, ok: false, data: { error: String(err) } };
+      });
     }
     // A failed call as one legible line: the op, what happened, and what to do about it.
     function opFailure(op, res) {
@@ -1358,7 +1454,7 @@ HTML;
         var body = { session: agentSession };
         if (cmd.args === 'clear') { body.clear = true; } else if (cmd.args !== '') { body.goal = cmd.args; }
         callOp('POST', '/agent/goal', body).then(function (res) {
-          if (!res.ok) { notice(opFailure('agent:goal', res)); return; }
+          if (!res.ok) { if (!res.told) { notice(opFailure('agent:goal', res)); } return; }
           var d = res.data, goal = typeof d.goal === 'string' ? d.goal : '';
           if (goal === '') { notice(d.changed === true ? 'goal cleared' : 'no standing goal — /goal <text> sets one'); return; }
           notice((d.changed === false ? 'goal unchanged: ' : 'goal set: ') + goal);
@@ -1380,7 +1476,7 @@ HTML;
         // already the wrapped <skill_content> form: it enters the turn AS-IS, the args after it.
         callOp('GET', '/skill/invoke', { name: skill.name }).then(function (res) {
           var d = res.data;
-          if (!res.ok || typeof d.body !== 'string') { notice(opFailure('skill:invoke', res)); return; }
+          if (!res.ok || typeof d.body !== 'string') { if (!res.told) { notice(opFailure('skill:invoke', res)); } return; }
           runTurn(d.body + (cmd.args !== '' ? '\n\n' + cmd.args : ''));
         });
       }
@@ -1529,7 +1625,7 @@ HTML;
               index: parseInt(dragged.getAttribute('data-index'), 10),
               status: col.getAttribute('data-status')
             })
-          });
+          }).then(guarded).catch(function (err) { failed(err, tr('guard.unreachable')); });
           dragged = null;
         });
       });
@@ -1622,7 +1718,7 @@ HTML;
       fetch('/desktop/settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: key })
-      });
+      }).then(guarded).catch(function (err) { failed(err, tr('guard.unreachable')); });
     }
     if (modeChip && modeMenu) {
       modeChip.addEventListener('click', function (e) {
@@ -1652,13 +1748,13 @@ HTML;
     if (enroll) {
       enroll.addEventListener('click', function (e) {
         e.preventDefault();
-        fetch('/webauthn/enroll', { method: 'GET' }).then(function (r) {
-          if (r.ok) { location.href = '/webauthn/enroll'; return; }
-          enroll.textContent = 'No passkey door in this app';
+        fetch('/webauthn/enroll', { method: 'GET' }).then(guarded).then(function () { location.href = '/webauthn/enroll'; }).catch(function (err) {
+          // A 401 is the door asking for a session — guarded() already left for sign-in — and a 403 is the door
+          // refusing: neither means the door is absent (greenhouse decisions/0209). Only a 404, or no answer at
+          // all, degrades the link to «no passkey door».
+          if (err && err.status && err.status !== 404) { failed(err); return; }
+          enroll.textContent = tr('enroll.none');
           enroll.setAttribute('aria-disabled', 'true');
-          enroll.style.opacity = '.6';
-        }).catch(function () {
-          enroll.textContent = 'No passkey door in this app';
           enroll.style.opacity = '.6';
         });
       });
