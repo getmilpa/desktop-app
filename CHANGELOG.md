@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.47.0](https://github.com/getmilpa/desktop-app/compare/v0.46.0...v0.47.0) (2026-09-05)
+
+
+### Features
+
+* **desktop:** the Desktop behind the same door — desktop.middleware, assets exempt, a shell that knows it was shut ([#85](https://github.com/getmilpa/desktop-app/issues/85)) ([835e629](https://github.com/getmilpa/desktop-app/commit/835e6295bcff0538153a48968525bd9e14515f68))
+
 ## [0.46.0](https://github.com/getmilpa/desktop-app/compare/v0.45.0...v0.46.0) (2026-09-04)
 
 
