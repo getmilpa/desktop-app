@@ -38,31 +38,29 @@ final class AdminGuestTest extends TestCase
     {
         [, $kernel] = self::boot([AdminPlugin::class, DesktopAppPlugin::class]);
 
-        // Discovery: the section, its group and who declared it — what the admin's catalogue KNOWS. Three of
-        // those facts the decision expects on the PAGE («under the AGENT group», «declared by … DesktopAppPlugin»,
-        // the glyph) and milpa/admin 0.10.1 does not paint, its own sections included — a gap in the host,
-        // reported, not patched here (greenhouse decisions/0210 §3): `AdminShell::navItems()` ignores
-        // `AdminSection::$group` (one flat list, no group label), no section page prints the attribution
-        // `SectionCatalogue::declaredBy()` holds (only the Stack section attributes services), and the sidebar
-        // item's icon span is empty for every section, measured with an ASCII glyph too. So the page assertions
-        // below stop at what the host renders, and the catalogue assertions stand for the rest.
+        // Discovery: the section, its group and who declared it — what the admin's catalogue KNOWS. The three
+        // facts the decision expects on the PAGE («under the AGENT group», «declared by … DesktopAppPlugin», the
+        // glyph) were a measured gap of milpa/admin 0.10.1 and are painted since 0.11.0 (greenhouse
+        // decisions/0210): the page assertions below hold the host to them.
         $catalogue = SectionCatalogue::discover($kernel->plugins());
         $agent = $catalogue->find('agent');
         self::assertNotNull($agent, 'the admin discovered the Desktop\'s section');
-        self::assertSame('agent', $agent->group, 'under the AGENT group — data the host holds and does not yet paint');
-        self::assertSame(10, $agent->order);
-        self::assertSame(DesktopAppPlugin::class, $catalogue->declaredBy('agent'), 'declared by the Desktop plugin — attribution the host holds and does not yet paint');
+        self::assertSame('agent', $agent->group, 'under the AGENT group');
+        self::assertSame(60, $agent->order, 'after the host\'s own 10..40 (greenhouse decisions/0210)');
+        self::assertSame(DesktopAppPlugin::class, $catalogue->declaredBy('agent'), 'declared by the Desktop plugin');
 
-        // The sidebar lists it by title and route.
+        // The sidebar (milpa/admin ≥ 0.11): the item sits under the AGENT group heading, with its glyph.
         $index = self::dispatch($kernel, '/milpa/admin');
         self::assertSame(200, $index->getStatusCode());
+        $indexHtml = (string) $index->getBody();
+        self::assertMatchesRegularExpression('~data-group="agent"[^>]*>\s*<span class="mui-sidebar__section-label"[^>]*>AGENT</span>~', $indexHtml, 'the AGENT group, painted by the host (its heading id is positional)');
         self::assertMatchesRegularExpression(
-            '~<a class="mui-sidebar__item" href="/milpa/admin/s/agent"( aria-current="page")?><span class="mui-sidebar__item-icon" aria-hidden="true">[^<]*</span><span class="mui-sidebar__item-label">Agent</span></a>~',
-            (string) $index->getBody(),
+            '~<a class="mui-sidebar__item" href="/milpa/admin/s/agent"( aria-current="page")?><span class="mui-sidebar__item-icon" aria-hidden="true">◈</span><span class="mui-sidebar__item-label">Agent</span></a>~',
+            $indexHtml,
         );
-        // Order 10 ties with the admin's own Plugins section and the id breaks the tie: the panel OPENS on the Agent.
-        self::assertSame('agent', $catalogue->first()?->id);
-        self::assertStringContainsString('href="/milpa/admin/s/agent" aria-current="page"', (string) $index->getBody());
+        // Order 60 sits after the host's own sections: the panel opens on Plugins, never on the guest.
+        self::assertSame('plugins', $catalogue->first()?->id);
+        self::assertStringContainsString('href="/milpa/admin/s/plugins" aria-current="page"', $indexHtml);
 
         // The section: the HOST puts the header; the guest emits the region — the live frame at the embed path.
         $section = self::dispatch($kernel, '/milpa/admin/s/agent');
@@ -71,6 +69,8 @@ final class AdminGuestTest extends TestCase
         self::assertStringContainsString('<span class="mui-kbd">Agent</span>', $html, 'the host header names the section');
         self::assertStringContainsString('<title>Agent · Milpa Admin</title>', $html);
         self::assertStringContainsString('<div class="desktop-agent" id="milpa-admin-section-agent" data-desktop-agent="live" data-gate="loopback">', $html);
+        // The host paints the attribution (milpa/admin ≥ 0.11): the section says who declared it.
+        self::assertStringContainsString('data-declared-by="Milpa\DesktopApp\DesktopAppPlugin">declared by DesktopAppPlugin</span>', $html);
         self::assertStringContainsString('src="/desktop?embed=1" title="Milpa Desktop — Agent"', $html);
         self::assertStringNotContainsString('loading="lazy"', $html);
         self::assertStringContainsString('data-gate="loopback">gate: loopback</span>', $html, 'the guest bar says the Desktop\'s gate');
@@ -141,17 +141,13 @@ final class AdminGuestTest extends TestCase
 
     /**
      * The state the decision names for a passkey gate AND a principal — the live frame — measured through the
-     * real admin, and the CONTRACT GAP that keeps it from happening on milpa/admin 0.10.1 (greenhouse
-     * decisions/0210 §3: «if something is missing there, it is a finding, not an assumption»): the admin's gate
-     * authenticates (its topbar says who), but `AdminShell::render()` builds the `ComponentContext` it hands
-     * every section with `componentId`, `locale` and `route` only — the `$principal` it received never enters
-     * the context — so the guest is told nobody is signed in while the topbar says who is, and behind a
-     * passkey-gated Desktop the region offers sign-in to everyone, forever. The fix is one line in the admin
-     * (`principal: $principal` at that constructor), not in this package: the component and the renderer already
-     * honor a principal in the context (AgentGuestComponentTest, AgentGuestRendererTest), and this test asserts
-     * the decision's state the day the host fills it — until then it asserts the gap, with its control.
+     * real admin. On milpa/admin 0.10.1 this was a measured CONTRACT GAP (greenhouse decisions/0210 §3: «if
+     * something is missing there, it is a finding, not an assumption»): the admin's gate authenticated and its
+     * topbar said who, but `AdminShell::render()` handed every section a `ComponentContext` without the
+     * principal, so the region offered sign-in to a human already through the door. milpa/admin 0.11.0 fills
+     * `principal:` in that one context; the region and the topbar now agree, and this test asserts exactly that.
      */
-    public function testWithAPrincipalTheAdminSaysWhoSignedInButHandsItsSectionsNoPrincipalTheMeasuredHostGap(): void
+    public function testWithAPrincipalTheAdminSaysWhoSignedInAndTheRegionIsTheLiveFrame(): void
     {
         if (!class_exists(DesktopSettings::PASSKEY_GATE)) {
             require __DIR__ . '/../Fixtures/app-runtime-passkey-gate.php';
@@ -169,21 +165,11 @@ final class AdminGuestTest extends TestCase
         $html = (string) $section->getBody();
         self::assertStringContainsString('data-principal="passkey:stub">signed in as passkey:stub</span>', $html, 'the admin knows who signed in');
 
-        if (str_contains($html, 'data-desktop-agent="live"')) {
-            // The host fills the context's principal: the region is the frame, as the decision names it.
-            self::assertStringContainsString('data-desktop-agent="live" data-gate="passkey">', $html);
-            self::assertStringContainsString('src="/desktop?embed=1"', $html);
-            self::assertStringNotContainsString('Sign in to open the Agent', $html);
-
-            return;
-        }
-
-        // The gap, measured on milpa/admin 0.10.1 with its control on the same page: the topbar names the
-        // principal (the admin authenticated the request), the region is told nobody did (the context carried
-        // no principal). Reported upstream; nothing in this package can close it.
-        self::assertStringContainsString('data-desktop-agent="signed-out" data-gate="passkey">', $html, 'milpa/admin 0.10.1 hands its sections a ComponentContext without the principal its topbar shows');
-        self::assertStringContainsString('href="/webauthn/signin?next=%2Fmilpa%2Fadmin%2Fs%2Fagent">', $html, 'so the region offers the door to a human who is already through it');
-        self::assertStringNotContainsString('<iframe', $html);
+        // The host fills the context's principal: the region is the frame, as the decision names it.
+        self::assertStringContainsString('data-desktop-agent="live" data-gate="passkey">', $html);
+        self::assertStringContainsString('src="/desktop?embed=1"', $html);
+        self::assertStringNotContainsString('Sign in to open the Agent', $html, 'the region agrees with the topbar');
+        self::assertStringNotContainsString('data-desktop-agent="signed-out"', $html);
     }
 
     /**

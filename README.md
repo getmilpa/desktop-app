@@ -167,29 +167,23 @@ How it holds together:
   (`tests/Admin/AdminAbsentBootTest.php`). `milpa/admin` is a *dev* dependency here only so the suite boots the
   real panel next to the Desktop (`tests/Admin/AdminGuestTest.php`); it stays a suggestion for an app.
 
-**What the host cannot do yet** — measured against milpa/admin 0.10.1 by booting the real panel next to the
-Desktop (`tests/Admin/AdminGuestTest.php`); gaps in the host's contract, reported to it, not patched around here:
+**What the host does for a guest** — milpa/admin **0.11.0** closed the three gaps the first version of this
+guest measured against 0.10.1 (greenhouse `decisions/0210`), and the integration test now asserts them
+(`tests/Admin/AdminGuestTest.php`):
 
-- **The context carries no principal.** `AdminShell::render()` builds the `ComponentContext` it hands every
-  section with `componentId`, `locale` and `route` only; the principal its own topbar shows never enters it. So
-  with the Desktop behind the **passkey** gate the region offers «Sign in to open the Agent» to *everyone* —
-  the human who just signed in included — and the way back after the ceremony lands on the same offer. Until the
-  admin fills `principal:` there (one line), the Agent is not reachable inside the panel behind a passkey gate;
-  the component and the renderer already honor a principal in the context, and the integration test asserts the
-  decision's state the day the host fills it.
-- **The rule reads the admin's principal, not the Desktop's gate.** It presumes both stand behind the same door
-  (`decisions/0209`): an admin whose door authenticates nobody — the default loopback gate, or `[]` — leaves a
-  passkey-gated Desktop's region at the sign-in offer whatever cookie the browser holds. Put both behind the same
-  gate.
-- **No attribution, no group, no icon on the page.** The catalogue knows who declared the section
-  (`SectionCatalogue::declaredBy('agent')` → `DesktopAppPlugin`), its group (`agent`) and its glyph, and the
-  admin paints none of the three — for its own sections either: the sidebar is one flat list and no section page
-  prints a «declared by» line.
+- **The context carries the principal.** The `ComponentContext` every section receives names who signed in
+  (`passkey:<id>`) or `null`; the region and the topbar agree, and behind the passkey gate a signed-in human sees
+  the frame, not the door.
+- **The host paints the attribution and the groups.** The section header says «declared by DesktopAppPlugin»;
+  the sidebar lists the Agent under the **AGENT** group heading, with its glyph `◈`; the Desktop's order (60) sits
+  after the admin's own sections, so the panel opens on Plugins, never on the guest.
+- **The rule reads the principal the host hands over.** With the runtime's identity chain in place
+  (`milpa/app-runtime` ≥ 0.120 and the skeleton of `milpa/framework` ≥ 0.41), the passkey session is a principal on
+  every route of the house — the admin's included, whatever its own gate — so an admin on the default loopback gate
+  still hands a signed-in principal to the region. Without that chain, put both behind the same gate.
 - **The title is resolved once, in the declared locale.** The admin resolves a guest's `title` only through its
   own catalog keys, which a guest cannot extend, so the sidebar item reads «Agent» (or «Agente» under
   `desktop.locale: es`) whatever `?lang=` says — the region itself follows `?lang=`.
-- **Order 10 ties** with the admin's own Plugins section and the id breaks the tie, so the panel **opens on the
-  Agent** — the order the decision names, kept.
 
 **Upgrading.** New in this version: embed mode (`?embed=1`, the same route and door — a `desktop.middleware`
 you declared applies to it unchanged), the `chrome` prop on the `desktop-sidebar` component (default `true`;

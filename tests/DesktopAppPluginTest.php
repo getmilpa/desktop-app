@@ -187,7 +187,7 @@ final class DesktopAppPluginTest extends TestCase
         self::assertSame('Agent', $agent->title, 'the title from the Desktop\'s catalog, English by default');
         self::assertSame('desktop-agent', $agent->component);
         self::assertSame(['embed' => '/desktop?embed=1', 'open' => '/desktop', 'gate' => 'loopback', 'signin' => '/webauthn/signin'], $agent->props);
-        self::assertSame(10, $agent->order);
+        self::assertSame(60, $agent->order, 'after the host\'s own 10..40 (greenhouse decisions/0210)');
         self::assertSame('agent', $agent->group);
         self::assertSame('◈', $agent->icon);
         self::assertTrue($agent->isCustom(), 'it brings its own component and renderer');
