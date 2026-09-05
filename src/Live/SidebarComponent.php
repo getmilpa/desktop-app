@@ -49,13 +49,16 @@ final class SidebarComponent implements ComponentDefinitionInterface
                 'activeSession' => ['type' => 'string', 'required' => false],
                 'activeNav' => ['type' => 'string', 'default' => 'sessions'],
                 'decisions' => ['type' => 'int', 'default' => 0],
+                // false in embed mode (greenhouse decisions/0210): the chrome screens' nav is not rendered —
+                // the host's own navigation stands — while the session list and the actions stay.
+                'chrome' => ['type' => 'bool', 'default' => true],
             ],
             stateSchema: ['activeNav' => ['type' => 'string']],
             actions: ['select' => ['payload' => ['nav' => 'string']]],
         );
     }
 
-    /** Mount from props: the active nav in state; the sessions, active session and decisions count in meta. */
+    /** Mount from props: the active nav in state; the sessions, active session, decisions count and chrome flag in meta. */
     public function mount(array $props, ComponentContext $context): StateSnapshot
     {
         return new StateSnapshot(
@@ -67,6 +70,7 @@ final class SidebarComponent implements ComponentDefinitionInterface
                 'sessions' => \is_array($props['sessions'] ?? null) ? $props['sessions'] : [],
                 'activeSession' => (string) ($props['activeSession'] ?? ''),
                 'decisions' => (int) ($props['decisions'] ?? 0),
+                'chrome' => ($props['chrome'] ?? true) !== false,
             ],
         );
     }

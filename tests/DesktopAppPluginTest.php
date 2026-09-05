@@ -15,6 +15,9 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Tests;
 
 use Milpa\Container\DIContainer;
+use Milpa\DesktopApp\Admin\AdminGuest;
+use Milpa\DesktopApp\Admin\AgentGuestComponent;
+use Milpa\DesktopApp\Admin\AgentGuestRenderer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Http\LoopbackOnlyMiddleware;
@@ -165,6 +168,36 @@ final class DesktopAppPluginTest extends TestCase
     {
         $container = new DIContainer();
         self::assertSame($container, (new DesktopAppPlugin($container))->container());
+    }
+
+    public function testItIsTheAdminsGuestAndDeclaresOneAgentSection(): void
+    {
+        // The Desktop as the admin's guest (greenhouse decisions/0210): the plugin class carries the admin's
+        // contract through the AdminGuest bridge — the admin, installed here, finds it by instanceof — and
+        // declares ONE section: the shell in embed mode, with the Desktop's paths and gate as props.
+        $plugin = new DesktopAppPlugin(new DIContainer());
+        self::assertInstanceOf(AdminGuest::class, $plugin);
+        self::assertInstanceOf(\Milpa\Admin\Section\AdminSectionProvider::class, $plugin);
+
+        $sections = $plugin->adminSections();
+        self::assertCount(1, $sections);
+        $agent = $sections[0];
+        self::assertInstanceOf(\Milpa\Admin\Section\AdminSection::class, $agent);
+        self::assertSame('agent', $agent->id);
+        self::assertSame('Agent', $agent->title, 'the title from the Desktop\'s catalog, English by default');
+        self::assertSame('desktop-agent', $agent->component);
+        self::assertSame(['embed' => '/desktop?embed=1', 'open' => '/desktop', 'gate' => 'loopback', 'signin' => '/webauthn/signin'], $agent->props);
+        self::assertSame(10, $agent->order);
+        self::assertSame('agent', $agent->group);
+        self::assertSame('◈', $agent->icon);
+        self::assertTrue($agent->isCustom(), 'it brings its own component and renderer');
+        self::assertInstanceOf(AgentGuestComponent::class, $agent->definition);
+        self::assertInstanceOf(AgentGuestRenderer::class, $agent->renderer);
+
+        // The props follow the declared door and locale — the gate the topbar chip says, the title in Spanish.
+        $es = self::withConfig(['desktop' => ['locale' => 'es', 'middleware' => []]])->adminSections()[0];
+        self::assertSame('Agente', $es->title);
+        self::assertSame('open', $es->props['gate']);
     }
 
     public function testLifecycleHooksAreInert(): void

@@ -22,10 +22,14 @@
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.75",
-        "phpstan/phpstan": "^2.1",
+        "milpa/admin": "^0.10.1",
+        "milpa/container": ">=0.1 <1.0",
         "phpstan/phpdoc-parser": "^2.3",
-        "phpunit/phpunit": "^11.5",
-        "milpa/container": ">=0.1 <1.0"
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5"
+    },
+    "suggest": {
+        "milpa/admin": "The Desktop becomes the admin's guest (greenhouse decisions/0210): DesktopAppPlugin declares an Agent section — the shell in embed mode inside the panel, behind the same door — the moment the admin is installed; nothing is required for the Desktop itself."
     },
     "autoload": {
         "psr-4": {

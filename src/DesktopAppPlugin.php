@@ -15,6 +15,9 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp;
 
 use Milpa\Attributes\PluginMetadata;
+use Milpa\DesktopApp\Admin\AdminGuest;
+use Milpa\DesktopApp\Admin\AgentGuestComponent;
+use Milpa\DesktopApp\Admin\AgentGuestRenderer;
 use Milpa\DesktopApp\Controllers\AssetsController;
 use Milpa\DesktopApp\Controllers\DataController;
 use Milpa\DesktopApp\Controllers\EventsController;
@@ -67,6 +70,12 @@ use Milpa\Runtime\Stack\StackProviderInterface;
  * the middleware the app declared under `desktop.middleware` — judged by {@see DesktopSettings}, loopback-only
  * by default, `[]` open on purpose, anything misdeclared falling to loopback-only — except the assets, which
  * stay public package files: a JSON 401 to a `<link>` or `<script>` would break the page silently.
+ *
+ * And it is the admin's GUEST (greenhouse decisions/0210): when milpa/admin is installed, the panel finds this
+ * plugin among the booted ones — by `instanceof` its `AdminSectionProvider`, which {@see AdminGuest} carries
+ * only when the admin is there, so a house without the admin boots untouched — and lists ONE section, «Agent»:
+ * the shell in embed mode ({@see ShellController::EMBED_PARAM}) as one region inside the admin's main, behind
+ * the same door. The Desktop names no dependency on the admin; it honors the admin's contract when asked.
  */
 #[PluginMetadata(
     version: '0.1.0',
@@ -75,10 +84,16 @@ use Milpa\Runtime\Stack\StackProviderInterface;
     name: 'DesktopApp',
     type: 'Web',
 )]
-final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface, StackProviderInterface
+final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface, StackProviderInterface, AdminGuest
 {
     /** A plugin dispatches this (with a {@see ShellEvent} in `payload['shellEvent']`) to push a live update. */
     public const CHANGED_EVENT = 'desktop.shell.changed';
+
+    /** Where the shell is mounted — not configurable: every route below hangs from it, and the admin section points at it. */
+    public const SHELL_PATH = '/desktop';
+
+    /** The sign-in door the admin section offers a signed-out human — app-runtime's default, the one the shell's guard reads from the 401 too. */
+    public const SIGNIN_PATH = '/webauthn/signin';
 
     public function __construct(private readonly DIContainerInterface $container)
     {
@@ -193,7 +208,12 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $conversation = new \Milpa\DesktopApp\Live\Conversation($this->liveSecret('signing'), $events);
         $this->container->registerService(\Milpa\DesktopApp\Live\Conversation::class, $conversation);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog));
+        // The session strip of embed mode (greenhouse decisions/0210) is a component too (decisions/0189): the
+        // sidebar's reach in one row when the sidebar is folded, signed, with lifecycle events.
+        $sessionStrip = new \Milpa\DesktopApp\Live\SessionStrip($this->liveSecret('signing'), $data, $events, $catalog);
+        $this->container->registerService(\Milpa\DesktopApp\Live\SessionStrip::class, $sessionStrip);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog, $sessionStrip));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
@@ -224,7 +244,7 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
 
         return [
             new Route(
-                path: '/desktop',
+                path: self::SHELL_PATH,
                 methods: HttpMethod::GET,
                 name: 'desktop.shell',
                 middleware: $middleware,
@@ -308,6 +328,43 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
                 name: 'desktop.work.move',
                 middleware: $middleware,
                 handler: new HandlerReference(MutationController::class, 'moveWork'),
+            ),
+        ];
+    }
+
+    /**
+     * The Desktop's one section in the admin panel (greenhouse decisions/0210): «Agent», the shell in embed
+     * mode as a region of the admin's main, behind the same door.
+     *
+     * Called by milpa/admin at request time, and by nothing else: the section brings its own component
+     * ({@see AgentGuestComponent}) and renderer ({@see AgentGuestRenderer}), so the admin registers them
+     * under `desktop-agent` and never learns this plugin's name. The props are the Desktop's paths and its
+     * gate as judged now — the same `gate: <label>` the topbar chip says — and the title speaks the declared
+     * locale. Without milpa/admin there is nobody to call this; `AdminSection` would not even be loadable.
+     *
+     * @return list<\Milpa\Admin\Section\AdminSection>
+     */
+    public function adminSections(): array
+    {
+        $settings = $this->settings();
+        $catalog = $settings->catalog();
+
+        return [
+            new \Milpa\Admin\Section\AdminSection(
+                id: AgentGuestComponent::SECTION,
+                title: $catalog->tr('agent.title'),
+                component: AgentGuestComponent::NAME,
+                props: [
+                    'embed' => self::SHELL_PATH . '?' . ShellController::EMBED_PARAM . '=1',
+                    'open' => self::SHELL_PATH,
+                    'gate' => $settings->gateLabel(),
+                    'signin' => self::SIGNIN_PATH,
+                ],
+                order: 10,
+                group: 'agent',
+                definition: new AgentGuestComponent(),
+                renderer: new AgentGuestRenderer($catalog),
+                icon: '◈',
             ),
         ];
     }

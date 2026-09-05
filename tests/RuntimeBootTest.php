@@ -17,6 +17,7 @@ namespace Milpa\DesktopApp\Tests;
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Tests\Fixtures\PasskeyGateStub;
+use Milpa\DesktopApp\Tests\Fixtures\RedirectingGateStub;
 use Milpa\Runtime\Http\RequestHandler;
 use Milpa\Runtime\Kernel;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -151,6 +152,35 @@ final class RuntimeBootTest extends TestCase
         self::assertStringContainsString('signed in as passkey:stub', $body);
         self::assertStringContainsString('data-principal="passkey:stub"', $body);
         self::assertStringContainsString('data-gate="custom"', $body);
+    }
+
+    public function testEmbedModeIsServedByTheSameRouteAndTheGatesNextCarriesTheFlag(): void
+    {
+        // Embed mode (greenhouse decisions/0210) through the real pipeline: the same route serves it — the
+        // query is read from the URI, since the runtime hands the handler a bare PSR-7 request — and, when a
+        // gate with no session sends the browser to sign in, `next` carries the path AND the query, so the
+        // round trip lands back in embed mode. The gate uses the request target: nothing here adds the flag.
+        $kernel = Kernel::boot(['root' => sys_get_temp_dir(), 'plugins' => [DesktopAppPlugin::class]]);
+        $embed = self::dispatch($kernel, 'GET', '/desktop?embed=1', '127.0.0.1');
+        self::assertSame(200, $embed->getStatusCode());
+        self::assertStringContainsString('<html data-theme="dark" lang="en" data-embed="1">', (string) $embed->getBody());
+        self::assertStringContainsString('id="milpa-session-strip"', (string) $embed->getBody());
+        self::assertStringContainsString('<html data-theme="dark" lang="en">', (string) self::dispatch($kernel, 'GET', '/desktop', '127.0.0.1')->getBody(), 'the plain shell has no flag on its root');
+
+        $container = new DIContainer();
+        $container->registerService(RedirectingGateStub::class, new RedirectingGateStub());
+        $gated = Kernel::boot([
+            'root' => sys_get_temp_dir(),
+            'container' => $container,
+            'plugins' => [DesktopAppPlugin::class],
+            'config' => ['desktop' => ['middleware' => [RedirectingGateStub::class]]],
+        ]);
+
+        $redirect = self::dispatch($gated, 'GET', '/desktop?embed=1', '203.0.113.9', ['Accept' => 'text/html']);
+        self::assertSame(302, $redirect->getStatusCode());
+        self::assertSame('/webauthn/signin?next=%2Fdesktop%3Fembed%3D1', $redirect->getHeaderLine('Location'), 'next carries the flag');
+        // The control: the plain shell's next has no flag to carry.
+        self::assertSame('/webauthn/signin?next=%2Fdesktop', self::dispatch($gated, 'GET', '/desktop', '203.0.113.9', ['Accept' => 'text/html'])->getHeaderLine('Location'));
     }
 
     /**

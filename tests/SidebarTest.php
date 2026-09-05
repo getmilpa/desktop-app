@@ -62,6 +62,28 @@ final class SidebarTest extends TestCase
         self::assertStringContainsString('No sessions yet', $html);
     }
 
+    public function testWithoutChromeItKeepsItsIdsButLinksToNoChromeScreen(): void
+    {
+        // Embed mode (greenhouse decisions/0210): the host's navigation stands, so the links that would open a
+        // chrome screen are not rendered; the session list and the actions keep their ids for the shell script.
+        $html = (new Sidebar('secret'))->render(false);
+
+        foreach (['settings', 'decisions', 'capabilities', 'skills', 'preview'] as $nav) {
+            self::assertStringNotContainsString('data-nav="' . $nav . '"', $html);
+        }
+        self::assertStringContainsString('data-nav="sessions"', $html);
+        self::assertStringContainsString('id="milpa-sessions"', $html);
+        self::assertStringContainsString('id="milpa-new-session"', $html);
+        self::assertStringContainsString('id="milpa-enroll-link"', $html);
+        self::assertStringContainsString('data-milpa-state="sidebar"', $html, 'still a component with its envelope');
+
+        // The flag is part of the component's contract and lands in its state.
+        self::assertSame('bool', SidebarComponent::contract()->propsSchema['chrome']['type']);
+        $state = (new SidebarComponent())->mount(['chrome' => false], new ComponentContext('sidebar'));
+        self::assertFalse($state->meta['chrome']);
+        self::assertTrue((new SidebarComponent())->mount([], new ComponentContext('sidebar'))->meta['chrome'], 'the chrome is there by default');
+    }
+
     public function testItEmitsRenderEventsSoPluginsCanExtendIt(): void
     {
         $events = new EventDispatcher(new NullLogger());

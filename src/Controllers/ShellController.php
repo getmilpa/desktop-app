@@ -24,6 +24,7 @@ use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\RolesView;
 use Milpa\DesktopApp\Live\ScreenPreviewView;
+use Milpa\DesktopApp\Live\SessionStrip;
 use Milpa\DesktopApp\Live\SkillsView;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
@@ -49,11 +50,23 @@ use Psr\Http\Message\ServerRequestInterface;
  * whatever the gate in front of the route left on the request ({@see RequestPrincipal}) — the shell reads no
  * cookie and mints no identity — and every `fetch()` the shell makes passes through one client guard, so a
  * gate's 401 sends the browser to sign in, a 403 is told, and «Saved» is only ever said on a 2xx.
+ *
+ * EMBED MODE (greenhouse decisions/0210): `GET /desktop?embed=1` — the same route, the same door, no new route —
+ * serves the SAME page with `data-embed="1"` on the root element, and CSS folds the chrome: the window strip,
+ * the sidebar, the topbar and the status bar are not visible, the main takes the whole grid. The DOM is KEPT —
+ * every element id the shell script looks up at boot is still in the document, so the script contract does not
+ * change — and the sessions stay reachable through a compact strip above the conversation
+ * ({@see SessionStripView}) rendered only in embed mode. The links that would open a chrome screen inside the
+ * host are not rendered. Whoever embeds the shell (the admin's Agent section) is a same-origin frame; the
+ * guard's `next` carries the path AND the query, so a sign-in round trip lands back in embed mode.
  */
 final class ShellController
 {
     /** The event other plugins subscribe to (in their `boot()`) to contribute dashboard panels. */
     public const COMPOSE_EVENT = 'desktop.shell.compose';
+
+    /** The query flag that folds the chrome: `?embed=1` (greenhouse decisions/0210). Only `1` counts. */
+    public const EMBED_PARAM = 'embed';
 
     public function __construct(
         private readonly MilpaEventDispatcherInterface $events,
@@ -73,6 +86,7 @@ final class ShellController
         private readonly ?\Milpa\DesktopApp\Live\Conversation $conversation = null,
         private readonly ?DesktopSettings $settings = null,
         private readonly ?Catalog $catalog = null,
+        private readonly ?SessionStrip $sessionStrip = null,
     ) {
     }
 
@@ -103,10 +117,12 @@ final class ShellController
     {
         // A sidebar click selects a session via `?session=<id>`; the data seam loads that one's counters,
         // context and conversation (an unknown or malformed id is ignored — the newest session stands).
-        $params = $request->getQueryParams();
-        if (isset($params['session']) && is_string($params['session'])) {
-            $this->data?->select($params['session']);
+        $session = self::queryParam($request, 'session');
+        if (\is_string($session)) {
+            $this->data?->select($session);
         }
+        // Embed mode (greenhouse decisions/0210): the flag folds the chrome; the DOM and the door are the same.
+        $embed = self::queryParam($request, self::EMBED_PARAM) === '1';
 
         $composition = new ShellComposition();
         $this->events->dispatch(self::COMPOSE_EVENT, ['composition' => $composition]);
@@ -146,24 +162,51 @@ final class ShellController
 
         // Who the gate let in (greenhouse decisions/0209): read from the attribute the gate leaves on the request,
         // never from a cookie — the Desktop invents no identity; the topbar shows the actor, or nobody.
-        return new Response(200, $headers, $this->html($composition, $liveBoot, $agentSid, RequestPrincipal::of($request)));
+        return new Response(200, $headers, $this->html($composition, $liveBoot, $agentSid, RequestPrincipal::of($request), $embed));
     }
 
-    private function html(ShellComposition $composition, string $liveBoot = '', string $agentSid = '', ?string $principal = null): string
+    /**
+     * One query parameter of the request, read the way app-runtime's sign-in page reads `next`
+     * (`PasskeyController::signinPage()`): the parsed params when they carry the KEY, else the URI's own query
+     * string parsed here — so `?embed=1` and `?session=` are read however the request was built, a bare PSR-7
+     * request included. Per key, not per request: a parsed bag that lacks the key does not hide the URI's.
+     */
+    private static function queryParam(ServerRequestInterface $request, string $name): mixed
+    {
+        $params = $request->getQueryParams();
+        if (!\array_key_exists($name, $params)) {
+            parse_str($request->getUri()->getQuery(), $params);
+        }
+
+        return $params[$name] ?? null;
+    }
+
+    private function html(ShellComposition $composition, string $liveBoot = '', string $agentSid = '', ?string $principal = null, bool $embed = false): string
     {
         return str_replace(
             [
                 '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--ROLES-->', '<!--SCREENS-->', '<!--LIVEROUTE-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
                 '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->', '<!--COMMANDS-->',
-                '<!--I18N-->', '<!--SAVED-->',
+                '<!--I18N-->', '<!--SAVED-->', '<!--EMBED-->', '<!--SESSIONSTRIP-->',
             ],
             [
                 $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
-                $this->sidebarHtml(), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml($principal), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
-                $this->i18nJson(), htmlspecialchars($this->catalog()->tr('settings.saved'), ENT_QUOTES),
+                $this->sidebarHtml(!$embed), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml($principal), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
+                $this->i18nJson(), htmlspecialchars($this->catalog()->tr('settings.saved'), ENT_QUOTES), $embed ? ' data-embed="1"' : '', $embed ? $this->sessionStripHtml() : '',
             ],
             $this->template(),
         );
+    }
+
+    /**
+     * The session strip of embed mode (greenhouse decisions/0210): the current session's goal, a `<select>` of
+     * every session and a «New session» control — the sidebar's reach, in one row above the conversation, when
+     * the sidebar is folded. A milpa/live component ({@see SessionStrip}) over the same data the sidebar reads;
+     * a fallback is built from that data when none was injected.
+     */
+    private function sessionStripHtml(): string
+    {
+        return ($this->sessionStrip ?? new SessionStrip('desktop-session-strip-fallback', $this->data, $this->events, $this->catalog()))->render();
     }
 
     /**
@@ -368,10 +411,11 @@ HTML;
     }
 
     /** The sidebar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's first
-     *  pure-component surface. A fallback Sidebar is built from the same data when none was injected. */
-    private function sidebarHtml(): string
+     *  pure-component surface. A fallback Sidebar is built from the same data when none was injected. In embed
+     *  mode (`$chrome` false, decisions/0210) it keeps its ids but renders no link to a chrome screen. */
+    private function sidebarHtml(bool $chrome = true): string
     {
-        return ($this->sidebar ?? new \Milpa\DesktopApp\Live\Sidebar('desktop-sidebar-fallback', $this->data, $this->events))->render();
+        return ($this->sidebar ?? new \Milpa\DesktopApp\Live\Sidebar('desktop-sidebar-fallback', $this->data, $this->events))->render($chrome);
     }
 
     /** The topbar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's second
@@ -599,7 +643,7 @@ HTML;
     {
         return <<<'HTML'
 <!doctype html>
-<html data-theme="dark" lang="en">
+<html data-theme="dark" lang="en"<!--EMBED-->>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -619,6 +663,16 @@ HTML;
      "Open workspace" reveal the dashboard and the composer panels close as you type. */
   [hidden] { display: none !important; }
   .tabpane[hidden] { display: none; }
+  /* Embed mode (greenhouse decisions/0210): the Desktop as the admin's guest. The chrome FOLDS — the window
+     strip, the sidebar, the topbar and the status bar are not visible and the main takes the whole grid — but
+     the DOM stays: every id the shell script looks up at boot is still in the document. The session strip
+     above the conversation is what keeps the sessions reachable while the sidebar is folded. */
+  html[data-embed="1"] .chrome, html[data-embed="1"] .statusbar, html[data-embed="1"] .mui-sidebar, html[data-embed="1"] .mui-topbar { display: none !important; }
+  html[data-embed="1"] .mui-shell { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+  html[data-embed="1"] .mui-shell__main { grid-column: 1 !important; grid-row: 1 !important; }
+  .milpa-session-strip { display: flex; align-items: center; gap: var(--space-3); flex: none; padding: var(--space-3) var(--space-8); border-bottom: 1px solid var(--border-subtle); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-xs); }
+  .milpa-session-strip__goal { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .milpa-session-strip__pick { flex: none; max-width: 22rem; }
   ul.feed { list-style: none; margin: 0; padding: 0; font: var(--text-xs)/1.5 var(--font-mono); overflow: auto; }
   ul.feed li { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); margin: var(--space-2) 0; word-break: break-word; }
   .mui-empty { color: var(--text-muted); font-size: var(--text-sm); }
@@ -820,6 +874,8 @@ HTML;
 
     <main class="mui-shell__main mui-shell__main--wide" style="grid-row:2;grid-column:2;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
       <div class="view" data-view="session" x-data style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+      <!-- Embed mode only (greenhouse decisions/0210): the session strip — the sidebar's reach in one row. -->
+      <!--SESSIONSTRIP-->
       <!--TABS-->
 
       <div style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
@@ -1678,9 +1734,20 @@ HTML;
     // The composer field's server round-trip on blur (validate + cross-component effects) is now the
     // framework's own remote runtime (milpaFieldRemote, bound via `remote`); no Desktop JS drives it.
 
-    // New session: open the entry overlay to configure and confirm a new session.
+    // New session: open the entry overlay to configure and confirm a new session. The sidebar's button and,
+    // in embed mode, the session strip's control (`data-new-session`) run the SAME handler (decisions/0210).
+    function openNewSession() { auth.hidden = false; }
     var newBtn = document.getElementById('milpa-new-session');
-    if (newBtn) { newBtn.addEventListener('click', function () { auth.hidden = false; }); }
+    if (newBtn) { newBtn.addEventListener('click', openNewSession); }
+    document.querySelectorAll('[data-new-session]').forEach(function (b) { b.addEventListener('click', openNewSession); });
+    // Embed mode: picking a session in the strip navigates to it as a sidebar click would — keeping embed=1,
+    // so the host's frame stays a frame.
+    var embedPick = document.getElementById('milpa-embed-session');
+    if (embedPick) {
+      embedPick.addEventListener('change', function () {
+        if (embedPick.value !== '') { location.assign('?session=' + encodeURIComponent(embedPick.value) + '&embed=1'); }
+      });
+    }
 
     // Search: filter the sidebar session list by goal text (client-side over the rendered list).
     var search = document.getElementById('milpa-search');

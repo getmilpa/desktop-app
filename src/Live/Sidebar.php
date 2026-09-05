@@ -55,8 +55,14 @@ final class Sidebar
         $this->codec = new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner($signingSecret), null);
     }
 
-    /** The sidebar's server-rendered HTML — a component with its signed envelope and a signal-driven nav. */
-    public function render(): string
+    /**
+     * The sidebar's server-rendered HTML — a component with its signed envelope and a signal-driven nav.
+     *
+     * @param bool $chrome false in embed mode (greenhouse decisions/0210): the nav to the chrome screens
+     *                     (Decisions, Capabilities, Skills, Preview, Settings) is not rendered — the host's
+     *                     navigation stands — while the session list and the actions keep their ids
+     */
+    public function render(bool $chrome = true): string
     {
         $component = new SidebarComponent();
         $props = [
@@ -64,6 +70,7 @@ final class Sidebar
             'activeSession' => $this->data?->currentSessionId() ?? '',
             'activeNav' => 'sessions',
             'decisions' => \count($this->data?->pendingDecisions() ?? []),
+            'chrome' => $chrome,
         ];
         $subject = new ComposerRender($props);
         $this->events?->dispatch(self::BEFORE_RENDER, ['sidebar' => $subject]);
@@ -83,11 +90,12 @@ final class Sidebar
         $active = (string) ($props['activeNav'] ?? 'sessions');
         $sessions = \is_array($props['sessions'] ?? null) ? $props['sessions'] : [];
         $current = (string) ($props['activeSession'] ?? '');
+        $chrome = ($props['chrome'] ?? true) !== false;
 
         return '<nav class="mui-sidebar" aria-label="main" data-milpa-runtime="alpine" data-milpa-component="desktop-sidebar" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data'
             . ' style="grid-row:1 / span 2;grid-column:1;position:static;height:auto;min-height:0">'
             . $this->brand()
-            . '<div class="mui-sidebar__nav"><div class="mui-sidebar__section">' . $this->navItems($active, (int) ($props['decisions'] ?? 0)) . '</div>'
+            . '<div class="mui-sidebar__nav"><div class="mui-sidebar__section">' . $this->navItems($active, (int) ($props['decisions'] ?? 0), $chrome) . '</div>'
             . '<div class="mui-sidebar__section" id="milpa-sessions"><span class="mui-sidebar__section-label">sessions · goal and state</span>' . $this->sessionsList($sessions, $current) . '</div></div>'
             . '<div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">'
             . '<button type="button" class="mui-btn mui-btn--subtle mui-btn--full" id="milpa-new-session">New session</button>'
@@ -95,11 +103,18 @@ final class Sidebar
             . '</div></nav>';
     }
 
-    private function navItems(string $active, int $decisions = 0): string
+    /**
+     * The nav items — all of them, or only the sessions item when the chrome is folded (embed mode,
+     * greenhouse decisions/0210): a link that would open a chrome screen is not shown inside the host.
+     */
+    private function navItems(string $active, int $decisions = 0, bool $chrome = true): string
     {
         $out = '';
         foreach (self::NAV as $item) {
             $key = $item['key'];
+            if (!$chrome && $key !== 'sessions') {
+                continue;
+            }
             // The Decisions item carries a count badge when questions are parked (greenhouse decisions/0195):
             // the human sees there is a decision waiting without opening the pane. Hidden at zero.
             $badge = ($key === 'decisions' && $decisions > 0)
