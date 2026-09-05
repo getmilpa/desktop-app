@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.48.0](https://github.com/getmilpa/desktop-app/compare/v0.47.0...v0.48.0) (2026-09-05)
+
+
+### Features
+
+* **desktop:** the Desktop as the admin's guest — embed mode and the Agent section ([#87](https://github.com/getmilpa/desktop-app/issues/87)) ([67fddfe](https://github.com/getmilpa/desktop-app/commit/67fddfe3998833b6668d9f2bd4368381fac2163d))
+
 ## [0.47.0](https://github.com/getmilpa/desktop-app/compare/v0.46.0...v0.47.0) (2026-09-05)
 
 
