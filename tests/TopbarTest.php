@@ -16,8 +16,11 @@ namespace Milpa\DesktopApp\Tests;
 
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\DesktopSettings;
+use Milpa\DesktopApp\I18n\Catalog;
 use Milpa\DesktopApp\Live\Topbar;
 use Milpa\DesktopApp\Live\TopbarComponent;
+use Milpa\DesktopApp\Tests\Fixtures\AllowAllMiddleware;
 use Milpa\Eventing\EventDispatcher;
 use Milpa\Live\ValueObjects\ComponentContext;
 use PHPUnit\Framework\TestCase;
@@ -83,10 +86,48 @@ final class TopbarTest extends TestCase
         $contract = TopbarComponent::contract();
         self::assertSame('desktop-topbar', $contract->name);
         self::assertSame([], $contract->actions);
+        self::assertArrayHasKey('principal', $contract->propsSchema, 'the door\'s chips are declared props (decisions/0209)');
+        self::assertArrayHasKey('gate', $contract->propsSchema);
 
         $component = new TopbarComponent();
-        $state = $component->mount(['state' => 'working', 'mode' => 'Continue automatically', 'hasSession' => true], new ComponentContext('topbar'));
+        $state = $component->mount(['state' => 'working', 'mode' => 'Continue automatically', 'hasSession' => true, 'principal' => 'passkey:rod', 'gate' => 'passkey', 'gateKind' => 'custom'], new ComponentContext('topbar'));
         self::assertSame('working', $state->data['state']);
         self::assertSame('Continue automatically', $state->data['mode']);
+        self::assertSame('passkey:rod', $state->meta['principal']);
+        self::assertSame('passkey', $state->meta['gate']);
+        self::assertSame('custom', $state->meta['gateKind']);
+        self::assertSame('', $component->mount([], new ComponentContext('topbar'))->meta['principal'], 'nobody by default');
+    }
+
+    public function testTheChipsSayWhoTheGateLetInAndWhichGateStands(): void
+    {
+        // Nobody signed in, the default door: the gate chip alone, naming loopback (greenhouse decisions/0209).
+        $anonymous = (new Topbar('secret'))->render();
+        self::assertStringContainsString('data-gate="loopback"', $anonymous);
+        self::assertStringContainsString('gate: loopback', $anonymous);
+        self::assertStringNotContainsString('signed in as', $anonymous);
+        self::assertStringNotContainsString('data-principal=', $anonymous);
+        self::assertStringNotContainsString('mui-badge--warning', $anonymous, 'the default is not a fallback');
+
+        // A gate authenticated the request: the principal chip appears with the actor's id, escaped.
+        $signedIn = (new Topbar('secret'))->render('passkey:rod<b>');
+        self::assertStringContainsString('data-principal="passkey:rod&lt;b&gt;"', $signedIn);
+        self::assertStringContainsString('signed in as passkey:rod&lt;b&gt;', $signedIn);
+
+        // The gate chip follows the judged settings: open, custom, and a fallback wearing the warning badge.
+        $open = (new Topbar('secret', null, null, new DesktopSettings(middleware: [])))->render();
+        self::assertStringContainsString('data-gate="open"', $open);
+        $custom = (new Topbar('secret', null, null, new DesktopSettings(middleware: [AllowAllMiddleware::class])))->render();
+        self::assertStringContainsString('data-gate="custom"', $custom);
+        $fallback = (new Topbar('secret', null, null, new DesktopSettings(middleware: ['Acme\\Nope'])))->render();
+        self::assertStringContainsString('data-gate="fallback"', $fallback);
+        self::assertStringContainsString('desktop-chip--gate mui-badge--warning', $fallback);
+
+        // The chips speak the declared locale.
+        $spanish = (new Topbar('secret', null, null, new DesktopSettings(locale: 'es')))->render('passkey:rod');
+        self::assertStringContainsString('puerta: loopback', $spanish);
+        self::assertStringContainsString('sesión iniciada como passkey:rod', $spanish);
+        $explicit = (new Topbar('secret', null, null, null, new Catalog('es')))->render();
+        self::assertStringContainsString('puerta: loopback', $explicit, 'a catalog given directly wins over the settings\' locale');
     }
 }

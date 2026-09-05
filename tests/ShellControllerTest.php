@@ -18,6 +18,10 @@ use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
+use Milpa\DesktopApp\DesktopSettings;
+use Milpa\DesktopApp\Http\RequestPrincipal;
+use Milpa\DesktopApp\I18n\Catalog;
+use Milpa\DesktopApp\Tests\Fixtures\PasskeyGateStub;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
 use Milpa\DesktopApp\Live\RolesView;
@@ -655,5 +659,93 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-milpa-component="desktop-thinking"', $body);
         // The agent's message and the turn ending both close the block.
         self::assertStringContainsString("on('agent.message', function (d) { endReasoning();", $body);
+    }
+
+    public function testEveryDesktopFetchPassesThroughOneGuard(): void
+    {
+        // The Desktop stands behind the same door as the admin (greenhouse decisions/0209): a gate may answer any
+        // call instead of the handler, so ONE helper reads every fetch() result — a 401 with `signin` leaves for
+        // sign-in and comes back (`next`), a 403 is told once, any other non-2xx rejects with its status.
+        $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        self::assertStringContainsString('function guarded(r) {', $body);
+        self::assertStringContainsString("if (r.status === 401 && typeof body.signin === 'string' && body.signin !== '')", $body);
+        self::assertStringContainsString("location.assign(body.signin + '?next=' + encodeURIComponent(location.pathname + location.search))", $body);
+        self::assertStringContainsString('return new Promise(function () {});', $body, 'a page that is leaving settles nothing');
+        self::assertStringContainsString('if (r.status === 403) {', $body);
+        self::assertStringContainsString("tr('guard.forbidden.reason', body.error) : tr('guard.forbidden')", $body);
+        self::assertStringContainsString('return Promise.reject(err);', $body);
+
+        // Every call site the reader mapped goes through it.
+        self::assertStringContainsString("}).then(guarded).then(function () { location.reload(); })", $body, 'POST /desktop/sessions');
+        self::assertStringContainsString("}).then(guarded).then(function () {\n          showSaved(true, tr('settings.saved'));", $body, 'POST /desktop/settings — Saved only on a 2xx');
+        self::assertStringContainsString("showSaved(false, tr('settings.save_failed', (err && err.status) || 0));", $body);
+        self::assertStringContainsString("fetch(url, { method: 'POST', headers: hdr, body: body }).then(function (r) { return r.status === 428 ? r : guarded(r); })", $body, 'capabilities step one: the confirm gate passes, a door does not');
+        self::assertStringContainsString("fetch(url, { method: 'POST', headers: h2, body: body }).then(guarded)", $body, 'capabilities step two');
+        self::assertStringContainsString("}).then(guarded).then(function (r) { return r.json(); }).then(function (res) {", $body, 'POST /agent');
+        self::assertStringContainsString("}).catch(function (err) { failed(err, tr('guard.unreachable')); });", $body, 'the turn\'s unreachable copy comes from the catalog like its siblings');
+        self::assertStringNotContainsString("'The turn could not be reached.'", $body);
+        self::assertStringContainsString('return req.then(guarded).then(read)', $body, 'callOp → /agent/goal, /skill/invoke');
+        self::assertStringContainsString("if (!res.ok) { if (!res.told) { notice(opFailure('agent:goal', res)); } return; }", $body, 'a refusal the guard told is not told twice');
+        self::assertSame(2, substr_count($body, "}).then(guarded).catch(function (err) { failed(err, tr('guard.unreachable')); });"), 'POST /desktop/work and the mode chip\'s settings post');
+        self::assertStringContainsString("fetch('/webauthn/enroll', { method: 'GET' }).then(guarded)", $body, 'the enrol probe');
+        self::assertStringContainsString("if (err && err.status && err.status !== 404) { failed(err); return; }", $body, 'a 401/403 there is a door, not a missing one');
+        self::assertStringContainsString("enroll.textContent = tr('enroll.none');", $body);
+        self::assertStringNotContainsString("enroll.textContent = 'No passkey door", $body);
+        // Ten fetch calls (a `fetch(` with an argument — the comments' `fetch()` is not one), and not one reads
+        // its result before the guard did: eight `.then(guarded)` (callOp guards two fetches through one `req`),
+        // plus the capabilities' inline `guarded(r)`.
+        self::assertSame(10, preg_match_all('/\bfetch\((?!\))/', $body));
+        self::assertSame(8, substr_count($body, '.then(guarded)'));
+        self::assertStringContainsString("guarded(r); }).then(function (r) { return r.json(); }).then(function (a) {", $body, 'the capabilities body is read only after the guard');
+        self::assertStringNotContainsString("badge.hidden = false; setTimeout", $body, 'the old unconditional Saved is gone');
+    }
+
+    public function testTheTopbarSaysWhoTheGateLetInAndWhichGateStands(): void
+    {
+        // Who is signed in is whatever the gate left on the request (greenhouse decisions/0209): a fake
+        // `milpa.auth` context with isAuthenticated() and ->actor->id shows the chip; nothing shows none.
+        $signedIn = (new ServerRequest('GET', '/desktop'))->withAttribute(RequestPrincipal::ATTRIBUTE, PasskeyGateStub::context('passkey:rod'));
+        $body = (string) $this->controller()->shell($signedIn)->getBody();
+        self::assertStringContainsString('signed in as passkey:rod', $body);
+        self::assertStringContainsString('data-principal="passkey:rod"', $body);
+        self::assertStringContainsString('data-gate="loopback"', $body, 'the default door');
+
+        // The catalog JSON carries the phrase's template, so the chip's own attribute is what tells presence apart.
+        $anonymous = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        self::assertStringNotContainsString('data-principal=', $anonymous);
+        self::assertStringNotContainsString('desktop-chip--principal', $anonymous);
+        self::assertStringContainsString('data-gate="loopback"', $anonymous);
+
+        $unauthenticated = (new ServerRequest('GET', '/desktop'))->withAttribute(RequestPrincipal::ATTRIBUTE, new \stdClass());
+        self::assertStringNotContainsString('data-principal=', (string) $this->controller()->shell($unauthenticated)->getBody(), 'a context that cannot say it is authenticated is nobody');
+
+        // The gate chip follows the judged settings the plugin hands the shell.
+        $open = new ShellController(new EventDispatcher(new NullLogger()), settings: new DesktopSettings(middleware: []));
+        self::assertStringContainsString('data-gate="open"', (string) $open->shell(new ServerRequest('GET', '/desktop'))->getBody());
+    }
+
+    public function testTheShellSpeaksTheDeclaredLocale(): void
+    {
+        // English by default: the badge says Saved, and the client gets the same words as JSON.
+        $en = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        self::assertStringContainsString('id="milpa-settings-saved" class="mui-badge mui-badge--success" hidden>Saved</span>', $en);
+        preg_match('#<script id="milpa-desktop-i18n" type="application/json">(.*?)</script>#s', $en, $m);
+        self::assertNotEmpty($m, 'the catalog rides the page');
+        self::assertStringNotContainsString('<', $m[1], 'no message can close the script element');
+        $i18n = json_decode($m[1], true);
+        self::assertSame('Saved', $i18n['settings.saved']);
+        self::assertSame('Not allowed here (%s)', $i18n['guard.forbidden.reason']);
+        self::assertLessThan(strpos($en, 'function guarded(r)'), strpos($en, 'id="milpa-desktop-i18n"'), 'the JSON precedes the script that reads it');
+
+        // Spanish declared: the same page, the same keys, the other words.
+        $es = new ShellController(new EventDispatcher(new NullLogger()), settings: new DesktopSettings(locale: 'es'));
+        $body = (string) $es->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        self::assertStringContainsString('hidden>Guardado</span>', $body);
+        self::assertStringContainsString('"settings.saved":"Guardado"', $body);
+        self::assertStringContainsString('puerta: loopback', $body, 'the topbar chip too');
+
+        $explicit = new ShellController(new EventDispatcher(new NullLogger()), catalog: new Catalog('es'));
+        self::assertStringContainsString('hidden>Guardado</span>', (string) $explicit->shell(new ServerRequest('GET', '/desktop'))->getBody(), 'a catalog given directly wins');
     }
 }

@@ -40,9 +40,15 @@ composer create-project milpa/framework my-app   # 1. a Milpa app
 cd my-app
 composer require milpa/desktop-app                # 2. add the plugin
 # 3. declare Milpa\DesktopApp\DesktopAppPlugin::class in config/plugins.php
-php -S 127.0.0.1:8080 -t public public/router.php # 4. serve over HTTP
-# 5. open http://127.0.0.1:8080/desktop
+php -S 127.0.0.1:8080 -t public public/router.php  # 4. serve over HTTP
+# 5. open http://localhost:8080/desktop
 ```
+
+The origin is `localhost`, not `127.0.0.1`: WebAuthn accepts `localhost` as a relying-party id and refuses an
+IP, so a passkey gate in front of the Desktop (below) only matches an origin spelled that way. The server is
+still *bound* on the IP: PHP's built-in server listens on one address family, and `php -S localhost:8080` lands
+on `[::1]` alone wherever the name resolves to IPv6 first, refusing every IPv4 client — a browser opening
+`localhost` reaches a `127.0.0.1` bind with family fallback, and the passkey `rpId` matches the name either way.
 
 Step 4 needs a `public/router.php` so the built-in server hands non-file requests (the shell, and the
 `/desktop/assets/*.css` served by a route, not from disk) to the Kernel:
@@ -73,6 +79,48 @@ MILPA_APP_DIR=/path/to/my-app npm start
 - `GET /desktop` — the Milpa Desktop dashboard, served over HTTP. Point an Electron `loadURL` (or a
   browser) at it. Built-in panels: the consent gate, the activity stream, and the passkey doors.
 - `GET /desktop/events` — the shell's live event feed (SSE), the transport when no hub is wired.
+
+Every one of those routes — and the data, export, live and write endpoints — stands behind the door below.
+Only the assets under `/desktop/assets/*` are public.
+
+## Behind the door
+
+The Desktop stands behind the same door as the admin (greenhouse `decisions/0209`). The plugin attaches the
+PSR-15 middleware the app declares under **`desktop.middleware`** to every shell route; **since this version the
+default answers only to loopback** (`Milpa\DesktopApp\Http\LoopbackOnlyMiddleware`): a request from the LAN gets
+`403` — a small page for a browser, `{"ok":false,"error":"loopback_only"}` for the shell's own calls. Only a
+literally empty list `[]` opens the Desktop. Anything misdeclared — a non-string entry, an associative map, a
+value that is not a list, a class that does not exist or is not a PSR-15 middleware — makes the **whole** stack
+fall to loopback-only, never open and never the half that loads; the topbar chip says `gate: fallback` in warning.
+`desktop.locale` (`en` default, `es`) chooses the language of the chips and the notices.
+
+To put it behind a passkey, name `milpa/app-runtime`'s gate — the Desktop does not import it; it names the class:
+
+```php
+// config/app.php
+'desktop' => ['middleware' => [Milpa\AppRuntime\Web\PasskeyGateMiddleware::class]],
+```
+
+`PasskeyPlugin` must be declared in `config/plugins.php`, `'passkey' => ['rpId' => 'localhost']` set in
+`config/app.php`, and the key enrolled with the scope the gate checks plus the one the turns need:
+
+```bash
+php bin/coa identity:enroll --fingerprint=<credential id> --scopes=milpa.admin --scopes=agent:run --sign
+```
+
+From then on identity replaces the address. A browser loading `/desktop` without a session is sent to
+`/webauthn/signin?next=/desktop`; every `fetch()` the shell makes passes through one guard, so a gated call that
+answers `401 {signin}` sends the browser to sign in and back (`next` carries the path and query), a `403` is told as
+a system notice, and «Saved» is only ever said on a `2xx`. The topbar shows `signed in as <actor id>` — read from
+the `milpa.auth` attribute the gate leaves on the request, never from a cookie — and `gate: passkey` when that class
+is the whole stack (`loopback · custom · open · fallback` otherwise). The assets are exempt: a JSON `401` to a
+`<link>` or `<script>` would break the page silently.
+
+**Upgrading.** Before this version the Desktop had no gate: every route was open to whoever could reach the port.
+Now the default is loopback-only, so a house that serves the Desktop on the LAN must declare its gate explicitly —
+a passkey gate as above, its own PSR-15 stack, or `[]` to keep it open on purpose. Naming the passkey gate without
+`PasskeyPlugin` declared and an `rpId` set is a fail-closed `500` at the first gated request, as it is for the
+admin: the router refuses to skip a middleware it cannot resolve.
 
 ## Add a dashboard panel (the DX)
 

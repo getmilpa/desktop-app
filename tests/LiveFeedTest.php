@@ -86,7 +86,7 @@ final class LiveFeedTest extends TestCase
         $kernel = $this->boot();
         $this->dispatcher($kernel)->dispatch(DesktopAppPlugin::CHANGED_EVENT, ['shellEvent' => new ShellEvent('seen')]);
 
-        $request = (new ServerRequest('GET', '/desktop/events'))->withHeader('Last-Event-ID', '1');
+        $request = (new ServerRequest('GET', '/desktop/events', [], null, '1.1', ['REMOTE_ADDR' => '127.0.0.1']))->withHeader('Last-Event-ID', '1');
         $response = (new RequestHandler($kernel, new Psr17Factory()))->handle($request);
         self::assertStringNotContainsString('event: seen', $this->emit($response));
     }
@@ -127,7 +127,8 @@ final class LiveFeedTest extends TestCase
 
     private function get(Kernel $kernel, string $target): ResponseInterface
     {
-        return (new RequestHandler($kernel, new Psr17Factory()))->handle(new ServerRequest('GET', $target));
+        // The feed stands behind the Desktop's door (greenhouse decisions/0209): the request comes from loopback.
+        return (new RequestHandler($kernel, new Psr17Factory()))->handle(new ServerRequest('GET', $target, [], null, '1.1', ['REMOTE_ADDR' => '127.0.0.1']));
     }
 
     /** Run the streaming body's callback and capture the bytes it writes (what the emitter runs in production). */

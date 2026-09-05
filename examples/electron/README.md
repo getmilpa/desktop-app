@@ -2,8 +2,11 @@
 
 A minimal, generic Electron host for any Milpa app running `milpa/desktop-app`. It does two things:
 
-1. starts the app's HTTP server (PHP's built-in server, via the app's `public/router.php`), and
-2. loads `GET /desktop` in a native window at a **real origin** (`http://127.0.0.1:<port>`).
+1. starts the app's HTTP server (PHP's built-in server bound on `127.0.0.1`, via the app's
+   `public/router.php` — bound on the IP because that server listens on one address family only), and
+2. loads `GET /desktop` in a native window at a **real origin** (`http://localhost:<port>` — `localhost`,
+   not an IP: WebAuthn accepts it as a relying-party id, and a passkey gate declared under
+   `desktop.middleware` matches it with `passkey.rpId = 'localhost'`).
 
 The Milpa Desktop is not an Electron app that drives a separate Milpa — it is a Milpa that serves its
 own shell over HTTP. This host just wraps that shell in a native window, so the passkey ceremony, the

@@ -15,6 +15,8 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Live;
 
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\DesktopApp\DesktopSettings;
+use Milpa\DesktopApp\I18n\Catalog;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Security\HmacStateSigner;
 use Milpa\Live\Security\SignedXhtmlStateTransferCodec;
@@ -28,6 +30,10 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  * header (session goal/id/mode on the left; live state, mode and Export on the right), carries the signed state
  * envelope, binds the shared signals, and emits `desktop.topbar.before_render` / `after_render` so other
  * plugins can extend it.
+ *
+ * The right side also carries the door's chips (greenhouse decisions/0209): `signed in as <actor id>` when the
+ * gate in front of the route authenticated the request — the Desktop invents no identity — and `gate: <label>`
+ * from {@see DesktopSettings::gateLabel()}, the warning badge when a misdeclared gate fell back to loopback-only.
  */
 final class Topbar
 {
@@ -40,19 +46,35 @@ final class Topbar
 
     private readonly SignedXhtmlStateTransferCodec $codec;
 
+    private readonly DesktopSettings $settings;
+
+    private readonly Catalog $catalog;
+
+    /**
+     * @param DesktopSettings|null $settings the door as declared — the gate chip reads it; null runs on the defaults (loopback-only)
+     * @param Catalog|null         $catalog  the copy the chips speak; null answers in English
+     */
     public function __construct(
         string $signingSecret,
         private readonly ?DesktopData $data = null,
         private readonly ?MilpaEventDispatcherInterface $events = null,
+        ?DesktopSettings $settings = null,
+        ?Catalog $catalog = null,
     ) {
         $this->codec = new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner($signingSecret), null);
+        $this->settings = $settings ?? new DesktopSettings();
+        $this->catalog = $catalog ?? $this->settings->catalog();
     }
 
-    /** The topbar's server-rendered HTML — a component with its signed envelope and signal-bound badges. */
-    public function render(): string
+    /**
+     * The topbar's server-rendered HTML — a component with its signed envelope and signal-bound badges.
+     *
+     * @param string|null $principal who the gate let in — the authenticated actor's id, never a session id — or null when nobody is signed in
+     */
+    public function render(?string $principal = null): string
     {
         $component = new TopbarComponent();
-        $subject = new ComposerRender($this->props());
+        $subject = new ComposerRender($this->props($principal));
         $this->events?->dispatch(self::BEFORE_RENDER, ['topbar' => $subject]);
 
         $context = new ComponentContext(componentId: self::COMPONENT_ID);
@@ -65,7 +87,7 @@ final class Topbar
     }
 
     /** @return array<string, mixed> */
-    private function props(): array
+    private function props(?string $principal): array
     {
         $id = $this->data?->currentSessionId() ?? '';
         $goal = '';
@@ -88,6 +110,9 @@ final class Topbar
             'modeKey' => $modeKey,
             'state' => $state,
             'hasSession' => $id !== '',
+            'principal' => $principal ?? '',
+            'gate' => $this->settings->gateLabel(),
+            'gateKind' => $this->settings->gateKind(),
         ];
     }
 
@@ -126,7 +151,7 @@ final class Topbar
         $id = (string) ($props['sessionId'] ?? '');
         $href = '/desktop/export' . ($id !== '' ? '?session=' . rawurlencode($id) : '');
 
-        return sprintf(
+        return $this->chips($props) . sprintf(
             // The session state is a SHARED signal — the badge reads it (a panel can read the same).
             '<span class="%s" id="milpa-topstate" x-text="$store.milpa[\'session.state.label\']">%s</span>'
             // The mode is a SHARED signal: this badge and the composer's chip read one truth (decisions/0189).
@@ -137,6 +162,32 @@ final class Topbar
             htmlspecialchars((string) ($props['mode'] ?? 'Ask before changing'), ENT_QUOTES),
             htmlspecialchars($href, ENT_QUOTES),
         );
+    }
+
+    /**
+     * The door's chips (greenhouse decisions/0209): who signed in — only when a gate authenticated the request;
+     * the Desktop invents no identity — and the gate in effect (`loopback | custom | passkey | open | fallback`),
+     * a fallback wearing the warning badge because a misdeclared gate is something to fix.
+     *
+     * @param array<string, mixed> $props
+     */
+    private function chips(array $props): string
+    {
+        $principal = (string) ($props['principal'] ?? '');
+        $label = (string) ($props['gate'] ?? DesktopSettings::GATE_LOOPBACK);
+        $gateClass = 'mui-badge desktop-chip desktop-chip--gate' . (($props['gateKind'] ?? '') === DesktopSettings::GATE_FALLBACK ? ' mui-badge--warning' : '');
+        $e = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES);
+
+        $signedIn = $principal === ''
+            ? ''
+            : '<span class="mui-badge desktop-chip desktop-chip--principal" data-principal="' . $e($principal) . '">'
+                . $e($this->catalog->tr('topbar.signed_in', $principal))
+                . '</span>';
+
+        return $signedIn
+            . '<span class="' . $gateClass . '" data-gate="' . $e($label) . '">'
+            . $e($this->catalog->tr('chip.gate', $this->catalog->tr('gate.kind.' . $label)))
+            . '</span>';
     }
 
     private function envelope(StateSnapshot $state): string
