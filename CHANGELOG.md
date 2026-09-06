@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.52.1](https://github.com/getmilpa/desktop-app/compare/v0.52.0...v0.52.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* the inbox reads the graph's name from the key the engine actually sends ([#97](https://github.com/getmilpa/desktop-app/issues/97)) ([a7013c2](https://github.com/getmilpa/desktop-app/commit/a7013c2afaa6e3c5880f9085f2ac0a3bbfe93733))
+
 ## [0.52.0](https://github.com/getmilpa/desktop-app/compare/v0.51.0...v0.52.0) (2026-09-06)
 
 
