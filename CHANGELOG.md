@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.52.2](https://github.com/getmilpa/desktop-app/compare/v0.52.1...v0.52.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* the Desktop's settings and session store live at the app root, never at the working directory ([#99](https://github.com/getmilpa/desktop-app/issues/99)) ([589e13b](https://github.com/getmilpa/desktop-app/commit/589e13b1d5ac8f6ae0219d92953f5924f6d07fb7))
+
 ## [0.52.1](https://github.com/getmilpa/desktop-app/compare/v0.52.0...v0.52.1) (2026-09-06)
 
 
