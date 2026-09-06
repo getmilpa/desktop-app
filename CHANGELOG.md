@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.49.0](https://github.com/getmilpa/desktop-app/compare/v0.48.0...v0.49.0) (2026-09-06)
+
+
+### Features
+
+* **views:** the shell emits one runtime through LiveBoot, and eight surfaces become client modules ([#89](https://github.com/getmilpa/desktop-app/issues/89)) ([ec9a43c](https://github.com/getmilpa/desktop-app/commit/ec9a43c4b3fc138a0886d364d0263e7151c2dcdf))
+
 ## [0.48.0](https://github.com/getmilpa/desktop-app/compare/v0.47.0...v0.48.0) (2026-09-05)
 
 
