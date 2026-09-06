@@ -26,6 +26,7 @@ use Milpa\DesktopApp\Controllers\MutationController;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Live\ComposerField;
 use Milpa\DesktopApp\Data\DesktopData;
+use Milpa\Live\Contracts\Component\DeclaresComponents;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Http\LoopbackOnlyMiddleware;
 use Milpa\DesktopApp\Live\DesktopAssets;
@@ -88,8 +89,60 @@ use Milpa\Runtime\Support\RootResolver;
     name: 'DesktopApp',
     type: 'Web',
 )]
-final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface, StackProviderInterface, AdminGuest
+final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface, StackProviderInterface, AdminGuest, DeclaresComponents
 {
+    /**
+     * The components this plugin brings, so `components:catalogue` can name them and say they are
+     * ours (greenhouse decisions/0214).
+     *
+     * It is a SECOND list beside the shell's `declare()` calls, and a second list is a lie waiting
+     * to happen — so `DeclarationMatchesTheShellTest` asserts the two agree. Folding the shell's
+     * calls into a loop is not possible here: each carries its own paint callable, which is what
+     * makes a surface a surface.
+     */
+    public const array COMPONENTS = [
+        Live\ActivityComponent::class,
+        Live\AgentMessageComponent::class,
+        Live\AuthOverlayComponent::class,
+        Live\CapabilitiesScreenComponent::class,
+        Live\ComposerBarComponent::class,
+        Live\ComposerMessageComponent::class,
+        Live\ContextComponent::class,
+        Live\ConversationComponent::class,
+        Live\DecisionsInboxComponent::class,
+        Live\GateComponent::class,
+        Live\ResultClaimComponent::class,
+        Live\ScreenPreviewComponent::class,
+        Live\SessionStripComponent::class,
+        Live\SettingsScreenComponent::class,
+        Live\SidebarComponent::class,
+        Live\SkillsScreenComponent::class,
+        Live\StatusBarComponent::class,
+        Live\SystemNoticeComponent::class,
+        Live\TabsComponent::class,
+        Live\TaskComponent::class,
+        Live\ThinkingComponent::class,
+        Live\ToolCallComponent::class,
+        Live\TopbarComponent::class,
+        Live\UserMessageComponent::class,
+        Live\WorkBoardComponent::class,
+        AgentViewComponent::class,
+    ];
+
+    /**
+     * The component definitions this plugin declares.
+     *
+     * {@see AgentViewComponent} is listed explicitly because it never enters the shell's registry —
+     * it is built inside `AgentView::of()` for the admin's guest section — and a component nobody
+     * can discover is a capability nobody can use.
+     *
+     * @return list<class-string<\Milpa\Live\Contracts\Component\ComponentDefinitionInterface>>
+     */
+    public function declaredComponents(): array
+    {
+        return self::COMPONENTS;
+    }
+
     /** A plugin dispatches this (with a {@see ShellEvent} in `payload['shellEvent']`) to push a live update. */
     public const CHANGED_EVENT = 'desktop.shell.changed';
 
