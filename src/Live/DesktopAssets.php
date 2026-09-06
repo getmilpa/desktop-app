@@ -120,11 +120,11 @@ final class DesktopAssets
         'desktop-screens' => ['css', 'js'],
         'desktop-skills' => ['css'],
         'desktop-statusbar' => ['css'],
-        // The admin's Agent region (greenhouse decisions/0210): a surface this package contributes to
-        // SOMEBODY ELSE's page. Its renderer loads these two itself — milpa/admin collects no client
-        // assets from a section's renderer — but they are declared here like every other component's, so
-        // the route serves them and the suite proves they exist.
-        'desktop-agent-guest' => ['css', 'js'],
+        // The Agent region of a HOST panel (greenhouse decisions/0211, slice 3): the root of the view
+        // this package declares to milpa/admin. It ships the region's frame — the column its surfaces
+        // sit in — and no module: the region writes no behaviour of its own, it composes surfaces that
+        // bring theirs. The host emits this file like any other, from the declaration its renderer makes.
+        'desktop-agent' => ['css'],
         self::GUARD => ['js'],
         self::BUS => ['js'],
         self::HUB => ['js'],

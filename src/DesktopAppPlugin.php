@@ -16,8 +16,8 @@ namespace Milpa\DesktopApp;
 
 use Milpa\Attributes\PluginMetadata;
 use Milpa\DesktopApp\Admin\AdminGuest;
-use Milpa\DesktopApp\Admin\AgentGuestComponent;
-use Milpa\DesktopApp\Admin\AgentGuestRenderer;
+use Milpa\DesktopApp\Admin\AgentView;
+use Milpa\DesktopApp\Admin\AgentViewComponent;
 use Milpa\DesktopApp\Controllers\AssetsController;
 use Milpa\DesktopApp\Controllers\DataController;
 use Milpa\DesktopApp\Controllers\EventsController;
@@ -363,14 +363,17 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
     }
 
     /**
-     * The Desktop's one section in the admin panel (greenhouse decisions/0210): «Agent», the shell in embed
-     * mode as a region of the admin's main, behind the same door.
+     * The Desktop's one section in the admin panel: «Agent» — the conversation composed INLINE in the
+     * panel's own document, behind the same door (greenhouse decisions/0211, slice 3).
      *
-     * Called by milpa/admin at request time, and by nothing else: the section brings its own component
-     * ({@see AgentGuestComponent}) and renderer ({@see AgentGuestRenderer}), so the admin registers them
-     * under `desktop-agent` and never learns this plugin's name. The props are the Desktop's paths and its
-     * gate as judged now — the same `gate: <label>` the topbar chip says — and the title speaks the declared
-     * locale. Without milpa/admin there is nobody to call this; `AdminSection` would not even be loadable.
+     * The section declares a whole VIEW ({@see AgentView}), not one component: the region's root plus every
+     * `desktop-*` component behind it, with the SHELL's own definitions and renderers, the props they mount
+     * with and the signals the page must seed. The admin registers the tree under a layer of its own,
+     * compiles it into main, emits ONE runtime for the page — every file those renderers declared, each
+     * once — and serves them all from its own live wire. The iframe of decisions/0210 is gone with it.
+     *
+     * Called by milpa/admin at request time, and by nothing else: without the admin there is nobody to call
+     * this, and `AdminSection` would not even be loadable.
      *
      * @return list<\Milpa\Admin\Section\AdminSection>
      */
@@ -378,22 +381,27 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
     {
         $settings = $this->settings();
         $catalog = $settings->catalog();
+        // Asked of the UNDERLYING container, like the gate above: the wrapper's has() also says yes to
+        // anything it could auto-wire, and neither of these can be auto-wired — a plugin whose boot() never
+        // ran would fatal inside the admin's discovery instead of declaring the section it can declare.
+        $registered = $this->container->getContainer();
+        $live = $registered->has(DesktopComponents::class) ? $this->container->get(DesktopComponents::class) : null;
+        $data = $registered->has(DesktopData::class) ? $this->container->get(DesktopData::class) : null;
 
         return [
-            new \Milpa\Admin\Section\AdminSection(
-                id: AgentGuestComponent::SECTION,
+            \Milpa\Admin\Section\AdminSection::ofView(
+                id: AgentViewComponent::SECTION,
                 title: $catalog->tr('agent.title'),
-                component: AgentGuestComponent::NAME,
-                props: [
-                    'embed' => self::SHELL_PATH . '?' . ShellController::EMBED_PARAM . '=1',
-                    'open' => self::SHELL_PATH,
-                    'gate' => $settings->gateLabel(),
-                    'signin' => self::SIGNIN_PATH,
-                ],
+                view: AgentView::of(
+                    $live instanceof DesktopComponents ? $live : new DesktopComponents($this->liveSecret('signing'), $this->liveSecret('csrf')),
+                    $settings,
+                    $catalog,
+                    $data instanceof DesktopData ? $data : null,
+                    self::SHELL_PATH,
+                    self::SIGNIN_PATH,
+                ),
                 order: 60,
                 group: 'agent',
-                definition: new AgentGuestComponent(),
-                renderer: new AgentGuestRenderer($catalog),
                 icon: '◈',
             ),
         ];

@@ -16,8 +16,8 @@ namespace Milpa\DesktopApp\Tests;
 
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Admin\AdminGuest;
-use Milpa\DesktopApp\Admin\AgentGuestComponent;
-use Milpa\DesktopApp\Admin\AgentGuestRenderer;
+use Milpa\DesktopApp\Admin\AgentViewComponent;
+use Milpa\DesktopApp\Admin\AgentViewRenderer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\DesktopAppPlugin;
 use Milpa\DesktopApp\Http\LoopbackOnlyMiddleware;
@@ -174,11 +174,11 @@ final class DesktopAppPluginTest extends TestCase
         self::assertSame($container, (new DesktopAppPlugin($container))->container());
     }
 
-    public function testItIsTheAdminsGuestAndDeclaresOneAgentSection(): void
+    public function testItIsTheAdminsGuestAndDeclaresTheAgentSectionAsAView(): void
     {
-        // The Desktop as the admin's guest (greenhouse decisions/0210): the plugin class carries the admin's
-        // contract through the AdminGuest bridge — the admin, installed here, finds it by instanceof — and
-        // declares ONE section: the shell in embed mode, with the Desktop's paths and gate as props.
+        // The Desktop as the admin's guest (greenhouse decisions/0210, 0211): the plugin class carries the
+        // admin's contract through the AdminGuest bridge — the admin, installed here, finds it by instanceof
+        // — and declares ONE section, which since slice 3 declares a whole VIEW instead of one component.
         $plugin = new DesktopAppPlugin(new DIContainer());
         self::assertInstanceOf(AdminGuest::class, $plugin);
         self::assertInstanceOf(\Milpa\Admin\Section\AdminSectionProvider::class, $plugin);
@@ -189,19 +189,43 @@ final class DesktopAppPluginTest extends TestCase
         self::assertInstanceOf(\Milpa\Admin\Section\AdminSection::class, $agent);
         self::assertSame('agent', $agent->id);
         self::assertSame('Agent', $agent->title, 'the title from the Desktop\'s catalog, English by default');
-        self::assertSame('desktop-agent', $agent->component);
-        self::assertSame(['embed' => '/desktop?embed=1', 'open' => '/desktop', 'gate' => 'loopback', 'signin' => '/webauthn/signin'], $agent->props);
         self::assertSame(60, $agent->order, 'after the host\'s own 10..40 (greenhouse decisions/0210)');
         self::assertSame('agent', $agent->group);
         self::assertSame('◈', $agent->icon);
-        self::assertTrue($agent->isCustom(), 'it brings its own component and renderer');
-        self::assertInstanceOf(AgentGuestComponent::class, $agent->definition);
-        self::assertInstanceOf(AgentGuestRenderer::class, $agent->renderer);
+
+        // The narrow shape is gone: no `component`, no section props, no single definition/renderer pair.
+        self::assertSame('', $agent->component);
+        self::assertSame([], $agent->props);
+        self::assertFalse($agent->isCustom());
+        self::assertTrue($agent->hasView(), 'the section declares a view (greenhouse decisions/0211, slice 3)');
+
+        $view = $agent->view;
+        self::assertInstanceOf(\Milpa\Admin\Section\DeclaredView::class, $view);
+        self::assertSame('<milpa:desktop-agent id="milpa-agent"/>', $view->markup, 'ONE root: the region contains and governs its own surfaces');
+        self::assertSame(['open' => '/desktop', 'gate' => 'loopback', 'signin' => '/webauthn/signin'], $view->props['desktop-agent']);
+        self::assertInstanceOf(AgentViewComponent::class, $view->definitions['desktop-agent']);
+        self::assertInstanceOf(AgentViewRenderer::class, $view->renderers['desktop-agent']);
+        self::assertFalse($view->seedsNothing(), 'the view seeds the signals its surfaces read');
+        self::assertSame('chat', $view->signals['desktop.tab']);
+        self::assertArrayHasKey('session.summary', $view->computed);
 
         // The props follow the declared door and locale — the gate the topbar chip says, the title in Spanish.
         $es = self::withConfig(['desktop' => ['locale' => 'es', 'middleware' => []]])->adminSections()[0];
         self::assertSame('Agente', $es->title);
-        self::assertSame('open', $es->props['gate']);
+        self::assertSame('open', $es->view?->props['desktop-agent']['gate']);
+    }
+
+    /**
+     * A plugin that was never booted still declares a well-formed section — the registry it reads from the
+     * container is not there, so the view carries the region's root and nothing else. The alternative is a
+     * fatal inside milpa/admin's discovery, which would take the whole panel down with it.
+     */
+    public function testAnUnbootedPluginStillDeclaresTheSection(): void
+    {
+        $view = (new DesktopAppPlugin(new DIContainer()))->adminSections()[0]->view;
+
+        self::assertInstanceOf(\Milpa\Admin\Section\DeclaredView::class, $view);
+        self::assertSame(['desktop-agent'], $view->names(), 'no shell surfaces: nothing declared them');
     }
 
     public function testLifecycleHooksAreInert(): void

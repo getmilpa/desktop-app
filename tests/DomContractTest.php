@@ -17,8 +17,8 @@ namespace Milpa\DesktopApp\Tests;
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\Data\DesktopData;
-use Milpa\DesktopApp\Admin\AgentGuestComponent;
-use Milpa\DesktopApp\Admin\AgentGuestRenderer;
+use Milpa\DesktopApp\Admin\AgentViewComponent;
+use Milpa\DesktopApp\Admin\AgentViewRenderer;
 use Milpa\DesktopApp\Live\CapabilitiesScreen;
 use Milpa\DesktopApp\Live\ComposerRender;
 use Milpa\DesktopApp\Live\DecisionsInbox;
@@ -163,10 +163,10 @@ final class DomContractTest extends TestCase
         // `data-activity-empty` only exists while nothing has been recorded.
         $bare = new ShellController(new EventDispatcher(new NullLogger()));
 
-        // …and the surface this package contributes to SOMEBODY ELSE's page (greenhouse decisions/0210):
-        // the admin's Agent region, whose module reaches for hooks the shell's own pages never print.
-        $guest = (new AgentGuestRenderer())->render(
-            new AgentGuestComponent(),
+        // …and the surface this package contributes to SOMEBODY ELSE's page (greenhouse decisions/0211,
+        // slice 3): the admin's Agent region, which composes the SAME surfaces into a host's document.
+        $guest = (new AgentViewRenderer($withData->components(), $data))->render(
+            new AgentViewComponent(),
             new RenderRequest(new ComponentContext('milpa-admin-section-agent', route: '/milpa/admin'), ['gate' => 'loopback']),
         )->output;
 

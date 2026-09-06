@@ -132,6 +132,37 @@ test('the mode chip writes BOTH signals and persists through the door — and /m
   assert.equal(composer.menuOpen, false);
 });
 
+/**
+ * A DOOR THAT REFUSES ROLLS THE CHIP BACK. `composer.mode` is not decoration: it is the value every turn
+ * carries to the agent (greenhouse decisions/0202), so a chip reading «Continue automatically» over a
+ * server that still says «ask» is the UI lying about how much the agent may do. Reachable the moment
+ * these surfaces are used through a door that is not the Desktop's own — the admin panel composing this
+ * bar while the Desktop stands behind a gate the reader did not pass (decisions/0211, slice 3).
+ */
+test('a mode the door refuses is rolled back — the chip never disagrees with the setting', async () => {
+  const { p, composer, told } = composerPage();
+  p.signal('composer.mode', 'ask');
+  p.signal('composer.mode.label', 'Ask before changing');
+
+  // The positive control first: a door that ACCEPTS leaves the new mode standing.
+  stubFetch(p, [response(200, { ok: true })]);
+  composer.pick('auto');
+  await settle();
+  assert.equal(p.signal('composer.mode'), 'auto');
+  assert.equal(p.signal('composer.mode.label'), 'Continue automatically');
+
+  // …and a door that refuses — the Desktop gated loopback-only, read from somewhere else — puts it back.
+  const calls = stubFetch(p, [response(403, { ok: false, error: 'loopback_only' })]);
+  composer.pick('ask');
+  await settle();
+
+  assert.equal(calls[0].url, '/desktop/settings', 'the save was attempted');
+  assert.equal(p.signal('composer.mode'), 'auto', 'the VALUE every turn sends is the one the server still holds');
+  assert.equal(p.signal('composer.mode.label'), 'Continue automatically', 'and the chip says the same');
+  assert.equal(composer.isMode('auto'), true);
+  assert.deepEqual(told.slice(-1), ['Not allowed here (loopback_only)'], 'and the refusal is told, never silent');
+});
+
 // ── desktop-turn (C3) ───────────────────────────────────────────────────────────────────────────────
 test('a turn renders its answer, rides its verdict on it and moves the shared counters', async () => {
   const { p, chat } = composerPage();

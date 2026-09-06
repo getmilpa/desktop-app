@@ -78,8 +78,9 @@ MILPA_APP_DIR=/path/to/my-app npm start
 
 - `GET /desktop` — the Milpa Desktop dashboard, served over HTTP. Point an Electron `loadURL` (or a
   browser) at it. Built-in panels: the consent gate, the activity stream, and the passkey doors.
-- `GET /desktop?embed=1` — the same page in **embed mode**: the chrome folds and the shell fits one region
-  of a host page (the admin's Agent section, below). Same route, same door.
+- `GET /desktop?embed=1` — the same page in **embed mode**: the chrome folds and the shell fits one region of
+  a host page you own. Same route, same door. (The admin's Agent section does **not** use it any more — it
+  composes the Desktop's components inline; see below.)
 - `GET /desktop/events` — the shell's live event feed (SSE), the transport when no hub is wired.
 
 Every one of those routes — and the data, export, live and write endpoints — stands behind the door below.
@@ -127,71 +128,166 @@ admin: the router refuses to skip a middleware it cannot resolve.
 ## The Agent inside the admin
 
 With [`milpa/admin`](https://github.com/getmilpa/admin) installed, the Desktop becomes the admin's **guest**
-(greenhouse `decisions/0209` put both behind one door; `decisions/0210` puts the Desktop inside the panel): the
-admin's sidebar lists an **Agent** section, and opening it shows the Desktop shell — the conversation, the
-composer, the consent gate — as **one region inside the admin's main**, behind the same door. Nothing to
-configure: the admin discovers the section by `instanceof` over the booted plugins, and the Desktop names no
-dependency on the admin.
+(greenhouse `decisions/0209` put both behind one door; `decisions/0210` put the Desktop inside the panel in a
+frame; `decisions/0211` **retires the frame**): the admin's sidebar lists an **Agent** section, and opening it
+shows the Desktop's conversation — the tabs, the thread, the consent gate, the composer — **composed inline in
+the admin's own document**, behind the same door. Nothing to configure: the admin discovers the section by
+`instanceof` over the booted plugins, and the Desktop names no dependency on the admin.
 
-How it holds together:
+**There is no iframe.** The section declares a whole **view** and the host mounts it — the plugin declares, the
+runtime reconciles:
 
-- **Embed mode.** `GET /desktop?embed=1` serves the *same* shell page with `data-embed="1"` on the root element
-  and the chrome folded by CSS — the window strip, the sidebar, the topbar and the status bar are not visible;
-  the DOM is kept, so the shell script's contract does not change. The sessions stay reachable through a compact
-  **session strip** above the conversation — a Milpa Component like every shell surface (`desktop-session-strip`,
-  signed, with `desktop.session_strip.before_render` / `after_render`): the current goal, a `<select>` of every
-  session, «New session» wired to the same handler as the sidebar's button; links that would open a chrome
-  screen inside the host (Settings, Decisions, Capabilities, Skills, Preview) are not rendered. A gate that
-  sends the browser to sign in carries `next=/desktop?embed=1` — the request target — so the round trip lands
-  back in embed mode.
-- **The section.** `DesktopAppPlugin` implements the admin's `AdminSectionProvider` and declares one
-  `AdminSection`: id `agent`, title «Agent» (`Agente` under `desktop.locale: es`), order 10, group `agent`, with
-  its own Milpa Component (`desktop-agent`: `Milpa\DesktopApp\Admin\AgentGuestComponent`) and renderer
-  (`AgentGuestRenderer`). The renderer emits the region only — the host puts the header (and, the day it paints
-  it, the attribution; see below): a same-origin `<iframe src="/desktop?embed=1">` filling the main's available
-  height (computed from the admin's own tokens — topbar height and main padding — with fallbacks), plus a guest
-  bar with the `gate: <label>` chip and «Open the Desktop» (a new tab). When the Desktop stands behind the
-  **passkey** gate and the admin authenticated nobody, no frame is mounted: the region says «Sign in to open the
-  Agent» and links the sign-in door with `next` pointing back at `/milpa/admin/s/agent` (the admin's mount point,
-  read from the component context; a `?lang=` the page carried travels with it). Whatever the Desktop *answers*
-  — a 403, a 500, its sign-in door — loads inside the frame and stays there, the admin whole around it; only
-  when the frame gets **no document** from the Desktop (the app is down or unreachable, so the browser paints its
-  own error page) does an inline `onload` probe swap in «The Agent did not answer» inside the region — nothing
-  outside it moves. (`onerror` is kept too, but browsers report a failed frame navigation as a load of their
-  error page, never as an error.)
+- **The view.** `DesktopAppPlugin::adminSections()` returns one `AdminSection::ofView(...)`: id `agent`, title
+  «Agent» (`Agente` under `desktop.locale: es`), order 60, group `agent`, glyph `◈`, and a
+  `Milpa\Admin\Section\DeclaredView` built by `Milpa\DesktopApp\Admin\AgentView`. The view carries the markup
+  to compile (one root, `<milpa:desktop-agent id="milpa-agent"/>`), **every `desktop-*` definition and renderer
+  of the Desktop's one registry** — the SAME instances `/desktop` composes with, never copies — the props the
+  region mounts with, and the **signals** the page must seed (`Milpa\DesktopApp\Live\ShellSignals`, the one
+  authority both pages read, so the panel seeds exactly what `/desktop` seeds).
+- **The region.** `desktop-agent` (`Admin\AgentViewComponent` + `Admin\AgentViewRenderer`) is the root the
+  admin compiles. It emits the guest bar (the `gate: <label>` chip and «Open the Desktop», a new tab), then
+  composes — through the Desktop's own compiler — the tablist, the four panes (conversation + consent gate,
+  work board, activity, context), the composer docked below, the seven message prototypes the thread clones,
+  and the four `application/json` DATA tags the Desktop's modules read (`milpa-commands`, `milpa-desktop-i18n`,
+  `milpa-desktop-guard`, `milpa-desktop-session`). It writes **no executable script**: like `/desktop`, every
+  verb lives in a declared module.
+- **One runtime for the page.** Every file those renderers DECLARE (`DeclaresClientAssets`) rides back on the
+  render result, and the **host** emits it — styles, boot, `milpa-live`, `milpa-live-remote`, the Desktop's
+  modules, Alpine last, each URL once. The Desktop loads no Alpine and no `milpa-live` of its own inside
+  somebody else's document. Measured in Chrome on a fresh app: 18 scripts, 17 stylesheets, **zero duplicates**,
+  one Alpine, console clean.
+- **One wire.** The admin's `POST {admin.route}/live` is built over the composite registry the page compiled
+  with, so it serves the guest's components too. Measured: `desktop-tabs` `select` answered `200` with the
+  re-rendered surface and its `StateEffect` — **when the app declares one house key** (see «the two keys», below).
+- **Contained per surface.** Each surface is compiled on its own; one that throws while mounting or rendering
+  paints a small region naming it (`data-failed-component="…"`) and the rest of the Agent — and the whole
+  panel — stands. Never a 500 for the panel. The host applies the same rule per view root.
+- **Signed out.** When the Desktop stands behind the **passkey** gate and the admin authenticated nobody, the
+  view is **not composed at all**: no thread, no composer, no prototypes, and not one Desktop module emitted —
+  only «Sign in to open the Agent» with `next` pointing back at `/milpa/admin/s/agent` (the admin's mount point,
+  read from the component context; a `?lang=` the page carried travels with it). Measured in Chrome.
+- **One region, ONE language — the Desktop's declared one.** The panel's `?lang=` switches the panel's own
+  chrome; the region answers in `desktop.locale`, exactly as `/desktop` does. That is not an oversight, it is
+  what reusing the shell's own component instances costs: each surface holds the declared catalog, and the
+  page's signal seeds were declared with it too, so a bar that followed the request would be the only word in
+  the other language on an English conversation — and the mode chip would read one language until the first
+  module rewrote it in the other. What DOES follow the request is the way back: the sign-in `next` keeps
+  `?lang=`, so the panel returns in the language the human was reading it in. Measured on the cattle:
+  `GET /milpa/admin/s/agent?lang=es` → `<html lang="es">` with Spanish chrome, and every word of the region —
+  bar, tablist, composer placeholder, `#milpa-live-signals`, `#milpa-desktop-i18n` — in English.
+- **The agent session.** `/desktop` mints a session id and keeps it in a cookie; a component rendered inside
+  the host's response cannot set one, so the region **derives** it from the principal the admin authenticated
+  (`desk-admin-<hash>`). The same human returning to the panel returns to the same governed session; two humans
+  behind the same door do not share one.
 - **No hard dependency.** The plugin class carries the admin's interface through
   `Milpa\DesktopApp\Admin\AdminGuest`, an interface declared in one of two shapes when it is first loaded: it
   *extends* `Milpa\Admin\Section\AdminSectionProvider` when that interface exists (milpa/admin installed), and
   stands alone with the same one method otherwise. A fresh app **without** milpa/admin boots and serves
-  `/desktop?embed=1` — measured in a process where every `Milpa\Admin\*` name is unloadable
+  `/desktop` — measured in a process where every `Milpa\Admin\*` name is unloadable
   (`tests/Admin/AdminAbsentBootTest.php`). `milpa/admin` is a *dev* dependency here only so the suite boots the
   real panel next to the Desktop (`tests/Admin/AdminGuestTest.php`); it stays a suggestion for an app.
 
-**What the host does for a guest** — milpa/admin **0.11.0** closed the three gaps the first version of this
-guest measured against 0.10.1 (greenhouse `decisions/0210`), and the integration test now asserts them
-(`tests/Admin/AdminGuestTest.php`):
+**`?embed=1` still works, and is no longer the mechanism.** `GET /desktop?embed=1` serves the same shell page
+with `data-embed="1"` on the root and the chrome folded by CSS — a compact standalone Desktop for a host that
+wants one (an Electron window, another frame you own). The admin does not use it any more.
+
+### The doors, when they differ — measured
+
+Both the admin and the Desktop stand behind whatever gate the app declares for each (`admin.middleware`,
+`desktop.middleware`). They can differ, and the region does not pretend otherwise. Measured in Chrome on a
+fresh app (greenhouse `evidence/0527`):
+
+- **Desktop `passkey`, admin open (`[]`), nobody signed in** → the section is the sign-in offer, and the view
+  is not composed. Not a frame that would bounce, not a conversation that could not be used.
+- **Admin `passkey`, Desktop loopback-only, the browser on the LAN** → the panel renders and the region
+  composes (the admin's own door let this human in). `POST /agent` still answers `201`: the governed turn goes
+  through app-runtime's operation door, not the Desktop's. But a call to one of the **Desktop's own** routes —
+  `POST /desktop/work`, `/desktop/settings`, `/desktop/sessions` — answers `403 {"ok":false,"error":"loopback_only"}`,
+  and the Desktop's client guard **says so**: a system message lands in the conversation reading «Not allowed
+  here (loopback_only)» and the shared `desktop.notice` signal carries it. **Nothing fails silently** — which is
+  the property that matters when two doors disagree. What it does not do is *pre-empt* the mismatch: the region
+  is composed and the refusal is discovered on use, per call.
+- **A refused save is rolled back, not left showing.** The mode chip writes `composer.mode` optimistically —
+  a menu that waited on a round trip would feel broken — and puts BOTH signals back when the door refuses.
+  That matters more than it looks: `composer.mode` is the value every turn carries to the agent (greenhouse
+  `decisions/0202`), so a chip reading «Continue automatically» over a server that still says `ask` would be
+  the UI lying about how much the agent may do. The panel is the first place these surfaces are used through
+  a door that may not be theirs, which is what made it reachable.
+- The gate chip is honest about the Desktop's judged door in either case (`gate: passkey`, `gate: loopback`,
+  `gate: fallback` when a declaration could not be resolved).
+
+The way to avoid the mismatch is the one the framework already recommends: put both behind the same gate
+(greenhouse `decisions/0209`).
+
+### The two keys, and the one line that makes them one
+
+Every component signs its state envelope with the HMAC key of the package that rendered it. The admin's key is
+`admin.secret`, else `live.secret`, else one derived from its own install; the Desktop's is
+`desktop.live.<kind>_secret`, else `live.secret`, else one derived from *its* install. An app that declares
+**neither** therefore gives host and guest two different derived keys, and the admin's wire refuses the guest's
+envelope with `400 invalid_signature` — loudly, never silently, and never today for a surface the human is
+using (no shipped Desktop module drives the wire: the composer field is local, `remote: false`).
+
+Declare one house key and the wire serves the guest as it serves the host:
+
+```php
+// config/app.php
+'live' => ['secret' => getenv('MILPA_LIVE_SECRET') ?: ''],
+```
+
+Measured both ways on a fresh app: without it, `POST /milpa/admin/live` for `desktop-composer` →
+`invalid_signature`; with it, `desktop-tabs` `select` → `200`, the surface re-rendered and its effect returned.
+The residue is on the host side and named as such: `DeclaredView` does not receive the panel's own codec, so a
+guest cannot sign with the host's key without the app saying so.
+
+### What the host does for a guest
+
+milpa/admin **0.11.0** closed the three gaps the first version of this guest measured against 0.10.1
+(greenhouse `decisions/0210`), and **0.12.0** added the view contract itself (`decisions/0211`). The
+integration test asserts them (`tests/Admin/AdminGuestTest.php`):
 
 - **The context carries the principal.** The `ComponentContext` every section receives names who signed in
-  (`passkey:<id>`) or `null`; the region and the topbar agree, and behind the passkey gate a signed-in human sees
-  the frame, not the door.
+  (`passkey:<id>`) or `null`; the region and the topbar agree, and behind the passkey gate a signed-in human
+  sees the conversation, not the door.
+- **`ComponentContext::meta` carries the host's facts.** The gate label, the active section id and the
+  request's query params reach every node. The region reads `meta['query']` for `?lang=` — a view's props are
+  its own per component, so the narrow shape's `props['query']` never arrives.
 - **The host paints the attribution and the groups.** The section header says «declared by DesktopAppPlugin»;
-  the sidebar lists the Agent under the **AGENT** group heading, with its glyph `◈`; the Desktop's order (60) sits
-  after the admin's own sections, so the panel opens on Plugins, never on the guest.
+  the sidebar lists the Agent under the **AGENT** group heading, with its glyph `◈`; the Desktop's order (60)
+  sits after the admin's own sections, so the panel opens on Plugins, never on the guest.
 - **The rule reads the principal the host hands over.** With the runtime's identity chain in place
-  (`milpa/app-runtime` ≥ 0.120 and the skeleton of `milpa/framework` ≥ 0.41), the passkey session is a principal on
-  every route of the house — the admin's included, whatever its own gate — so an admin on the default loopback gate
-  still hands a signed-in principal to the region. Without that chain, put both behind the same gate.
+  (`milpa/app-runtime` ≥ 0.120 and the skeleton of `milpa/framework` ≥ 0.41), the passkey session is a principal
+  on every route of the house — the admin's included, whatever its own gate — so an admin on the default
+  loopback gate still hands a signed-in principal to the region. Without that chain, put both behind the same gate.
 - **The title is resolved once, in the declared locale.** The admin resolves a guest's `title` only through its
   own catalog keys, which a guest cannot extend, so the sidebar item reads «Agent» (or «Agente» under
-  `desktop.locale: es`) whatever `?lang=` says — the region itself follows `?lang=`.
+  `desktop.locale: es`) whatever `?lang=` says.
+- **`ComponentContext::principal` and `meta` reach every COMPOSED surface**, not just the region's root: the
+  region mounts each surface with the principal the admin authenticated and the host's facts (gate label,
+  active section, the request's query). Two fields are the region's own: each surface's component id, and the
+  `route`, which is the Desktop's live wire (`/desktop/live`) and not the panel's URL — that is what a
+  surface's envelope is bound to.
 
-**Upgrading.** New in this version: embed mode (`?embed=1`, the same route and door — a `desktop.middleware`
-you declared applies to it unchanged), the `chrome` prop on the `desktop-sidebar` component (default `true`;
-`false` renders no link to a chrome screen), the `desktop-session-strip` component (rendered in embed mode only;
-`Milpa\DesktopApp\Live\SessionStrip` is registered in the container like the other shell surfaces), the Agent
-section the admin discovers the moment `milpa/admin` is installed (nothing to declare; remove the admin to
-remove the section), and `milpa/admin` as an optional peer — suggested, never required. Nothing you configured
-for `0.47` changes meaning.
+### What the panel does NOT get, and why
+
+- **The live stream.** The Mercure subscriber JWT travels as a **cookie**, and only `GET /desktop` can set one:
+  a component rendered inside somebody else's response sets no cookie. So the region writes no
+  `#milpa-desktop-hub` tag, `desktop-hub.js` says «offline» once and opens nothing. A governed turn still
+  answers — the message, the pause and the **closure verdict** come back on the `POST /agent` response and
+  render — but what only the hub carries does not reach the panel: the **live reasoning** of a turn in flight
+  and the Activity stream. Open the full Desktop for those; the bar's link is there for it.
+- **The sessions strip, the sidebar, the screens.** The region is the *conversation*; the Desktop's own page is
+  where sessions, Settings, Skills, Capabilities, Decisions and Preview live.
+
+**Upgrading to this version.** `Admin\AgentGuestComponent` and `Admin\AgentGuestRenderer` are **deleted**, with
+the `desktop-agent-guest` CSS and JS the frame needed (`/desktop/assets/c/desktop-agent-guest.*` now 404s). The
+`desktop-agent` component **keeps its name** and its two states and loses the `embed` prop: it is the root of a
+declared view now, contract version `2`. The section is declared with `AdminSection::ofView(...)`, so it needs
+**milpa/admin ≥ 0.12**; on 0.11 the constructor would refuse it. New: `Admin\AgentView`,
+`Admin\AgentViewComponent`, `Admin\AgentViewRenderer`, `Live\ShellSignals` (the shell's seed map, extracted so
+both pages read one authority — `ShellController` delegates to it and its output is unchanged), and
+`resources/components/desktop-agent/desktop-agent.css`. `?embed=1` is untouched. Nothing you configured for
+`0.50` changes meaning.
 
 ## Declared views — one runtime per page
 
@@ -229,8 +325,8 @@ module. The page **composes** them and emits **one** runtime.
   than hidden: `addSection()` / `addPanel()` interpolate a **plugin's** html verbatim (the DX example
   below does exactly that), so a contributed panel's `<script>` is the plugin's own responsibility and the
   test's claim is about the shell's template, which is what it renders. The one surface this package
-  contributes to *another* page — the admin's Agent region — carries none either: its look and its
-  frame probe are `desktop-agent-guest.css` / `.js`, declared like every other component's.
+  contributes to *another* page — the admin's Agent region — carries none either: its look is
+  `desktop-agent.css`, declared like every other component's, and it ships no module at all.
 - **What the shell's `<style>` still holds.** Only the shell's own frame: the document (`body`, the
   scrollbar rule, reduced motion), the window strip (`.chrome`, `.lights`), the grid the views sit in
   (`.mui-shell`, `.mui-shell__main`, `.view--session*`, `.tabpane*`), the `[hidden] { display: none
@@ -298,13 +394,12 @@ renders them:
 | `desktop-turn.js` | `MilpaLive.desktop.turn` | `run(text)` — the ONE `POST /agent` — `regenerate()`, `stop()`, the `session.working` signal (**set by the turn itself**, so a Desktop with no hub still shows one running), the pause a parked turn reports, and the counters the turn reports (`session.turns/steps/tokens`, `context.used`) |
 | `desktop-commands.js` | `MilpaLive.desktop.commands` | `parse()` / `run()` for `/goal`, `/mode`, `/help` and every user-invocable skill, `call()` over the op's http projection, the failure line, and the completion popup with its keyboard |
 
-One more component is declared but never painted on this page: **`desktop-agent-guest`** — the region this
-package contributes to the admin (`?embed=1` in a frame, greenhouse `decisions/0210`). Its stylesheet and its
-module are declared here like any other's and served by the same route, but its **renderer loads them itself**
-with a `<link>` and a deferred `<script>`, because milpa/admin is the host there and a guest cannot reach the
-host's emitter. The frame keeps its `src` in the markup, so the Agent is there with no JavaScript at all; the
-module only reports the case where the Desktop returns **no document** (the app is down — the browser's own
-error page is cross-origin, so `contentDocument` is null).
+One more component is declared but never painted on this page: **`desktop-agent`** — the region this package
+contributes to the admin (greenhouse `decisions/0211`). It ships a stylesheet and **no module**: the region
+writes no behaviour of its own, it composes surfaces that bring theirs. Its files are declared here like any
+other's and served by the same route, and the HOST emits them — together with every file the surfaces the
+region composed declared, which ride back on the render result. That is the whole difference from the frame
+of `decisions/0210`: a guest declares, a host emits, and there is one runtime on the page.
 
 The client modules are measured by execution: `npm test` (or `node --test 'tests/js/**/*.test.mjs'`,
 Node ≥ 22, nothing to install) loads the shipped files **verbatim** into a stub page, hands each factory the
@@ -523,11 +618,11 @@ G. **The shell's `<style>` holds only the shell's frame.** The capability cards,
     recognise it by matching the English «no facts», which would have outlived the sentence's translation.
 12. **`ComposerField` takes a `?Catalog`** (fifth argument) so the live textarea's placeholder is catalog
     copy; `ComposerBar` takes one too (fifth argument).
-13. **The admin's Agent region declares its files.** `desktop-agent-guest.css` / `.js` replace the inline
-    `<style>` and the `onload=` / `onerror=` attributes on the frame — the only executable inline script
-    this package still emitted anywhere. The region's rules are scoped by the `.desktop-agent` class
-    instead of the section's id, so a host stylesheet that targeted `#<section-id> .desktop-agent__frame`
-    should target the class.
+13. **The admin's Agent region declares its files.** `desktop-agent.css` carries the region's frame (and, in
+    `0.51`, replaced `desktop-agent-guest.css` / `.js`, which the retired frame needed). The region's rules
+    are scoped by the `.desktop-agent` class instead of the section's id, so a host stylesheet that targeted
+    `#<section-id> .desktop-agent__frame` should target the class — and `.desktop-agent__frame` is gone with
+    the frame.
 
 **Upgrading (0.49.0).** Declared views land as described above; nothing you *configured* changes meaning,
 but eight things change shape:

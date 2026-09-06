@@ -21,7 +21,8 @@
  *     runs it), a mistyped command (told), or a prompt (the turn runs it).
  *   - the MODE, whole: the chip's menu, the `composer.mode` / `composer.mode.label` signal pair every turn
  *     reads, and the partial settings post that persists it server-side. `/mode` goes through the same
- *     `applyMode()`, so the chip and the setting can never disagree.
+ *     `applyMode()`, and a save the door REFUSES rolls both signals back — so the chip and the setting can
+ *     never disagree, whichever door the bar is being used through.
  *
  * What it does NOT own: the floating panels are the `composer.panel` signal, set by the chips' own
  * bindings and cleared here when the writer types (phase B4); the completion popup is the commands
@@ -231,19 +232,30 @@
       /**
        * The mode changes HERE and only here: both signals, then the partial settings post that persists
        * it. The turn reads the signal; nothing else writes it.
+       *
+       * OPTIMISTIC, AND ROLLED BACK. The chip answers the click at once — a mode menu that waited on a
+       * round trip would feel broken — but a door that REFUSES the save puts both signals back. The mode
+       * is not decoration: `composer.mode` is the value every turn carries to the agent (greenhouse
+       * decisions/0202), so a chip left reading «Continue automatically» over a server that still says
+       * «ask» would be the UI lying about how much the agent may do. That is reachable the moment these
+       * surfaces are used through a door that is not the Desktop's own — the admin panel composing this
+       * bar while the Desktop stands behind a gate the reader did not pass (decisions/0211, slice 3) —
+       * and the guard already says so out loud; this keeps the chip honest with it.
        */
       applyMode: function (key) {
         if (MODES.indexOf(key) === -1) { return null; }
-        signal('composer.mode', key);
-        signal('composer.mode.label', this.modeLabel(key));
         var d = desk();
         if (!d) { return Promise.reject(new Error('desktop-guard not loaded')); }
+        var was = { mode: this.mode(), label: signal('composer.mode.label') };
+        var rollback = function () { signal('composer.mode', was.mode); signal('composer.mode.label', was.label); };
+        signal('composer.mode', key);
+        signal('composer.mode.label', this.modeLabel(key));
 
         return fetch('/desktop/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode: key }),
-        }).then(d.guarded).catch(function (err) { d.failed(err, tr('guard.unreachable')); });
+        }).then(d.guarded).catch(function (err) { rollback(); d.failed(err, tr('guard.unreachable')); });
       },
 
       /** What the chip says for a mode — the label the server rendered on the menu's option. */

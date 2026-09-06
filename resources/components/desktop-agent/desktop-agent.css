@@ -1,0 +1,41 @@
+/*!
+ * desktop-agent — the Agent region of a HOST panel (greenhouse decisions/0211, slice 3).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the region's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-agent.css. It carries what the SHELL's own <style> carries for `/desktop` and
+ * nothing else: the frame the Desktop's surfaces sit in — the session view's column, the pane switching
+ * and the composer dock. Every surface's own look is its own file; none of it is repeated here.
+ *
+ * EVERY rule is scoped under `.desktop-agent`, the region's root. The Desktop is a GUEST inside somebody
+ * else's document: a rule that reached outside this root would be the guest restyling its host, which is
+ * exactly what mounting a plugin's view must not cost.
+ */
+
+/* ── the region itself: a column that fills whatever the host gave it ────────────────────────────── */
+.desktop-agent { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: var(--space-3); }
+
+/* The host's section body is a scroller; the region governs its own scrolling, so it must not stretch it. */
+.desktop-agent .view--session { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.desktop-agent .view--session__scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding-block: var(--space-2); }
+.desktop-agent .view--session__dock { flex: none; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); background: var(--bg); }
+
+/* The `hidden` attribute must win over a pane's own display — the tabs swap panes by binding it, and a
+   pane whose stylesheet says `display:grid` could never actually hide without this. */
+.desktop-agent [hidden] { display: none !important; }
+.desktop-agent .tabpane--activity { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: var(--space-6); align-items: start; }
+.desktop-agent .mui-empty { color: var(--text-muted); font-size: var(--text-sm); }
+
+/* ── the guest bar: whose door this is, and the way out to the Desktop's own page ─────────────────── */
+.desktop-agent__bar { flex: none; display: flex; align-items: center; gap: var(--space-3); }
+.desktop-agent__open { margin-inline-start: auto; }
+
+/* ── a surface that could not be painted (greenhouse decisions/0211, «contained errors») ──────────── */
+.desktop-agent__failure { display: block; margin: 0; }
+.desktop-agent__failure-why { font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
+/* ── the signed-out offer: no view, one door ──────────────────────────────────────────────────────── */
+.desktop-agent__signin { margin: 0; }
+.desktop-agent__signin-link { margin-inline-start: var(--space-2); }
