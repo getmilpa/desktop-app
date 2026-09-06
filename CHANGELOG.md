@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.50.0](https://github.com/getmilpa/desktop-app/compare/v0.49.0...v0.50.0) (2026-09-06)
+
+
+### Features
+
+* **views:** no behaviour left inline — the conversation, the composer, the turn and every screen are declared modules ([#91](https://github.com/getmilpa/desktop-app/issues/91)) ([ded9fef](https://github.com/getmilpa/desktop-app/commit/ded9fef495be757027f8db7e5aee829c7a739d02))
+
 ## [0.49.0](https://github.com/getmilpa/desktop-app/compare/v0.48.0...v0.49.0) (2026-09-06)
 
 
