@@ -19,14 +19,15 @@ namespace Milpa\DesktopApp\Live;
  *
  * One option per command: the house's own (`/goal`, `/mode`, `/help`) and every user-invocable skill
  * (`/<skill-name>`), each with its description and usage. The popup is CSS state (`data-open`) driven by one
- * delegated handler in the shell — no per-instance x-data (Alpine double-inits dynamic x-data). The same list
+ * delegated handler in `desktop-commands.js`, the module that owns this popup's behaviour (greenhouse
+ * decisions/0211, phase C4) — no per-instance x-data (Alpine double-inits dynamic x-data). The same list
  * ({@see \Milpa\DesktopApp\Data\DesktopData::commands()}) has two projections here: the popup HTML and the
  * JSON the parser reads ({@see self::json()}), so what completes is exactly what runs. Pure, so it is tested
  * directly with fixtures.
  */
 final class CommandListView
 {
-    /** The popup's element id — the shell's delegated handler and its CSS address it. */
+    /** The popup's element id — the commands module's delegated handler and its CSS address it. */
     public const string ID = 'milpa-command-list';
 
     /** The prefix of each option's element id (`milpa-cmd-<name>`) — what `aria-activedescendant` points at. */

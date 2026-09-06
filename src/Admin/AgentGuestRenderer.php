@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Admin;
 
 use Milpa\DesktopApp\I18n\Catalog;
+use Milpa\DesktopApp\Live\DesktopAssets;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
 use Milpa\Live\ValueObjects\RenderRequest;
@@ -48,12 +49,8 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  */
 final class AgentGuestRenderer implements ComponentRendererInterface
 {
-    /**
-     * The main's available height, from the host's own tokens: the viewport minus the admin topbar
-     * (`--_topbar-h`, the shell's alias of `--header-h`) and the main's padding (the same `clamp()` milpa/admin's
-     * bundle gives `.mui-shell__main`), each with a fallback to the values measured in milpa/admin 0.10.1.
-     */
-    private const string HEIGHT = 'calc(100dvh - var(--_topbar-h, var(--header-h, 3.5rem)) - 2*clamp(var(--space-5, 1.25rem), 3vw, var(--space-8, 2rem)))';
+    /** The component this region's declared files are served under, like every other Desktop surface. */
+    public const string ASSETS = 'desktop-agent-guest';
 
     /**
      * @param Catalog|null $catalog the Desktop's copy in its declared locale; null answers in English
@@ -104,32 +101,36 @@ final class AgentGuestRenderer implements ComponentRendererInterface
         return $this->catalog ?? new Catalog();
     }
 
+    /**
+     * The two tags that carry this region's declared look and its probe.
+     *
+     * Emitted by the renderer itself — see the class docblock: milpa/admin is the host, and a guest has no
+     * emitter to hand its files to. Both are package files on the Desktop's gate-free asset route, so a
+     * JSON 401 can never break them in silence.
+     */
+    private static function declaredFiles(): string
+    {
+        return '<link rel="stylesheet" href="' . DesktopAssets::url(self::ASSETS, 'css') . '">'
+            . '<script src="' . DesktopAssets::url(self::ASSETS, 'js') . '" defer></script>';
+    }
+
     private function live(StateSnapshot $state, Catalog $catalog): string
     {
         $id = self::attr($state->componentId);
         $gate = self::meta($state, 'gate', 'loopback');
         $e = static fn (string $s): string => self::attr($s);
-        // The contained error, inside the region only: hide the frame, show the notice. The id is a JS string
-        // literal inside an HTML attribute — escaped for both.
-        $reveal = 'this.hidden=true;var n=document.getElementById(\'' . $e(addcslashes($state->componentId . '-notice', "\\'")) . '\');if(n){n.hidden=false}';
 
         return '<div class="desktop-agent" id="' . $id . '" data-desktop-agent="' . AgentGuestComponent::STATE_LIVE . '" data-gate="' . $e($gate) . '">'
-            . '<style>'
-            . '#' . $id . '{display:flex;flex-direction:column;gap:var(--space-3,.75rem);height:' . self::HEIGHT . ';min-height:24rem}'
-            . '#' . $id . ' .desktop-agent__bar{display:flex;align-items:center;gap:var(--space-3,.75rem);flex:none}'
-            . '#' . $id . ' .desktop-agent__open{margin-inline-start:auto}'
-            . '#' . $id . ' .desktop-agent__frame{flex:1;min-height:0;width:100%;border:1px solid var(--border-subtle,#333);border-radius:var(--radius-md,.5rem);background:var(--surface,#111)}'
-            . '#' . $id . ' .desktop-agent__notice{margin:0}'
-            . '</style>'
+            . self::declaredFiles()
             . '<div class="desktop-agent__bar">'
             . '<span class="mui-badge desktop-chip desktop-chip--gate" data-gate="' . $e($gate) . '">' . $e($catalog->tr('chip.gate', $catalog->tr('gate.kind.' . $gate))) . '</span>'
             . '<a class="mui-btn mui-btn--sm desktop-agent__open" href="' . $e(self::meta($state, 'open', AgentGuestComponent::DEFAULT_OPEN)) . '" target="_blank" rel="noopener">' . $e($catalog->tr('agent.open')) . '</a>'
             . '</div>'
-            . '<iframe class="desktop-agent__frame" id="' . $id . '-frame" src="' . $e(self::meta($state, 'embed', AgentGuestComponent::DEFAULT_EMBED)) . '" title="' . $e($catalog->tr('agent.frame')) . '"'
             // No same-origin document after the load = the Desktop did not answer (the browser's own error page
-            // is cross-origin). What the Desktop did answer — a 403, a 500, the sign-in door — stays in the frame.
-            . ' onload="if(!this.contentDocument){' . $reveal . '}"'
-            . ' onerror="' . $reveal . '"></iframe>'
+            // is cross-origin). What the Desktop did answer — a 403, a 500, the sign-in door — stays in the
+            // frame. The probe is `desktop-agent-guest.js`; the frame carries its `src` in the markup, so a
+            // reader with no JavaScript still gets the Agent, exactly as before.
+            . '<iframe class="desktop-agent__frame" id="' . $id . '-frame" src="' . $e(self::meta($state, 'embed', AgentGuestComponent::DEFAULT_EMBED)) . '" title="' . $e($catalog->tr('agent.frame')) . '"></iframe>'
             . '<p class="mui-alert mui-alert--warning desktop-agent__notice" id="' . $id . '-notice" role="alert" hidden>' . $e($catalog->tr('agent.unanswered')) . '</p>'
             . '</div>';
     }
@@ -142,6 +143,7 @@ final class AgentGuestRenderer implements ComponentRendererInterface
         $e = static fn (string $s): string => self::attr($s);
 
         return '<div class="desktop-agent" id="' . $id . '" data-desktop-agent="' . AgentGuestComponent::STATE_SIGNED_OUT . '" data-gate="' . $e($gate) . '">'
+            . self::declaredFiles()
             . '<p class="mui-alert mui-alert--info desktop-agent__signin" role="note">'
             . '<span class="mui-alert__icon" aria-hidden="true">i</span>'
             . '<span class="mui-alert__content">' . $e($catalog->tr('agent.signin')) . '</span> '

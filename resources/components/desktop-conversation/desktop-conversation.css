@@ -15,3 +15,9 @@
 #milpa-chat:has(.msg) .milpa-empty-convo { display: none; }
 /* Every message kind names its author and its moment the same way. */
 .msg__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); display: block; }
+
+/* The interrupted-run notice (greenhouse decisions/0196): a prior run was left mid-turn and is REPORTED,
+   never silently auto-resumed. It is rendered inside the thread, above the first message, so the thread
+   is what owns its look (greenhouse decisions/0211, phase D5). */
+.milpa-interrupted { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--warning-border, var(--border)); border-radius: var(--radius-md); background: var(--warning-bg, var(--surface)); font-size: var(--text-sm); color: var(--text-secondary); }
+.milpa-interrupted__mark { color: var(--warning); }

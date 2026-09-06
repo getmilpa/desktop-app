@@ -94,7 +94,11 @@ final class ShellControllerTest extends TestCase
         // plugin can always register handlers; the built-in Activity component is a real reactive element.
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
-        self::assertStringContainsString('window.MilpaShell', $body);
+        // The bus is a DECLARED module since phase D (greenhouse decisions/0211, D1): the page LOADS it —
+        // `window.MilpaShell` is still the published extension point, it is simply not written here.
+        self::assertStringNotContainsString('window.MilpaShell', $body, 'the page carries no copy of the bus');
+        self::assertStringContainsString('<script src="/desktop/assets/c/desktop-shell-bus.js" defer></script>', $body);
+        self::assertStringContainsString('window.MilpaShell = { on: on', self::module('desktop-shell-bus'));
         self::assertStringContainsString('id="milpa-activity"', $body);
         // The Activity tab CONSUMES the bus from its own module now (greenhouse decisions/0211, B6).
         self::assertStringContainsString('window.MilpaShell.onAny(', self::module('desktop-activity'));
@@ -187,9 +191,10 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-view="capabilities"', $body);
         self::assertStringContainsString('cap-grid', $body);
         self::assertStringContainsString('mui-empty', $body);
-        // A settled (non-running) session shows no interrupted-run notice (greenhouse decisions/0196). The
-        // notice's TEXT — not its CSS class, which is always in the stylesheet — is the honest check.
-        self::assertStringNotContainsString('A prior run was interrupted', $body);
+        // A settled (non-running) session shows no interrupted-run notice (greenhouse decisions/0196).
+        // The MARKUP is the honest check now: the notice's sentence is a catalog key, and the whole catalog
+        // travels in `#milpa-desktop-i18n`, so its words are in every page whether or not it is shown.
+        self::assertStringNotContainsString('<div class="milpa-interrupted"', $body);
     }
 
     public function testTheDecisionsInboxRendersAParkedQuestionAcrossSessions(): void
@@ -304,7 +309,7 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('3 turns', $body, 'status counters');
         // The session was left in a running state ('working') → the interrupted-run notice shows on load
         // (greenhouse decisions/0196): a run reported as unfinished, never silently auto-resumed.
-        self::assertStringContainsString('milpa-interrupted', $body);
+        self::assertStringContainsString('<div class="milpa-interrupted"', $body);
         self::assertStringContainsString('A prior run was interrupted', $body);
         self::assertStringContainsString('data-view="auth"', $body, 'the Auth screen');
         self::assertStringContainsString('data-pane="work"', $body);
@@ -314,7 +319,13 @@ final class ShellControllerTest extends TestCase
         self::assertStringContainsString('data-milpa-state="work-board"', $body);
         self::assertStringContainsString('draggable="true" data-index="0"', $body);
         self::assertStringContainsString('class="work-col" data-status="done"', $body);
-        self::assertStringContainsString("fetch('/desktop/work'", $body);
+        // The gesture is the board's OWN module since phase D (greenhouse decisions/0211, D3): the board
+        // binds the five drag events on its root, and the persisting POST lives in the module, not here.
+        self::assertStringContainsString('x-data="desktopWorkBoard()"', $body);
+        self::assertStringContainsString('@drop="onDrop($event)"', $body);
+        self::assertStringNotContainsString("fetch('/desktop/work'", $body);
+        self::assertStringContainsString("fetch(ROUTE, {", self::module('desktop-work-board'));
+        self::assertStringContainsString("var ROUTE = '/desktop/work';", self::module('desktop-work-board'));
 
         unlink($dir . '/s1.json');
         unlink($dir . '/events.log');
@@ -459,14 +470,20 @@ final class ShellControllerTest extends TestCase
             ->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
         self::assertStringContainsString('id="composer-input"', $body);
-        self::assertStringContainsString('composer-panel" data-panel-for="context"', $body);
-        self::assertStringContainsString('composer-panel" data-panel-for="session"', $body);
+        self::assertStringContainsString('composer-panel composer-panel--context" data-panel-for="context"', $body);
+        self::assertStringContainsString('composer-panel composer-panel--session" data-panel-for="session"', $body);
         self::assertStringContainsString('data-open-panel="context"', $body);
         self::assertStringContainsString('8.19K', $body, 'real token count');
         self::assertStringContainsString('mui-progress__bar', $body);
         // One border, one authority: the field inside the composer box renders seamless (no border of its
         // own) so the box is the only frame — a double border reads as double authority (Rod's doctrine).
-        self::assertMatchesRegularExpression('/\.milpa-composer-box \.mui-textarea[^{]*\{[^}]*border:\s*0/', $body);
+        // The rule moved to the composer's OWN stylesheet in phase D (greenhouse decisions/0211, D5), so
+        // the page declares it instead of carrying it.
+        self::assertStringContainsString('<link rel="stylesheet" href="/desktop/assets/c/desktop-composer.css">', $body);
+        self::assertMatchesRegularExpression(
+            '/\.milpa-composer-box \.mui-textarea[^{]*\{[^}]*border:\s*0/',
+            (string) file_get_contents(\dirname(__DIR__) . '/resources/components/desktop-composer/desktop-composer.css'),
+        );
 
         unlink($dir . '/s.json');
         rmdir($dir);
@@ -526,9 +543,15 @@ final class ShellControllerTest extends TestCase
         self::assertStringNotContainsString("getElementById('milpa-decisions-badge')", $gate);
         self::assertStringNotContainsString('id="milpa-decisions-badge"', $body, 'nothing renders it — that was the bug');
         self::assertStringNotContainsString('badge.hidden', $gate, 'the gate does not own the decisions count');
-        // Positive control: the count IS ticked, by the surface that owns it — MilpaShell.addDecision finds
-        // the SIDEBAR's badge by its nav row, an element the sidebar actually renders when a question waits.
-        self::assertStringContainsString("querySelector('[data-nav=\"decisions\"] .mui-sidebar__item-badge')", $body);
+        // Positive control: the count IS ticked, by the surface that OWNS it. Since phase D (greenhouse
+        // decisions/0211, D4) that is the sidebar's own module, which consumes the transport's
+        // `decision.parked` fact and finds its badge by its nav row — an element the sidebar renders when
+        // a question waits. The page reaches for neither.
+        $sidebar = self::module('desktop-sidebar');
+        self::assertStringContainsString("querySelector('[data-nav=\"decisions\"]')", $sidebar);
+        self::assertStringContainsString("querySelector('.mui-sidebar__item-badge')", $sidebar);
+        self::assertStringContainsString("bus.on('decision.parked'", $sidebar);
+        self::assertStringNotContainsString("querySelector('[data-nav=\"decisions\"]", $body);
     }
 
     public function testWithoutAHubTheShellCarriesNoConnectionOrCookie(): void
@@ -555,61 +578,81 @@ final class ShellControllerTest extends TestCase
 
         // The hub reads the subscriber JWT from this cookie.
         self::assertStringContainsString('mercureAuthorization=', $res->getHeaderLine('Set-Cookie'));
-        // The client subscribes to the hub's PUBLIC url on the shell topic AND this session's EXACT stream
-        // topic on ONE connection — no poll, no template ambiguity (greenhouse decisions/0190).
-        self::assertStringContainsString('new EventSource(', $body);
-        self::assertStringContainsString('https://public.example/.well-known/mercure?topic=desktop%2Fshell', $body);
-        self::assertStringContainsString('&topic=' . rawurlencode('milpa/sessions/'), $body);
+        // The hub travels as DATA now (greenhouse decisions/0211, D1): the page writes the PUBLIC url with
+        // its two EXACT topics into a JSON tag, and `desktop-hub.js` is what opens the one connection — no
+        // poll, no template ambiguity (greenhouse decisions/0190), and no URL baked into executable markup.
+        self::assertStringNotContainsString('new EventSource(', $body, 'the page opens nothing itself');
+        self::assertSame(1, preg_match('#<script id="milpa-desktop-hub" type="application/json">(.*?)</script>#s', $body, $tag));
+        $hub = json_decode($tag[1], true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($hub);
+        self::assertStringStartsWith('https://public.example/.well-known/mercure?topic=desktop%2Fshell', (string) $hub['url']);
+        self::assertStringContainsString('&topic=' . rawurlencode('milpa/sessions/'), (string) $hub['url']);
         // The hub cookie is scoped to the session too, and the session id is pinned in its own cookie.
         self::assertStringContainsString('milpa_agent_sid=', $res->getHeaderLine('Set-Cookie'));
-        // The connection feeds the component runtime rather than dumping raw text.
-        self::assertStringContainsString('MilpaShell.emit(', $body);
-        // A session projection (kind) is translated to the shell's own events by MilpaShell.session.
-        self::assertStringContainsString('MilpaShell.session(env)', $body);
+        // The connection feeds the component runtime rather than dumping raw text, and a session projection
+        // (`kind`) is translated to the shell's own facts — both in the module, neither in the page.
+        $connector = self::module('desktop-hub');
+        self::assertStringContainsString('new EventSource(URL, { withCredentials: true })', $connector);
+        self::assertStringContainsString('function translate(env)', $connector);
+        self::assertStringContainsString("say(env.event, env.data)", $connector);
         // …and it opens only after every DEFERRED script has run (greenhouse decisions/0211): the gate and
-        // the activity stream subscribe to this bus from their component modules, which are deferred, while
-        // this tag is inline at the end of <body> and would otherwise run FIRST — dropping whatever the hub
-        // had already queued between connecting and subscribing.
-        self::assertSame(1, preg_match("#addEventListener\('DOMContentLoaded', function \(\) \{\s*var es = new EventSource\(#", $body), 'the stream opens after the modules subscribed');
+        // the activity stream subscribe to this bus from their component modules, which are deferred too,
+        // and a fact already queued at the hub arrives inside the window between connecting and subscribing.
+        self::assertSame(1, preg_match("#addEventListener\('DOMContentLoaded', function \(\) \{ open\(\); \}\);#", $connector), 'the stream opens after the modules subscribed');
     }
 
     public function testWithoutAHubTheOfflineStatusAlsoWaitsForTheModules(): void
     {
-        // Same ordering, other branch: a Desktop with no hub reports offline to handlers that exist.
+        // Same ordering, other branch: a Desktop with no hub says so ONCE, to handlers that exist. The page
+        // says it by writing an EMPTY hub tag; the module is what reports it (greenhouse decisions/0211, D1).
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
-        self::assertStringContainsString("document.addEventListener('DOMContentLoaded', function () { window.MilpaShell.status('offline'); });", $body);
+        self::assertStringContainsString('<script id="milpa-desktop-hub" type="application/json">{}</script>', $body);
+        $connector = self::module('desktop-hub');
+        self::assertStringContainsString("if (URL === '' || typeof window.EventSource !== 'function') {", $connector);
+        self::assertStringContainsString("b.status('offline');", $connector);
+        self::assertSame(1, preg_match("#addEventListener\('DOMContentLoaded', function \(\) \{ open\(\); \}\);#", $connector));
     }
 
     public function testTheComposerStartsAGovernedTurnOverTheHttpSurface(): void
     {
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        $turn = self::module('desktop-turn');
+        $composer = self::module('desktop-composer');
 
-        // Send POSTs the prompt to the governed `agent` op's HTTP route with the server-minted session id
-        // (greenhouse decisions/0190); the answer comes back, the badge streams over the hub. The mode it
-        // sends is the chip's VALUE — the `composer.mode` signal — not a hardcoded ask (decisions/0202).
-        self::assertStringContainsString("fetch('/agent'", $body);
-        self::assertStringContainsString('session: agentSession', $body);
-        self::assertStringNotContainsString("mode: 'ask'", $body);
-        self::assertStringContainsString('mode: currentMode()', $body);
-        self::assertStringContainsString("MilpaLive.signal('composer.mode')", $body);
-        self::assertStringContainsString("var agentSession = '", $body);
+        // The turn is a DECLARED VIEW now (greenhouse decisions/0211, phase C3): `desktop-turn.js` is the
+        // one place the Desktop asks for one. Send POSTs the prompt to the governed `agent` op's HTTP route
+        // with the server-minted session id (decisions/0190); the answer comes back, the badge streams over
+        // the hub. The mode it sends is the chip's VALUE — asked of the composer — not a hardcoded ask.
+        self::assertStringContainsString("fetch(ROUTE, {", $turn);
+        self::assertStringContainsString("var ROUTE = '/agent';", $turn);
+        self::assertStringContainsString('body: JSON.stringify({ prompt: text, session: SESSION, mode: bar ? bar.mode() : \'ask\' })', $turn);
+        self::assertStringNotContainsString("mode: 'ask',", $turn);
+        self::assertStringContainsString("return MODES.indexOf(value) !== -1 ? value : DEFAULT_MODE;", $composer, 'the composer owns the mode the turn reads');
+        // The session id reaches the module as DATA, not as a value baked into a script the page runs.
+        self::assertSame(1, preg_match('#<script id="milpa-desktop-session" type="application/json">(.*?)</script>#s', $body, $m));
+        self::assertMatchesRegularExpression('/^\{"agent":"desk-[0-9a-f]{16}"\}$/', $m[1]);
+        self::assertStringContainsString("var SESSION_TAG = 'milpa-desktop-session';", $turn);
+        self::assertStringNotContainsString("var agentSession = '", $body);
         // Minimalist composer (greenhouse decisions/0191, Rod): the char count lives in the footer, live,
-        // instead of a separate status line under the box.
+        // instead of a separate status line under the box — and its words come from the catalog now.
         self::assertStringContainsString('id="milpa-charcount"', $body);
-        self::assertStringContainsString("charCount.textContent = n > 0 ? ('~' + toks + ' tokens') : ''", $body);
-        // The agent's answer is rendered markdown (safe subset), not raw text (greenhouse decisions/0191, Rod).
-        self::assertStringContainsString('function renderMarkdown(', $body);
-        self::assertStringContainsString('b.innerHTML = renderMarkdown(o.text', $body);
+        self::assertStringContainsString("count.textContent = text.length > 0 ? tr('composer.tokens', tokens) : '';", $composer);
+        // The agent's answer is rendered markdown (safe subset), not raw text (greenhouse decisions/0191,
+        // Rod) — and the renderer belongs to the message kind that shows it.
+        self::assertStringContainsString('function renderMarkdown(', self::module('desktop-agent-message'));
+        self::assertStringContainsString('body.innerHTML = renderMarkdown(opts.text', self::module('desktop-agent-message'));
         // The token counter is the provider's REAL count (greenhouse decisions/0192), not a "≈" estimate.
-        self::assertStringContainsString("setSig('session.tokens', kfmt(res.tokens))", $body);
-        self::assertStringContainsString("setSig('context.used', kfmt(res.contextTokens))", $body);
+        self::assertStringContainsString("signal('session.tokens', kfmt(result.tokens))", $turn);
+        self::assertStringContainsString("signal('context.used', kfmt(result.contextTokens))", $turn);
         self::assertStringNotContainsString('≈', $body);
         // No stray NUL bytes in the rendered shell (a corruption the code-block placeholder once introduced).
         self::assertStringNotContainsString("\0", $body);
-        // The session projection maps activity thinking/ready to the working badge, message to a bubble.
-        self::assertStringContainsString("this.emit('session.state', { state: 'working' })", $body);
-        self::assertStringContainsString("this.emit('agent.message'", $body);
+        // The session projection maps activity thinking/ready to the working badge, message to a bubble —
+        // in the transport's own module since phase D (greenhouse decisions/0211, D1).
+        $connector = self::module('desktop-hub');
+        self::assertStringContainsString("say('session.state', { state: 'working' })", $connector);
+        self::assertStringContainsString("say('agent.message'", $connector);
     }
 
     public function testTheComposerServesItsCommandsAndTheModeReachesTheSession(): void
@@ -617,7 +660,8 @@ final class ShellControllerTest extends TestCase
         // Composer commands (greenhouse decisions/0202): the house serves the command list as JSON for the
         // parser AND renders it as the completion popup; the mode is a signal pair seeded from the saved
         // setting (the one truth on load), and every command is a governed operation reached over its http
-        // projection with the method that projection answers to.
+        // projection with the method that projection answers to. Since phase C the BEHAVIOUR is
+        // `desktop-commands.js` and `desktop-composer.js`; the page serves the data and the markup.
         $dir = sys_get_temp_dir() . '/milpa-shell-cmds-' . uniqid('', true);
         mkdir($dir);
         $store = new DesktopStore($dir . '/sessions', $dir . '/settings.json');
@@ -626,71 +670,78 @@ final class ShellControllerTest extends TestCase
 
         $body = (string) (new ShellController(new EventDispatcher(new NullLogger()), null, $data))
             ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        $commands = self::module('desktop-commands');
+        $composer = self::module('desktop-composer');
 
-        // The list the house serves: the house commands (no kernel → no skills) as JSON, before the shell script,
-        // each carrying the METHOD of its http projection.
+        // The list the house serves: the house commands (no kernel → no skills) as JSON, each carrying the
+        // METHOD of its http projection.
         self::assertMatchesRegularExpression('#<script id="milpa-commands" type="application/json">\[\{"name":"goal","kind":"house"#', $body);
         self::assertStringContainsString('"usage":"/mode ask|acknowledge|auto","method":"POST"', $body);
         self::assertStringContainsString('"name":"help","kind":"house"', $body);
-        self::assertLessThan(strpos($body, "function parseCommand("), strpos($body, 'id="milpa-commands"'), 'the JSON precedes the script that reads it');
+        self::assertStringContainsString("var LIST_TAG = 'milpa-commands';", $commands, 'the module reads the list the page served');
         // The JSON is HEX-encoded: no `<` survives inside the script (the house's own `<text>` placeholder is
         // the specimen), so no served description can close the element — yet it decodes to the same strings.
         preg_match('#<script id="milpa-commands" type="application/json">(.*?)</script>#s', $body, $m);
         self::assertStringNotContainsString('<', $m[1]);
         self::assertStringContainsString('\\u003Ctext\\u003E', $m[1]);
         self::assertSame(DesktopData::houseCommands(), json_decode($m[1], true));
-        // The completion popup is the pure CommandListView, closed until a slash is typed; the field announces
-        // it (aria-controls) and the highlighted option (aria-activedescendant on the option's id).
+        // The completion popup is the pure CommandListView, closed until a slash is typed; the field is
+        // HANDED to the module by the composer, and the module announces the popup (aria-controls) and the
+        // option it highlights (aria-activedescendant on the option's id).
         self::assertStringContainsString('id="milpa-command-list" class="milpa-cmds" role="listbox" aria-label="Commands" data-open="0"', $body);
         self::assertStringContainsString('id="milpa-cmd-goal" data-command="goal" data-kind="house"', $body);
-        self::assertStringContainsString("composerInput.setAttribute('aria-controls', 'milpa-command-list')", $body);
-        self::assertStringContainsString("composerInput.setAttribute('aria-activedescendant', opt.id)", $body);
-        self::assertStringContainsString('function refreshCommandList(', $body);
-        self::assertStringContainsString('function commandListHandlesKey(', $body);
+        self::assertStringContainsString("field.setAttribute('aria-controls', POPUP_ID)", $commands);
+        self::assertStringContainsString("field.setAttribute('aria-activedescendant', option.id)", $commands);
+        self::assertStringContainsString("if (c && typeof c.bindField === 'function') { c.bindField(field); }", $composer, 'the popup never reaches for the field');
+        self::assertStringContainsString('function refresh() {', $commands);
+        self::assertStringContainsString('function handlesKey(event) {', $commands);
         // Tab completes, Shift+Tab leaves the field; a click in the field does not close the popup — and the
-        // click-away itself is the `ui.dismiss` signal now (greenhouse decisions/0211): the popup CONSUMES it
-        // instead of the page hanging its own document listener.
-        self::assertStringContainsString("(e.key === 'Tab' && !e.shiftKey)", $body);
-        self::assertStringContainsString('d.onDismiss(function (e) {', $body);
-        self::assertStringContainsString('if (!(composerInput && e && e.target === composerInput)) { cmdHide(); }', $body);
-        self::assertStringNotContainsString("document.addEventListener('click'", $body, 'the single document listener lives in the guard module');
+        // click-away itself is the `ui.dismiss` signal (greenhouse decisions/0211): the popup CONSUMES it
+        // instead of hanging its own document listener.
+        self::assertStringContainsString("(event.key === 'Tab' && !event.shiftKey)", $commands);
+        self::assertStringContainsString('guard.onDismiss(function (event) {', $commands);
+        self::assertStringContainsString('if (!(field && event && event.target === field)) { hide(); }', $commands);
+        foreach ([$body, $commands, $composer] as $source) {
+            self::assertStringNotContainsString("document.addEventListener('click'", $source, 'the single document listener lives in the guard module');
+        }
         // The mode is a signal PAIR seeded from the saved setting: the VALUE the turn sends and its label. It is
         // NOT remembered in the browser — the saved setting is the one truth on load.
         self::assertStringContainsString('"composer.mode":"auto","composer.mode.label":"Continue automatically"', $body);
         self::assertStringContainsString('<script id="milpa-live-persist" type="application/json">[]</script>', $body);
         self::assertStringNotContainsString('"composer.mode"]', $body);
-        self::assertStringContainsString("setSig('composer.mode', key)", $body);
+        self::assertStringContainsString("signal('composer.mode', key);", $composer);
         // Only a REAL command is intercepted (a house command or a served name); a bare unknown `/name` is told;
         // anything else reaches the model as a prompt.
-        self::assertStringContainsString("HOUSE_COMMANDS.indexOf(m[1]) === -1 && !commandNamed(m[1])", $body);
-        self::assertStringContainsString('function isBareUnknownCommand(', $body);
-        self::assertStringContainsString('if (isBareUnknownCommand(text))', $body);
+        self::assertStringContainsString("HOUSE.indexOf(match[1]) === -1 && !named(match[1])", $commands);
+        self::assertStringContainsString('function isBareUnknown(text)', $commands);
+        self::assertStringContainsString('if (c && c.isBareUnknown(text)) { return c.unknown(text); }', $composer);
         // Every command is a governed operation over its http projection, called with the method it declares —
         // no invented action. The op's OWN answer decides: `ok:false` on a 2xx is a refusal.
-        self::assertStringContainsString('ok: r.ok && d.ok !== false', $body);
-        self::assertStringContainsString("callOp('POST', '/agent/goal', body)", $body);
-        // /goal reads the RESPONSE (goal / changed), never echoes the request.
-        self::assertStringContainsString("'no standing goal — /goal <text> sets one'", $body);
-        self::assertStringContainsString("d.changed === false ? 'goal unchanged: ' : 'goal set: '", $body);
+        self::assertStringContainsString('ok: response.ok && data.ok !== false', $commands);
+        self::assertStringContainsString("call('POST', '/agent/goal', body)", $commands);
+        // /goal reads the RESPONSE (goal / changed), never echoes the request — and says it from the catalog.
+        self::assertStringContainsString("notice(result.data.changed === true ? tr('command.goal.cleared') : tr('command.goal.none'));", $commands);
+        self::assertStringContainsString("notice(tr(result.data.changed === false ? 'command.goal.unchanged' : 'command.goal.set', goal));", $commands);
+        self::assertSame('no standing goal — /goal <text> sets one', (new Catalog())->tr('command.goal.none'));
         // /mode writes the chip and the setting; the next turn carries the mode — no agent:mode call.
-        self::assertStringNotContainsString('/agent/mode', $body);
-        self::assertStringContainsString('var key = cmd.args.toLowerCase()', $body);
-        self::assertStringContainsString("'mode ' + key + ' — applies from the next turn'", $body);
+        self::assertStringNotContainsString('/agent/mode', $commands);
+        self::assertStringContainsString('var key = command.args.toLowerCase()', $commands);
+        self::assertStringContainsString("notice(tr(key === 'auto' ? 'command.mode.set.auto' : 'command.mode.set', key));", $commands);
+        self::assertSame('mode auto — applies from the next turn (a signature or third-party egress still asks)', (new Catalog())->tr('command.mode.set.auto', 'auto'));
         // A skill is invoked through skill:invoke (GET) and its body enters the turn AS-IS, the args after it.
-        self::assertStringContainsString("callOp('GET', '/skill/invoke', { name: skill.name })", $body);
-        self::assertStringNotContainsString('/skill/load', $body);
-        self::assertStringNotContainsString("by: 'human'", $body);
-        self::assertStringContainsString("runTurn(d.body + (cmd.args !== '' ? '\\n\\n' + cmd.args : ''))", $body);
+        self::assertStringContainsString("call('GET', '/skill/invoke', { name: skill.name })", $commands);
+        self::assertStringNotContainsString('/skill/load', $commands);
+        self::assertStringNotContainsString("by: 'human'", $commands);
+        self::assertStringContainsString("t2.run(result.data.body + (command.args !== '' ? '\\n\\n' + command.args : ''))", $commands);
         self::assertStringNotContainsString('<skill_content name="', $body);
         // A refusal is never silent: the status comes back with a hint, and a 428 is reported, not confirmed.
-        self::assertStringContainsString('expose the operation in config/http.php', $body);
-        self::assertStringContainsString('res.status === 428', $body);
-        self::assertStringContainsString("op + ' refused — '", $body);
+        self::assertSame('the app does not expose agent:goal over HTTP — expose the operation in config/http.php', (new Catalog())->tr('op.hint.not_exposed', 'agent:goal'));
+        self::assertStringContainsString('result.status === 428', $commands);
+        self::assertStringContainsString("tr('op.refused', op, error || tr('op.no_reason'))", $commands);
 
         unlink($dir . '/settings.json');
         rmdir($dir);
     }
-
     public function testWithoutADataSeamTheComposerStillKnowsTheHouseCommands(): void
     {
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
@@ -703,27 +754,34 @@ final class ShellControllerTest extends TestCase
     public function testReasoningStreamsIntoACollapsibleThinkingBlock(): void
     {
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        $conversation = self::module('desktop-conversation');
+        $thinking = self::module('desktop-thinking');
 
         // Reasoning deltas map to agent.reasoning and stream into a live thinking block (greenhouse
         // decisions/0190); the block collapses to a toggle when the turn produces its message or ends.
-        self::assertStringContainsString("this.emit('agent.reasoning'", $body);
-        self::assertStringContainsString("env.reasoning.delta", $body);
-        self::assertStringContainsString("window.MilpaShell.on('agent.reasoning'", $body);
-        self::assertStringContainsString('function appendReasoning(', $body);
-        self::assertStringContainsString('function endReasoning(', $body);
-        // The thinking block is the `desktop-thinking` component: the conversation CLONES its prototype and
-        // feeds it by events (greenhouse decisions/0191) — not createElement.
-        self::assertStringContainsString("getElementById('milpa-thinking-proto')", $body);
-        self::assertStringContainsString('content.cloneNode(true)', $body);
-        self::assertStringContainsString('[data-thinking-body]', $body);
-        self::assertStringContainsString("setAttribute('data-open', '0')", $body);
-        // One delegated toggle for every thinking block, now and future.
-        self::assertStringContainsString('[data-thinking-toggle]', $body);
+        self::assertStringContainsString("say('agent.reasoning'", self::module('desktop-hub'));
+        self::assertStringContainsString('env.reasoning.delta', self::module('desktop-hub'));
+        self::assertStringNotContainsString('env.reasoning.delta', $body, 'the translation is the transport module\'s');
+        self::assertStringContainsString("shell.on('agent.reasoning', function (fact) { reasoning((fact && fact.text) || ''); });", $conversation);
+        self::assertStringContainsString('function reasoning(text) {', $conversation);
+        self::assertStringContainsString('function endReasoning() {', $conversation);
+        // The thinking block is the `desktop-thinking` component, and since phase C its own module: the
+        // conversation asks the KIND to open, feed and close itself — it clones no prototype of another's.
+        self::assertStringContainsString("var PROTO_ID = 'milpa-thinking-proto';", $thinking);
+        self::assertStringContainsString('proto.content.cloneNode(true)', $thinking);
+        self::assertStringContainsString('[data-thinking-body]', $thinking);
+        self::assertStringContainsString("block.setAttribute('data-open', '0');", $thinking);
+        self::assertStringContainsString("var elapsed = tr('thinking.elapsed', seconds);", $thinking, 'the elapsed is catalog copy');
+        // One delegated toggle for every thinking block, now and future — the conversation dispatches it.
+        self::assertStringContainsString("event.target.closest('[data-thinking-toggle]')", $thinking);
+        self::assertStringContainsString('@click="onClick($event)"', $body, 'the thread binds ONE click');
+        self::assertStringContainsString('function dispatch(event) {', $conversation);
         // The prototype is present, a real component with its declared behaviour and signed envelope.
         self::assertStringContainsString('<template id="milpa-thinking-proto">', $body);
         self::assertStringContainsString('data-milpa-component="desktop-thinking"', $body);
         // The agent's message and the turn ending both close the block.
-        self::assertStringContainsString("on('agent.message', function (d) { endReasoning();", $body);
+        self::assertStringContainsString("shell.on('agent.message', function (fact) { endReasoning();", $conversation);
+        self::assertStringContainsString("if (conv && !(fact && fact.state === 'working')) { conv.endReasoning(); }", self::module('desktop-turn'));
     }
 
     public function testEveryDesktopFetchPassesThroughOneGuardAndTheGuardIsItsOwnModule(): void
@@ -735,123 +793,137 @@ final class ShellControllerTest extends TestCase
         // function in the page: `desktop-guard.js`, hung off `MilpaLive.desktop`, so every component module
         // reaches the same one. The page delegates and never carries a second copy.
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
-        $guard = (string) file_get_contents(\dirname(__DIR__) . '/resources/components/desktop-guard/desktop-guard.js');
+        $guard = self::module('desktop-guard');
 
         // The behaviour is in the module…
         self::assertStringContainsString('function guarded(r) {', $guard);
-        self::assertStringContainsString("if (r.status === 401 && typeof body.signin === 'string' && body.signin !== '')", $guard);
-        self::assertStringContainsString("location.assign(body.signin + '?next=' + encodeURIComponent(location.pathname + location.search))", $guard);
+        // Every 401 is the door, not only one that names itself: the body's `signin` when it has one, else
+        // the app's declared sign-in path from `#milpa-desktop-guard` (greenhouse decisions/0211 review).
+        self::assertStringContainsString("var signin = r.status === 401 ? signinFor(body) : '';", $guard);
+        self::assertStringContainsString("if (body && typeof body.signin === 'string' && body.signin !== '') { return body.signin; }", $guard);
+        self::assertStringContainsString("return typeof DOORS.signin === 'string' ? DOORS.signin : '';", $guard);
+        self::assertStringContainsString("location.assign(signin + '?next=' + encodeURIComponent(location.pathname + location.search))", $guard);
         self::assertStringContainsString('return new Promise(function () {});', $guard, 'a page that is leaving settles nothing');
         self::assertStringContainsString('if (r.status === 403) {', $guard);
         self::assertStringContainsString("tr('guard.forbidden.reason', body.error) : tr('guard.forbidden')", $guard);
         self::assertStringContainsString('return Promise.reject(err);', $guard);
         self::assertStringContainsString('function guardedFlow(r) {', $guard, 'the capabilities 428 passthrough is the module\'s too');
         self::assertStringContainsString('function failed(err, unreachable) {', $guard);
-        self::assertStringContainsString("live.desktop = {", $guard, 'it hangs off the framework runtime');
+        self::assertStringContainsString('live.desktop = {', $guard, 'it hangs off the framework runtime');
+        // One `%s` per argument (greenhouse decisions/0211, phase C): the copy the commands say carries three.
+        self::assertStringContainsString('for (var i = 0; i < args.length; i++) { s = String(s).replace(\'%s\', String(args[i])); }', $guard);
 
         // …and NOT in the page: what the page keeps is a one-line delegation per name, nothing more.
         foreach (['function guarded(r) {', 'r.status === 428 ? r : guarded(r)', 'if (err && err.told) { return; }', 'var I18N = (function () {'] as $moved) {
             self::assertStringNotContainsString($moved, $body, 'moved to desktop-guard.js: ' . $moved);
         }
-        self::assertStringContainsString('function failed(err, unreachable) { var d = desk(); if (d) { d.failed(err, unreachable); } }', $body);
-        self::assertStringContainsString('function tr(key, arg) { var d = desk(); return d ? d.tr(key, arg) : key; }', $body);
+        // Since phase D the page keeps no shim either: there is nothing left in it to delegate FROM
+        // (greenhouse decisions/0211). Every caller reaches the guard through `MilpaLive.desktop` from its
+        // own module, and each of those modules fails closed the same way.
+        foreach (['function failed(err, unreachable) { var d = desk();', 'function tr(key, arg) { var d = desk();', 'function guard(r) { var d = desk();'] as $shim) {
+            self::assertStringNotContainsString($shim, $body, 'the page has no caller left to shim: ' . $shim);
+        }
+        foreach (['desktop-capabilities', 'desktop-work-board', 'desktop-turn'] as $caller) {
+            self::assertStringContainsString('function desk() { return live.desktop || null; }', self::module($caller), $caller . ' resolves the guard on use');
+        }
         // The page loads it, once, through LiveBoot — before any component module, after the runtime.
         self::assertSame(1, substr_count($body, '<script src="/desktop/assets/c/desktop-guard.js" defer></script>'));
         self::assertLessThan(strpos($body, '/desktop/assets/alpine.min.js'), strpos($body, '/desktop/assets/c/desktop-guard.js'));
         self::assertGreaterThan(strpos($body, '/desktop/assets/milpa-live-remote.js'), strpos($body, '/desktop/assets/c/desktop-guard.js'));
 
-        // Every call site the reader mapped goes through the delegating shim, which FAILS CLOSED.
-        self::assertStringContainsString("function guard(r) { var d = desk(); return d ? d.guarded(r) : Promise.reject(new Error('desktop-guard not loaded')); }", $body);
-        // The two writes that moved with their screens keep the SAME discipline, in their own modules.
+        // Every call site FAILS CLOSED: with no guard loaded a call is refused, never passed through unread.
+        foreach (['desktop-capabilities', 'desktop-work-board', 'desktop-turn'] as $caller) {
+            self::assertStringContainsString("return Promise.reject(new Error('desktop-guard not loaded'));", self::module($caller), $caller . ' fails closed');
+        }
+        // The writes that moved with their surfaces keep the SAME discipline, in their own modules.
         self::assertStringContainsString("}).then(d.guarded).then(function () {\n          location.reload();", self::module('desktop-auth'), 'POST /desktop/sessions');
         self::assertStringContainsString("}).then(d.guarded).then(function () {\n          self.report(true, tr('settings.saved'));", self::module('desktop-settings'), 'POST /desktop/settings — Saved only on a 2xx');
         self::assertStringContainsString("self.report(false, tr('settings.save_failed', (err && err.status) || 0));", self::module('desktop-settings'));
-        self::assertStringContainsString("fetch(url, { method: 'POST', headers: hdr, body: body }).then(guardFlow)", $body, 'capabilities step one: the confirm gate passes, a door does not');
-        self::assertStringContainsString("fetch(url, { method: 'POST', headers: h2, body: body }).then(guard)", $body, 'capabilities step two');
-        self::assertStringContainsString("}).then(guard).then(function (r) { return r.json(); }).then(function (res) {", $body, 'POST /agent');
-        self::assertStringContainsString("}).catch(function (err) { failed(err, tr('guard.unreachable')); });", $body, 'the turn\'s unreachable copy comes from the catalog like its siblings');
+        self::assertStringContainsString('.then(d.guardedFlow)', self::module('desktop-capabilities'), 'capabilities step one: the confirm gate passes, a door does not');
+        self::assertStringContainsString('}).then(d.guarded).then(function (confirmed) {', self::module('desktop-capabilities'), 'capabilities step two');
+        self::assertStringContainsString('}).then(d.guarded).catch(function (err) { d.failed(err, tr(\'guard.unreachable\')); });', self::module('desktop-work-board'), 'POST /desktop/work');
+        self::assertStringContainsString('}).then(d.guarded).then(function (response) {', self::module('desktop-turn'), 'POST /agent');
+        self::assertStringContainsString("}).catch(function (err) { working(false); d.failed(err, tr('guard.unreachable')); });", self::module('desktop-turn'), 'the turn\'s unreachable copy comes from the catalog like its siblings, and a failed turn is not left «working»');
         self::assertStringNotContainsString("'The turn could not be reached.'", $body);
-        self::assertStringContainsString('return req.then(guard).then(read)', $body, 'callOp → /agent/goal, /skill/invoke');
-        self::assertStringContainsString("if (!res.ok) { if (!res.told) { notice(opFailure('agent:goal', res)); } return; }", $body, 'a refusal the guard told is not told twice');
-        self::assertSame(2, substr_count($body, "}).then(guard).catch(function (err) { failed(err, tr('guard.unreachable')); });"), 'POST /desktop/work and the mode chip\'s settings post');
-        // The enrolment probe went with the sidebar (greenhouse decisions/0211, B5) and kept its discipline.
-        $sidebar = self::module('desktop-sidebar');
-        self::assertStringContainsString("fetch('/webauthn/enroll', { method: 'GET' }).then(d.guarded)", $sidebar, 'the enrol probe');
-        self::assertStringContainsString("if (err && err.status && err.status !== 404) { d.failed(err); return; }", $sidebar, 'a 401/403 there is a door, not a missing one');
-        self::assertStringContainsString("link.textContent = tr('enroll.none');", $sidebar);
-        self::assertStringNotContainsString("'No passkey door", $sidebar);
-        // Every Desktop module that calls a door reaches the SAME guard — none of them carries a copy.
-        foreach (['desktop-auth', 'desktop-settings', 'desktop-sidebar'] as $component) {
+        self::assertStringContainsString('return request.then(d.guarded).then(read)', self::module('desktop-commands'), 'callOp → /agent/goal, /skill/invoke');
+        self::assertStringContainsString('if (!result.told) { notice(failure(\'agent:goal\', result)); }', self::module('desktop-commands'), 'a refusal the guard told is not told twice');
+        // NOT ONE fetch is left in the page (greenhouse decisions/0211, phase D): the capabilities two-step
+        // and the work board's move were the last two, and they left with their surfaces. The claim is not
+        // «fewer»; it is zero, and the modules below are where every call now lives.
+        self::assertSame(0, preg_match_all('/\bfetch\((?!\))/', $body), 'the page calls nothing');
+        // And in the modules, every fetch is guarded — `d.guarded` is the same discipline by another name.
+        // The commands module makes TWO calls (a GET read and a POST mutation) through ONE guarded `request`;
+        // the capabilities module makes two because the house's confirm gate is a two-STEP, not two calls.
+        foreach (['desktop-auth' => 1, 'desktop-settings' => 1, 'desktop-sidebar' => 1, 'desktop-turn' => 1, 'desktop-composer' => 1, 'desktop-commands' => 2, 'desktop-capabilities' => 2, 'desktop-work-board' => 1] as $component => $calls) {
             $module = self::module($component);
+            self::assertSame($calls, preg_match_all('/\bfetch\((?!\))/', $module), $component);
+            self::assertGreaterThanOrEqual(1, substr_count($module, '.then(d.guarded)'), $component . ' guards every call');
             self::assertStringContainsString('function desk() { return live.desktop || null; }', $module, $component . ' resolves the shared guard');
             self::assertStringNotContainsString('function guarded(', $module, $component . ' carries no guard of its own');
         }
-        // Ten fetch calls (a `fetch(` with an argument — the comments' `fetch()` is not one), and not one reads
-        // its result before the guard did: eight `.then(guard)` (callOp guards two fetches through one `req`)
-        // plus the capabilities' first step through `.then(guardFlow)`.
-        // Phase B moved three of them into their components' modules (the session ceremony, the settings
-        // save, the enrolment probe), so the page is down to seven — and still not one reads its result
-        // before the guard did.
-        self::assertSame(7, preg_match_all('/\bfetch\((?!\))/', $body));
-        self::assertSame(5, preg_match_all('/\.then\(guard\)/', $body));
-        self::assertSame(1, substr_count($body, '.then(guardFlow)'));
-        // And in the modules, every fetch is guarded too — `d.guarded` is the same discipline by another name.
-        foreach (['desktop-auth' => 1, 'desktop-settings' => 1, 'desktop-sidebar' => 1] as $component => $calls) {
-            $module = self::module($component);
-            self::assertSame($calls, preg_match_all('/\bfetch\((?!\))/', $module), $component);
-            self::assertSame($calls, substr_count($module, '.then(d.guarded)'), $component . ' guards every call');
-        }
-        self::assertStringContainsString("guardFlow).then(function (r) { return r.json(); }).then(function (a) {", $body, 'the capabilities body is read only after the guard');
+        self::assertStringContainsString(
+            ".then(d.guardedFlow)\n      .then(function (response) { return response.json(); })",
+            self::module('desktop-capabilities'),
+            'the capabilities body is read only after the guard',
+        );
         self::assertStringNotContainsString("badge.hidden = false; setTimeout", $body, 'the old unconditional Saved is gone');
     }
 
     public function testTheGuardSaysWhatHappenedInsteadOfReachingIntoTheConversation(): void
     {
         // A3 (greenhouse decisions/0211): `notice()` no longer calls appendMessage — it emits the
-        // `desktop.notice` signal (kind, text) and the conversation CONSUMES it. That is the seam a
-        // Conversation module takes over next without touching the guard.
+        // `desktop.notice` signal (kind, text) and the conversation CONSUMES it. Phase C took that seam:
+        // the consumer is the thread's own module, so the page holds neither half of the coupling.
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
-        $guard = (string) file_get_contents(\dirname(__DIR__) . '/resources/components/desktop-guard/desktop-guard.js');
+        $guard = self::module('desktop-guard');
+        $conversation = self::module('desktop-conversation');
 
         self::assertStringContainsString("signal('desktop.notice', payload)", $guard);
-        self::assertStringContainsString("function notice(text) { var d = desk(); if (d) { d.notice('system', text); } }", $body);
-        self::assertStringContainsString("d.onNotice(function (n) { appendMessage('system', { text: (n && n.text) || '' }); });", $body);
-        self::assertStringNotContainsString("function notice(text) { appendMessage('system', { text: text }); }", $body);
+        self::assertStringContainsString("d.onNotice(function (notice) { append('system', { text: (notice && notice.text) || '' }); });", $conversation);
+        self::assertStringNotContainsString('function notice(', $body, 'the page says nothing of its own any more');
+        self::assertStringNotContainsString('appendMessage', $body);
         self::assertStringContainsString('"desktop.notice":null', $body, 'the signal is seeded so the store is reactive on it');
     }
 
     public function testWorkingIsASignalTheSendButtonAndTheTopbarBadgeBindTo(): void
     {
-        // A3 (greenhouse decisions/0211): setWorking() sets `session.working`; nothing pokes the button's
-        // glyph, label or disabled, nor the badge's className. `composer.draft` is the other half of the
-        // button's state, so `disabled` is a binding too.
+        // A3 (greenhouse decisions/0211): setting `session.working` is what makes the turn visible; nothing
+        // pokes the button's glyph, label or disabled, nor the badge's className. `composer.draft` is the
+        // other half of the button's state, so `disabled` is a binding too. Since phase C the writer is the
+        // TURN's module (the turn is what works) and the composer's Stop asks it to stop.
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
 
-        self::assertStringContainsString("function setWorking(on) {\n      setSig('session.working', !!on);", $body);
+        self::assertStringContainsString("function working(on) {\n    signal('session.working', !!on);", self::module('desktop-turn'));
         self::assertStringContainsString(":disabled=\"!\$store.milpa['session.working'] && !\$store.milpa['composer.draft']\"", $body);
         self::assertStringContainsString("x-text=\"\$store.milpa['session.working'] ? '■' : '↑'\"", $body);
+        self::assertStringContainsString('@click="working ? stop() : send()"', $body, 'the button asks its own component');
+        self::assertStringContainsString("return this.\$store.milpa['session.working'] === true;", self::module('desktop-composer'));
         // The badge asks its own component (greenhouse decisions/0211, B2): `working` is the signal, read
         // inside the effect by the `desktopTopbar` factory, so the binding stays reactive and the markup
         // stops reaching into the store.
         self::assertStringContainsString(":class=\"{ 'mui-badge--accent': working, 'mui-badge--dot': working }\"", $body);
         self::assertStringContainsString("return this.\$store.milpa['session.working'] === true;", self::module('desktop-topbar'));
         self::assertStringContainsString('"session.working":false', $body);
-        self::assertStringNotContainsString("sendBtn.textContent = working", $body);
-        self::assertStringNotContainsString("top.className = working", $body);
+        self::assertStringNotContainsString('sendBtn.textContent = working', $body);
+        self::assertStringNotContainsString('top.className = working', $body);
     }
 
     public function testTheComposerIsClearedThroughItsComponentNotASyntheticEvent(): void
     {
         // A3 (greenhouse decisions/0211): the field is a milpa/live component, so clearing it is an
         // interaction with the milpaField data (`reset('')` / `change(text)`) — the synthetic `input` event
-        // that announced a keystroke nobody typed is gone.
+        // that announced a keystroke nobody typed is gone. Phase C moved it into the composer's own module,
+        // which reads the field from its OWN root instead of the document.
         $body = (string) $this->controller()->shell(new ServerRequest('GET', '/desktop'))->getBody();
+        $composer = self::module('desktop-composer');
 
-        self::assertStringContainsString("if (d) { if (text === '') { d.reset(''); } else { d.change(text); } }", $body);
-        self::assertStringContainsString('window.Alpine.$data(root)', $body);
-        self::assertStringContainsString("setComposerText('');", $body, 'send clears through the component');
-        self::assertStringContainsString("setComposerText('/' + name + ' ');", $body, 'a completion fills through the component');
+        self::assertStringContainsString("if (text === '') { data.reset(''); } else { data.change(text); }", $composer);
+        self::assertStringContainsString('window.Alpine.$data(root)', $composer);
+        self::assertStringContainsString("this.setText('');", $composer, 'send clears through the component');
+        self::assertStringContainsString("bar.setText('/' + name + ' ');", self::module('desktop-commands'), 'a completion fills through the component');
+        self::assertStringNotContainsString("dispatchEvent(new Event('input'", $composer);
         self::assertStringNotContainsString("dispatchEvent(new Event('input'", $body);
+        self::assertStringContainsString('x-data="desktopComposer()"', $body, 'the bar is the component that owns the field');
     }
 
     public function testTheTopbarSaysWhoTheGateLetInAndWhichGateStands(): void

@@ -89,7 +89,10 @@ final class Activity
         /** @var list<array{seq: int, type: string, data: string}> $audit */
         $audit = \is_array($props['audit'] ?? null) ? $props['audit'] : [];
         if ($audit === []) {
-            return '<li class="mui-replay__event"><span class="mui-replay__actor">no facts recorded yet</span></li>';
+            // MARKED, not recognised by its words: the module removes this row when the first live fact
+            // lands, and it used to find it by matching the English «no facts» — a coupling that would
+            // have outlived the sentence the moment this screen was translated.
+            return '<li class="mui-replay__event" data-activity-empty><span class="mui-replay__actor">no facts recorded yet</span></li>';
         }
 
         $out = '';

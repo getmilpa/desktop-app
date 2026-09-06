@@ -156,7 +156,7 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         // components on it the same way the shell declares its own.
         $desktopComponents = new DesktopComponents($this->liveSecret('signing'), $this->liveSecret('csrf'), $events);
         $this->container->registerService(DesktopComponents::class, $desktopComponents);
-        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'), $events, $desktopComponents);
+        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'), $events, $desktopComponents, $catalog);
         $this->container->registerService(ComposerField::class, $composerField);
         $this->container->registerService(LiveController::class, new LiveController($desktopComponents->endpoint()));
 
@@ -211,7 +211,7 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $this->container->registerService(\Milpa\DesktopApp\Live\MessagePrototypes::class, $messages);
 
         // The conversation itself is a component that composes the message components (greenhouse decisions/0191).
-        $conversation = new \Milpa\DesktopApp\Live\Conversation($this->liveSecret('signing'), $events);
+        $conversation = new \Milpa\DesktopApp\Live\Conversation($this->liveSecret('signing'), $events, $data, $catalog);
         $this->container->registerService(\Milpa\DesktopApp\Live\Conversation::class, $conversation);
 
         // The session strip of embed mode (greenhouse decisions/0210) is a component too (decisions/0189): the
@@ -227,7 +227,13 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $authOverlay = new \Milpa\DesktopApp\Live\AuthOverlay($this->liveSecret('signing'), $data, $events, $catalog);
         $this->container->registerService(\Milpa\DesktopApp\Live\AuthOverlay::class, $authOverlay);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog, $sessionStrip, $settingsScreen, $authOverlay, $desktopComponents));
+        // The composer bar is a declared view too (greenhouse decisions/0211, phase C): the last surface the
+        // shell hand-stitched. Its markup is a renderer's, its behaviour `desktop-composer.js`, and the mode
+        // its chip shows travels in a signed envelope like every other component's state.
+        $composerBar = new \Milpa\DesktopApp\Live\ComposerBar($this->liveSecret('signing'), $data, $composerField, $events, $catalog);
+        $this->container->registerService(\Milpa\DesktopApp\Live\ComposerBar::class, $composerBar);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog, $sessionStrip, $settingsScreen, $authOverlay, $composerBar, $desktopComponents));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 

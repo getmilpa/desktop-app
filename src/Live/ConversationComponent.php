@@ -30,7 +30,7 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  */
 final class ConversationComponent implements ComponentDefinitionInterface
 {
-    /** The conversation container: whether it holds any messages yet. */
+    /** The conversation container: whether it holds any messages yet, and whether a run was left mid-turn. */
     public static function contract(): ComponentContract
     {
         return new ComponentContract(
@@ -38,16 +38,22 @@ final class ConversationComponent implements ComponentDefinitionInterface
             contractVersion: '1',
             summary: 'The conversation thread: composes the message components.',
             designContract: '@milpa/design:components/milpa-conversation.contract.json',
-            propsSchema: ['empty' => ['type' => 'bool', 'default' => true]],
-            stateSchema: ['empty' => ['type' => 'bool']],
+            propsSchema: ['empty' => ['type' => 'bool', 'default' => true], 'interrupted' => ['type' => 'bool', 'default' => false]],
+            stateSchema: ['empty' => ['type' => 'bool'], 'interrupted' => ['type' => 'bool']],
             actions: [],
         );
     }
 
-    /** Mount: a fresh conversation is empty until a message lands. */
+    /**
+     * Mount: a fresh conversation is empty until a message lands, and it carries the interrupted-run notice
+     * (greenhouse decisions/0196) when the session it opened on was left mid-turn.
+     */
     public function mount(array $props, ComponentContext $context): StateSnapshot
     {
-        return new StateSnapshot($context->componentId, 'desktop-conversation', '1', ['empty' => (bool) ($props['empty'] ?? true)], []);
+        return new StateSnapshot($context->componentId, 'desktop-conversation', '1', [
+            'empty' => (bool) ($props['empty'] ?? true),
+            'interrupted' => (bool) ($props['interrupted'] ?? false),
+        ], []);
     }
 
     /** The conversation is a container — no interaction of its own. */

@@ -41,11 +41,11 @@
         var stream = document.getElementById('milpa-activity');
         if (!stream) { return null; }
 
-        // The server's empty state goes the moment the first real fact lands.
-        var placeholder = stream.querySelector('.mui-replay__actor');
-        if (placeholder && placeholder.textContent.indexOf('no facts') === 0 && placeholder.parentNode) {
-          stream.removeChild(placeholder.parentNode);
-        }
+        // The server's empty state goes the moment the first real fact lands. It is found by the MARK the
+        // renderer puts on it (`data-activity-empty`), never by reading its words: matching on the English
+        // «no facts» made the placeholder outlive its own translation.
+        var placeholder = stream.querySelector('[data-activity-empty]');
+        if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
 
         var row = document.createElement('li');
         row.className = 'mui-replay__event';

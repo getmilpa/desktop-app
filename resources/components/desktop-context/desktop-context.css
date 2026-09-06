@@ -1,0 +1,13 @@
+/*!
+ * desktop-context — the grid a plugin's contributed panels sit in (greenhouse decisions/0189, 0211 D5).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the Context tab's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-context.css. The tab had no file of its own until phase D: its one rule was
+ * in the shell's inline <style>, which meant a plugin's panels were laid out by a stylesheet the shell
+ * paid for and nobody could point at.
+ */
+
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: var(--space-4); }

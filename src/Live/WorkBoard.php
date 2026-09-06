@@ -28,8 +28,10 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  * design-system board (columns by status, draggable cards), carries the signed state envelope, and emits
  * `desktop.work_board.before_render` / `after_render` so other plugins can extend it (decorate columns/cards).
  *
- * Moving a card persists through the dedicated `/desktop/work` mutation (greenhouse decisions/0484); that
- * drag-drop transport is unchanged — this makes the board a declared, signed, extensible component.
+ * Moving a card persists through the dedicated `/desktop/work` mutation (greenhouse decisions/0484). Since
+ * phase D of the declared views (greenhouse decisions/0211) the gesture is the board's OWN module:
+ * `desktop-work-board.js` (declared by this renderer, delegated on the root) and `desktop-work-board.css`,
+ * so the drag's look is CSS state and not a style assigned from JavaScript.
  */
 final class WorkBoard
 {
@@ -87,17 +89,21 @@ final class WorkBoard
         foreach ($work as $i => $item) {
             $status = \array_key_exists($item['status'], self::COLUMNS) ? $item['status'] : 'pending';
             $byStatus[$status] .= sprintf(
-                '<article class="mui-card mui-card--compact" draggable="true" data-index="%d" style="cursor:grab"><div class="mui-card__body"><p style="margin:0 0 var(--space-3);font-size:var(--text-sm)">%s</p><span class="mui-badge">%s</span></div></article>',
+                '<article class="mui-card mui-card--compact work-card" draggable="true" data-index="%d"><div class="mui-card__body"><p class="work-card__title">%s</p><span class="mui-badge">%s</span></div></article>',
                 $i,
                 htmlspecialchars($item['title'], ENT_QUOTES),
                 htmlspecialchars($item['origin'], ENT_QUOTES),
             );
         }
 
-        $out = '<div class="work-board" ' . $wrap . ' data-session="' . $session . '" style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);align-items:start">';
+        // Every drag event is DELEGATED on the board's own root (greenhouse decisions/0211, D3), so a card
+        // or a column painted later is draggable without anything re-wiring listeners onto it.
+        $out = '<div class="work-board" ' . $wrap . ' data-session="' . $session . '"'
+            . ' x-data="desktopWorkBoard()" @dragstart="onDragStart($event)" @dragend="onDragEnd($event)"'
+            . ' @dragover="onDragOver($event)" @dragleave="onDragLeave($event)" @drop="onDrop($event)">';
         foreach (self::COLUMNS as $key => $label) {
             $out .= sprintf(
-                '<section class="work-col" data-status="%s" style="display:flex;flex-direction:column;gap:var(--space-3);min-height:8rem;padding:var(--space-2);border-radius:var(--radius-md)"><div class="mui-cluster mui-cluster--sm" style="justify-content:space-between"><span class="mui-section__kicker" style="margin:0">%s</span></div>%s</section>',
+                '<section class="work-col" data-status="%s"><div class="mui-cluster mui-cluster--sm work-col__head"><span class="mui-section__kicker work-col__title">%s</span></div>%s</section>',
                 htmlspecialchars($key, ENT_QUOTES),
                 htmlspecialchars($label, ENT_QUOTES),
                 $byStatus[$key],

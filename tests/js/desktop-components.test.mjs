@@ -315,7 +315,9 @@ test('the entry overlay creates the session through the guard, and reloads only 
 test('every live fact of the bus is prepended to the Activity stream, newest first', () => {
   const html = new El('html');
   const stream = new El('ol', { id: 'milpa-activity' });
-  const empty = new El('li', { class: 'mui-replay__event' });
+  // The empty row as `Live\Activity` prints it: MARKED, so the module finds it by its mark and not by
+  // reading the English words it happens to carry today.
+  const empty = new El('li', { class: 'mui-replay__event', 'data-activity-empty': '' });
   empty.appendChild(new El('span', { class: 'mui-replay__actor', text: 'no facts recorded yet' }));
   stream.appendChild(empty);
   html.appendChild(stream);

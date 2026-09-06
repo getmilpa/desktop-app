@@ -15,8 +15,8 @@
  * The bug this fixes by execution (greenhouse decisions/0211, B3): the page's handler ended by unhiding
  * an element with the id `milpa-decisions-badge` — which NOTHING in this package renders. So every
  * `gate.opened` threw a TypeError right after filling the card, and the Dismiss listener threw on every
- * click. The decisions count is the SIDEBAR's badge and `MilpaShell.addDecision()` is what ticks it; the
- * gate does not own it, so the gate no longer reaches for it.
+ * click. The decisions count is the SIDEBAR's badge: the sidebar's own module consumes the
+ * `decision.parked` fact and ticks it. The gate does not own it, so the gate no longer reaches for it.
  */
 (function () {
   'use strict';

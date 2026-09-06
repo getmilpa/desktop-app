@@ -44,6 +44,46 @@ final class DesktopAssets
     public const string GUARD = 'desktop-guard';
 
     /**
+     * The shell's event bus (greenhouse decisions/0211, D1). `window.MilpaShell` is the Desktop's
+     * PUBLISHED extension point — four shipped modules consume it and a plugin drives its panels through
+     * it — so it is a module of its own rather than a private channel folded into one of its consumers.
+     */
+    public const string BUS = 'desktop-shell-bus';
+
+    /**
+     * The Mercure connector (greenhouse decisions/0211, D1). It opens the ONE `EventSource`, reading the
+     * hub's URL from a JSON data tag, and translates hub envelopes into the bus's facts and the shared
+     * signals. A transport is not a surface either.
+     */
+    public const string HUB = 'desktop-hub';
+
+    /**
+     * The governed turn (greenhouse decisions/0211, C3). A RUNTIME module like the guard, not a component:
+     * a turn is not a surface — nothing renders it — so no renderer declares it and the page does.
+     */
+    public const string TURN = 'desktop-turn';
+
+    /**
+     * The composer's slash commands (greenhouse decisions/0211, C4). A runtime module too: a command is
+     * the house's own operation reached from the composer, and the popup that lists them is markup the
+     * composer already owns.
+     */
+    public const string COMMANDS = 'desktop-commands';
+
+    /**
+     * The modules the PAGE declares — every component module is declared by the renderer that paints it,
+     * and these five have no surface to be painted. Emitted first, in this order: the guard creates
+     * `MilpaLive.desktop`, the bus creates `window.MilpaShell`, the hub subscribes the transport to it,
+     * and the turn and the commands hang off the guard.
+     *
+     * @return list<string>
+     */
+    public static function runtimeModules(): array
+    {
+        return [self::GUARD, self::BUS, self::HUB, self::TURN, self::COMMANDS];
+    }
+
+    /**
      * Which component ships which files. A component absent from this map declares nothing — the
      * design system carries its whole look and it has no behaviour of its own yet.
      *
@@ -58,15 +98,38 @@ final class DesktopAssets
         'desktop-settings' => ['css', 'js'],
         'desktop-auth' => ['css', 'js'],
         'desktop-session-strip' => ['css'],
-        'desktop-conversation' => ['css'],
+        'desktop-composer' => ['css', 'js'],
+        'desktop-context' => ['css'],
+        'desktop-work-board' => ['css', 'js'],
+        'desktop-conversation' => ['css', 'js'],
         'desktop-user-message' => ['css'],
-        'desktop-agent-message' => ['css'],
-        'desktop-thinking' => ['css'],
-        'desktop-tool-call' => ['css'],
+        // The three message kinds with behaviour of their own (greenhouse decisions/0211, C1): the
+        // thinking block's streaming life, the answer's markdown and foot tools, the tool result's
+        // reading and collapse. The plain kinds (user, task, system notice) are filled by the thread.
+        'desktop-agent-message' => ['css', 'js'],
+        'desktop-thinking' => ['css', 'js'],
+        'desktop-tool-call' => ['css', 'js'],
         'desktop-task' => ['css'],
         'desktop-system-notice' => ['css'],
-        'desktop-result-claim' => ['css'],
+        'desktop-result-claim' => ['css', 'js'],
+        // The screens the shell's template used to carry as raw HTML with their behaviour in its inline
+        // script (greenhouse decisions/0211, phase D). `desktop-skills` and `desktop-statusbar` declare a
+        // stylesheet and nothing else: they are read-only projections, so they have no module to ship.
+        'desktop-capabilities' => ['css', 'js'],
+        'desktop-decisions' => ['css', 'js'],
+        'desktop-screens' => ['css', 'js'],
+        'desktop-skills' => ['css'],
+        'desktop-statusbar' => ['css'],
+        // The admin's Agent region (greenhouse decisions/0210): a surface this package contributes to
+        // SOMEBODY ELSE's page. Its renderer loads these two itself — milpa/admin collects no client
+        // assets from a section's renderer — but they are declared here like every other component's, so
+        // the route serves them and the suite proves they exist.
+        'desktop-agent-guest' => ['css', 'js'],
         self::GUARD => ['js'],
+        self::BUS => ['js'],
+        self::HUB => ['js'],
+        self::TURN => ['js'],
+        self::COMMANDS => ['js'],
     ];
 
     /**

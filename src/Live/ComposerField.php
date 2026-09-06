@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Live;
 
+use Milpa\DesktopApp\I18n\Catalog;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Components\Form\InputComponent;
 use Milpa\Live\Http\LiveEndpoint;
@@ -53,6 +54,9 @@ final class ComposerField
 
     private readonly DesktopComponents $registry;
 
+    /** The Desktop's copy in the declared locale — the field's placeholder is a human-facing sentence. */
+    private readonly Catalog $catalog;
+
     /**
      * @param DesktopComponents|null $registry the Desktop's ONE component registry (greenhouse decisions/0211);
      *                                         a private one is built from the secrets when none is shared in,
@@ -63,8 +67,10 @@ final class ComposerField
         string $csrfSecret,
         private readonly ?MilpaEventDispatcherInterface $events = null,
         ?DesktopComponents $registry = null,
+        ?Catalog $catalog = null,
     ) {
         $this->registry = $registry ?? new DesktopComponents($signingSecret, $csrfSecret, $events);
+        $this->catalog = $catalog ?? new Catalog();
     }
 
     /**
@@ -74,7 +80,7 @@ final class ComposerField
      */
     public function render(): string
     {
-        $subject = new ComposerRender(['name' => 'message', 'placeholder' => 'Write to the session…', 'rows' => 2]);
+        $subject = new ComposerRender(['name' => 'message', 'placeholder' => $this->catalog->tr('composer.placeholder'), 'rows' => 2]);
         $this->events?->dispatch(self::BEFORE_RENDER, ['composer' => $subject]);
 
         $component = new ComposerMessageComponent($this->events);

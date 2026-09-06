@@ -1,0 +1,26 @@
+/*!
+ * desktop-work-board — the session's plan, by status (greenhouse decisions/0189, 0211 phase D3).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the board's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-work-board.css. The board's look used to be inline `style` attributes on
+ * every element the renderer wrote, and the drag's look was assigned from JavaScript
+ * (`col.style.background = …`, `card.style.opacity = …`). Both are CSS state now, so what a drag LOOKS
+ * like is here and what a drag DOES is in the module.
+ */
+
+.work-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); align-items: start; }
+@media (max-width: 900px) { .work-board { grid-template-columns: repeat(2, 1fr); } }
+
+.work-col { display: flex; flex-direction: column; gap: var(--space-3); min-height: 8rem; padding: var(--space-2); border-radius: var(--radius-md); background: transparent; }
+/* The column a card is being carried over. */
+.work-col--over { background: var(--accent-subtle); }
+.work-col__head { justify-content: space-between; }
+.work-col__title { margin: 0; }
+
+.work-card { cursor: grab; }
+/* The card being carried. */
+.work-card--carried { opacity: .5; cursor: grabbing; }
+.work-card__title { margin: 0 0 var(--space-3); font-size: var(--text-sm); }

@@ -55,7 +55,9 @@ final class EmbedModeTest extends TestCase
         self::assertStringContainsString('html[data-embed="1"] .chrome, html[data-embed="1"] .statusbar, html[data-embed="1"] .mui-sidebar, html[data-embed="1"] .mui-topbar { display: none !important; }', $embed);
         self::assertStringContainsString('html[data-embed="1"] .mui-shell__main { grid-column: 1 !important; grid-row: 1 !important; }', $embed);
         self::assertStringContainsString('<div class="chrome">', $embed);
-        self::assertStringContainsString('<div class="statusbar">', $embed);
+        // The status bar is a declared component since phase D (greenhouse decisions/0211), so it is
+        // matched by what it IS, not by a literal the shell used to hand-write.
+        self::assertStringContainsString('<div class="statusbar" data-milpa-component="desktop-statusbar"', $embed);
         self::assertStringContainsString('data-milpa-component="desktop-sidebar"', $embed);
         self::assertStringContainsString('data-milpa-component="desktop-topbar"', $embed);
         // The same route, the same page: nothing else changes but the flag, the strip and the chrome links.
@@ -74,7 +76,7 @@ final class EmbedModeTest extends TestCase
 
         $lookedUp = self::idsLookedUpIn($plain);
         foreach (glob(\dirname(__DIR__) . '/resources/components/*/*.js') ?: [] as $module) {
-            $lookedUp = [...$lookedUp, ...self::idsLookedUpIn((string) file_get_contents($module))];
+            $lookedUp = [...$lookedUp, ...self::idsNamedIn((string) file_get_contents($module))];
         }
         $lookedUp = array_values(array_unique($lookedUp));
         self::assertGreaterThanOrEqual(20, \count($lookedUp), 'the script contract: the ids the shell resolves at boot');
@@ -100,6 +102,23 @@ final class EmbedModeTest extends TestCase
         preg_match_all("/getElementById\\('([^']+)'\\)/", $script, $m);
 
         return array_values(array_unique($m[1]));
+    }
+
+    /**
+     * Every `milpa-…` name a MODULE carries as a literal.
+     *
+     * A module resolves its ids through a named constant (`var PROTO_ID = 'milpa-thinking-proto'`), so
+     * reading only `getElementById('…')` would silently stop seeing them — an instrument that says «15
+     * ids» because it went blind, not because the page shrank. Class names come along and are harmless:
+     * the caller keeps only the names the plain page actually renders as an `id`.
+     *
+     * @return list<string>
+     */
+    private static function idsNamedIn(string $module): array
+    {
+        preg_match_all("/'(milpa-[a-z0-9-]+)'/", $module, $m);
+
+        return array_values(array_unique([...self::idsLookedUpIn($module), ...$m[1]]));
     }
 
     public function testTheSessionStripIsRenderedOnlyInEmbedModeAndWiredToTheSameHandlers(): void

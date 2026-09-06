@@ -14,8 +14,12 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Tests\I18n;
 
+use Milpa\DesktopApp\Controllers\ShellController;
 use Milpa\DesktopApp\I18n\Catalog;
+use Milpa\Eventing\EventDispatcher;
+use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * The copy the CLIENT says, against the copy the SERVER has (greenhouse decisions/0211, phase A4).
@@ -28,11 +32,22 @@ use PHPUnit\Framework\TestCase;
  *
  * Two claims, both by reading the shipped artifacts and checking them against the running catalog:
  *
- *   1. every `tr('…')` key a shipped module asks for is a key the catalog answers;
+ *   1. every DOTTED LITERAL a shipped module carries is either a key the catalog answers, a signal the
+ *      page seeds or computes, or one of the few declared names that are neither;
  *   2. the node harness's hand-typed `CATALOG` — the copy those tests assert sentences against — says
  *      exactly what the English catalog says. It had already drifted («The call failed (%s)» against the
  *      shipped «The request failed (HTTP %s)»), which is precisely a test asserting a sentence no user
  *      ever sees.
+ *
+ * (1) IS WIDER THAN IT WAS, and the widening is the point. The first parser here matched `\btr\('…'` and
+ * therefore saw only a key written as the literal FIRST argument — so nine live keys were invisible to it:
+ * `conn.live` / `conn.offline` / `conn.connecting` (the bus picks one into a variable and calls `tr(key)`),
+ * `verdict.aria.verified` / `verdict.aria.disputed`, `command.mode.set` / `command.mode.set.auto`,
+ * `command.goal.set` / `command.goal.unchanged` (each reached through a ternary INSIDE the call). Renaming
+ * any of them in the catalog printed the raw key at a user with every gate green — exactly the failure this
+ * test exists to stop. Reading every dotted literal instead means the parser cannot be walked around by
+ * writing the call differently; the price is that the signals and the bus's fact types look the same, so
+ * those are named — the signals READ OFF THE PAGE the shell serves, not hand-typed.
  */
 final class ClientCopyTest extends TestCase
 {
@@ -42,31 +57,91 @@ final class ClientCopyTest extends TestCase
         return \dirname(__DIR__, 2);
     }
 
-    public function testEveryKeyTheShippedModulesAskForIsOneTheCatalogAnswers(): void
+    /**
+     * The dotted names a module carries that are NOT copy, each with the reason it is not.
+     *
+     * The signals are not here: they are read off the page the shell actually serves (`#milpa-live-signals`
+     * and `#milpa-live-computed`), so a signal renamed on the server is a signal renamed here too. What is
+     * left is what no server tag declares — the bus's fact TYPES, the two connection signals the bus alone
+     * writes, and the one browser storage key.
+     *
+     * @var array<string, string> name => why it is not a catalog key
+     */
+    private const array NOT_COPY = [
+        'agent.message' => 'a bus fact type (the hub republishes it, the thread renders it)',
+        'agent.reasoning' => 'a bus fact type',
+        'agent.thinking' => 'a bus fact type',
+        'decision.parked' => 'a bus fact type (the sidebar ticks its badge, the inbox adds its card)',
+        'gate.opened' => 'a bus fact type',
+        'session.state' => 'a bus fact type',
+        'system.notice' => 'a bus fact type',
+        'task.added' => 'a bus fact type',
+        'tool.call' => 'a bus fact type',
+        'conn.state' => 'a signal the bus alone writes and the status bar binds — the page seeds no value',
+        'conn.label' => 'idem: the connection has no state until the transport says one',
+        'milpa.theme' => "the localStorage key the viewer's own theme preference is remembered under",
+    ];
+
+    /** The signals the SERVED page declares — seeded and computed — read off the page itself. */
+    private static function signalsOfThePage(): array
+    {
+        $page = (string) (new ShellController(new EventDispatcher(new NullLogger())))
+            ->shell(new ServerRequest('GET', '/desktop'))->getBody();
+
+        $names = [];
+        foreach (['milpa-live-signals', 'milpa-live-computed'] as $id) {
+            self::assertSame(1, preg_match('/<script id="' . $id . '" type="application\/json">(.*?)<\/script>/s', $page, $m), $id . ' is served');
+            $read = json_decode($m[1], true);
+            self::assertIsArray($read, $id . ' is JSON');
+            foreach (array_keys($read) as $name) {
+                $names[(string) $name] = $id;
+            }
+        }
+        self::assertArrayHasKey('session.working', $names, 'the instrument read real signals');
+
+        return $names;
+    }
+
+    public function testEveryDottedNameAModuleCarriesIsCopyTheCatalogAnswersOrADeclaredNonKey(): void
     {
         $catalog = new Catalog();
+        $signals = self::signalsOfThePage();
         $modules = glob(self::root() . '/resources/components/*/*.js') ?: [];
         self::assertNotEmpty($modules, 'the instrument found no modules to read — it would pass on an empty package');
 
-        $asked = [];
+        $carried = [];
         foreach ($modules as $module) {
             $source = (string) file_get_contents($module);
-            preg_match_all("/\btr\('([^']+)'/", $source, $matches);
-            foreach ($matches[1] as $key) {
-                $asked[$key][] = basename($module);
+            preg_match_all("/'([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)'/", $source, $matches);
+            foreach ($matches[1] as $name) {
+                $carried[$name][] = basename($module);
             }
         }
 
         // The positive control for the PARSER: if it stopped matching, every assertion below would pass
-        // vacuously. It must find the keys the guard is built on.
-        self::assertArrayHasKey('guard.forbidden', $asked, 'the parser reads real `tr()` calls');
-        self::assertArrayHasKey('settings.saved', $asked);
-        self::assertGreaterThanOrEqual(6, \count($asked));
+        // vacuously. It must find the keys the guard is built on AND the nine the old parser could not see.
+        foreach ([
+            'guard.forbidden', 'settings.saved',
+            'conn.live', 'conn.offline', 'conn.connecting',
+            'verdict.aria.verified', 'verdict.aria.disputed',
+            'command.mode.set', 'command.mode.set.auto', 'command.goal.set', 'command.goal.unchanged',
+        ] as $reached) {
+            self::assertArrayHasKey($reached, $carried, '«' . $reached . '» is reached by a shipped module and the parser must see it');
+        }
+        self::assertGreaterThanOrEqual(40, \count($carried));
 
-        foreach ($asked as $key => $files) {
+        foreach ($carried as $name => $files) {
+            $where = implode(', ', array_unique($files));
+            if (isset(self::NOT_COPY[$name]) || isset($signals[$name])) {
+                self::assertFalse(
+                    $catalog->has($name) && isset(self::NOT_COPY[$name]),
+                    \sprintf('«%s» is declared a non-key but the catalog answers it — say which it is', $name),
+                );
+                continue;
+            }
             self::assertTrue(
-                $catalog->has($key),
-                \sprintf('«%s» is asked for by %s and answered by nobody — the user would read the key', $key, implode(', ', array_unique($files))),
+                $catalog->has($name),
+                \sprintf('«%s» is carried by %s and is neither copy the catalog answers nor a declared non-key — a user would read it raw', $name, $where),
             );
         }
 

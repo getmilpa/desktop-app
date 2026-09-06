@@ -50,7 +50,12 @@ final class CatalogTest extends TestCase
         self::assertSame(array_keys($en->all()), array_keys($es->all()), 'the same keys in both, the client gets one complete map');
         // The words that are the same word: two gate kinds that are their own names, and «Endpoint», which
         // Mexican Spanish uses as-is. Anything else differing by accident is caught below.
-        $sameInBoth = ['gate.kind.loopback', 'gate.kind.passkey', 'settings.model.endpoint'];
+        // «tokens» is the unit Mexican Spanish uses as-is, and the last two are pure ASSEMBLY — «%s → HTTP
+        // %s — %s» and «%s (%s)» carry no words of their own; everything they say is in their arguments.
+        $sameInBoth = [
+            'gate.kind.loopback', 'gate.kind.passkey', 'settings.model.endpoint',
+            'composer.tokens', 'op.failed', 'op.detail',
+        ];
         foreach (array_keys($en->all()) as $key) {
             if (!\in_array($key, $sameInBoth, true)) {
                 self::assertNotSame($en->tr($key), $es->tr($key), 'Spanish carries its own ' . $key);

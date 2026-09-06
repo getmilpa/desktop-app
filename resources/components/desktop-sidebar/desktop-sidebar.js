@@ -14,7 +14,10 @@
  *     ceremony, so there is one implementation and the session strip's own control runs the same one
  *     (greenhouse decisions/0210, B8);
  *   - `enroll(event)` probes the passkey door before navigating: a 404 (or no answer) degrades the link
- *     in place instead of replacing the whole app with a 404 page; a 401/403 is a door, not an absence.
+ *     in place instead of replacing the whole app with a 404 page; a 401/403 is a door, not an absence;
+ *   - the DECISIONS BADGE: the count belongs to the nav item that shows it, so the sidebar consumes the
+ *     transport's `decision.parked` fact itself (greenhouse decisions/0211, D4) instead of anything
+ *     reaching in from outside to write its number. The inbox screen consumes the same fact for its card.
  *
  * Two controls the sidebar reaches for live OUTSIDE its root and are wired here because they drive it:
  * the window chrome's session search (`#milpa-search`), and — in embed mode, where the sidebar is folded
@@ -66,6 +69,29 @@
       var goal = goalEl ? goalEl.textContent.toLowerCase() : '';
       items[i].classList.toggle('milpa-search-miss', needle !== '' && goal.indexOf(needle) === -1);
     }
+  }
+
+  /**
+   * Tick the decisions badge when an agent parks a question (greenhouse decisions/0196).
+   *
+   * The count belongs to the sidebar item that SHOWS it, so the sidebar consumes the transport's
+   * `decision.parked` fact itself instead of anything reaching in from outside to write its number. The
+   * inbox screen consumes the same fact and prepends its own card.
+   */
+  function parked() {
+    var item = document.querySelector('[data-nav="decisions"]');
+    if (!item) { return null; }
+    var badge = item.querySelector('.mui-sidebar__item-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'mui-sidebar__item-badge mui-badge mui-badge--warning';
+      badge.textContent = '0';
+      item.appendChild(badge);
+    }
+    badge.textContent = String((parseInt(badge.textContent, 10) || 0) + 1);
+    badge.hidden = false;
+
+    return badge;
   }
 
   /** Open the new-session ceremony — the auth overlay's, wherever the request came from. */
@@ -133,5 +159,10 @@
     });
   }
 
-  if (live.desktop) { live.desktop.sidebar = { showView: showView, filterSessions: filterSessions, newSession: newSession }; }
+  // A question parked while the page is open ticks the badge without a reload. Subscribed at LOAD: the
+  // stream is opened on `DOMContentLoaded`, after every deferred module has run (greenhouse decisions/0211).
+  var bus = window.MilpaShell;
+  if (bus && typeof bus.on === 'function') { bus.on('decision.parked', function () { parked(); }); }
+
+  if (live.desktop) { live.desktop.sidebar = { showView: showView, filterSessions: filterSessions, newSession: newSession, parked: parked }; }
 })();

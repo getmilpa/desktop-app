@@ -1,0 +1,24 @@
+/*!
+ * desktop-decisions — the cross-session inbox (greenhouse decisions/0195, 0211 phase D4/D5).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the inbox's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-decisions.css.
+ */
+
+/* The screen fills the main and scrolls on its own. */
+.milpa-decisions { flex: 1; min-height: 0; overflow: auto; padding: var(--space-6) var(--space-8); }
+.milpa-decisions__intro { color: var(--text-secondary); font-size: var(--text-sm); margin: 0 0 var(--space-4); }
+
+#milpa-decisions-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); max-width: 72ch; }
+/* The empty state is server-rendered NEXT TO the list, not instead of it — so a question parked while the
+   page is open has a list to land in, and the empty line steps aside by CSS the moment one does. */
+#milpa-decisions-list:has(.decision-card) + #milpa-decisions-empty { display: none; }
+
+.decision-card { border: 1px solid var(--warning-border, var(--border)); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-4) var(--space-5); }
+.decision-card__goal { margin: 0 0 var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.decision-card__q { margin: 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text); text-wrap: pretty; }
+.decision-card__facts { margin: var(--space-2) 0 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
+.decision-card__open { margin-top: var(--space-3); }

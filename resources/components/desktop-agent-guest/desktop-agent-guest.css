@@ -1,0 +1,31 @@
+/*!
+ * desktop-agent-guest — the Desktop as the admin's guest (greenhouse decisions/0210, 0211 review).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by {@see \Milpa\DesktopApp\Admin\AgentGuestRenderer} and served at
+ * /desktop/assets/c/desktop-agent-guest.css. The region used to carry these rules as an inline <style>
+ * scoped by the component's id, which meant the guest surface was the one place in this package where
+ * the look was not a declared file — the same reason every shell surface has a stylesheet of its own.
+ *
+ * Scoped by the component's CLASS instead of its id: the class is this package's own, so the rules reach
+ * the region and nothing else, whatever id the host gave the section.
+ */
+
+/* The main's available height, from the HOST's own tokens: the viewport minus the admin topbar
+   (`--_topbar-h`, the shell's alias of `--header-h`) and the main's padding (the same `clamp()`
+   milpa/admin's bundle gives `.mui-shell__main`), each with a fallback to milpa/admin 0.10.1's values. */
+.desktop-agent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, .75rem);
+  height: calc(100dvh - var(--_topbar-h, var(--header-h, 3.5rem)) - 2*clamp(var(--space-5, 1.25rem), 3vw, var(--space-8, 2rem)));
+  min-height: 24rem;
+}
+.desktop-agent__bar { display: flex; align-items: center; gap: var(--space-3, .75rem); flex: none; }
+.desktop-agent__open { margin-inline-start: auto; }
+.desktop-agent__frame { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--border-subtle, #333); border-radius: var(--radius-md, .5rem); background: var(--surface, #111); }
+.desktop-agent__notice { margin: 0; }
+/* The signed-out state is a notice, not a frame: it must not be stretched to the viewport's height. */
+.desktop-agent[data-desktop-agent="signed-out"] { display: block; height: auto; min-height: 0; }

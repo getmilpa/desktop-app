@@ -1,0 +1,30 @@
+/*!
+ * desktop-skills — what the agent carries, and the roles the app declares (greenhouse decisions/0197, 0211 D5).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the screen's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-skills.css. The screen has no module: it is read-only, so its whole
+ * declaration is this file — which is exactly why it had to become a component (greenhouse
+ * decisions/0211, D5: the shell stopped being a home for other surfaces' CSS).
+ */
+
+/* The screen fills the main and scrolls on its own. */
+.milpa-skills { flex: 1; min-height: 0; overflow: auto; padding: var(--space-6) var(--space-8); }
+.milpa-skills__intro { color: var(--text-secondary); font-size: var(--text-sm); margin: 0 0 var(--space-4); }
+.milpa-skills__head { margin: var(--space-8) 0 var(--space-4); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+
+/* Each skill guides judgment — it is not a tool that runs. */
+.skill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); max-width: 72ch; }
+.skill-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-3) var(--space-4); }
+.skill-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.skill-card__name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); }
+.skill-card__desc { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text-secondary); text-wrap: pretty; }
+
+/* A role is a named authority: what it preloads, and what it is denied. */
+.role-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); max-width: 72ch; }
+.role-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); padding: var(--space-3) var(--space-4); }
+.role-card__name { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); }
+.role-card__line { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.role-card__key { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }

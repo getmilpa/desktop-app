@@ -47,22 +47,35 @@ final class AgentGuestRendererTest extends TestCase
         // The frame: same origin, the embed path, a title, never lazy — the Agent is the point of the page.
         self::assertStringContainsString('<iframe class="desktop-agent__frame" id="milpa-admin-section-agent-frame" src="/desktop?embed=1" title="Milpa Desktop — Agent"', $html);
         self::assertStringNotContainsString('loading="lazy"', $html);
-        // The height is the main's available height — the viewport minus the host's topbar and the main's
-        // padding, from the host's own tokens with fallbacks — from a small style scoped by the component id.
-        self::assertStringContainsString('<style>#milpa-admin-section-agent{display:flex;flex-direction:column;', $html);
-        self::assertStringContainsString('height:calc(100dvh - var(--_topbar-h, var(--header-h, 3.5rem)) - 2*clamp(var(--space-5, 1.25rem), 3vw, var(--space-8, 2rem)));min-height:24rem}', $html);
-        self::assertStringContainsString('#milpa-admin-section-agent .desktop-agent__frame{flex:1;min-height:0;width:100%;', $html);
+        // The look and the probe are DECLARED FILES, served by the Desktop's own gate-free asset route
+        // (greenhouse decisions/0211 review): this region used to carry an inline <style> and two inline
+        // event handlers — the only executable inline script the package emitted after phase D.
+        self::assertStringContainsString('<link rel="stylesheet" href="/desktop/assets/c/desktop-agent-guest.css">', $html);
+        self::assertStringContainsString('<script src="/desktop/assets/c/desktop-agent-guest.js" defer></script>', $html);
+        self::assertStringNotContainsString('<style>', $html, 'the region declares its look, it does not inline it');
+        // …and the height it declares is still the main's available height, from the host's own tokens.
+        $css = (string) file_get_contents(\dirname(__DIR__, 2) . '/resources/components/desktop-agent-guest/desktop-agent-guest.css');
+        self::assertStringContainsString('height: calc(100dvh - var(--_topbar-h, var(--header-h, 3.5rem)) - 2*clamp(var(--space-5, 1.25rem), 3vw, var(--space-8, 2rem)));', $css);
+        self::assertStringContainsString('.desktop-agent__frame { flex: 1; min-height: 0; width: 100%;', $css);
         // The guest bar: the gate chip the topbar also says, and the way to the full Desktop in a new tab.
         self::assertStringContainsString('<span class="mui-badge desktop-chip desktop-chip--gate" data-gate="loopback">gate: loopback</span>', $html);
         self::assertStringContainsString('<a class="mui-btn mui-btn--sm desktop-agent__open" href="/desktop" target="_blank" rel="noopener">Open the Desktop</a>', $html);
         // The contained error, inside the region only and with no admin JS: browsers report a failed frame
-        // navigation as a `load` of their own (cross-origin) error page, so the reachable hook is `onload` with no
-        // same-origin document; `onerror` stays for the engines that fire it. Both reveal the same notice.
-        // Measured in Chrome 152 with this exact markup: a frame at a closed port → `contentDocument` null →
-        // frame hidden, notice shown; a same-origin 403 → the 403 stays inside the frame, notice hidden (the
-        // decision's F6); a same-origin embed page → untouched.
-        $reveal = 'this.hidden=true;var n=document.getElementById(\'milpa-admin-section-agent-notice\');if(n){n.hidden=false}';
-        self::assertStringContainsString(' onload="if(!this.contentDocument){' . $reveal . '}" onerror="' . $reveal . '"></iframe>', $html);
+        // navigation as a `load` of their own (cross-origin) error page, so the reachable hook is a `load`
+        // with no same-origin document; `error` stays for the engines that fire it. Both reveal the same
+        // notice. Measured in Chrome 152 with the inline form of this probe: a frame at a closed port →
+        // `contentDocument` null → frame hidden, notice shown; a same-origin 403 → the 403 stays inside the
+        // frame, notice hidden (the decision's F6); a same-origin embed page → untouched.
+        self::assertStringNotContainsString('onload=', $html, 'no inline handler: the probe is a declared module');
+        self::assertStringNotContainsString('onerror=', $html);
+        $probe = (string) file_get_contents(\dirname(__DIR__, 2) . '/resources/components/desktop-agent-guest/desktop-agent-guest.js');
+        self::assertStringContainsString('return !!frame.contentDocument;', $probe, 'the same test, in the file that runs it');
+        self::assertStringContainsString("frame.addEventListener('load', function () { report(root); });", $probe);
+        self::assertStringContainsString("frame.addEventListener('error', function () { report(root); });", $probe);
+        self::assertStringContainsString('notice.hidden = false;', $probe);
+        // The frame keeps its `src` in the MARKUP, so the Agent is there with no JavaScript at all — only
+        // the «did not answer» report needs the module.
+        self::assertStringContainsString('src="/desktop?embed=1" title="Milpa Desktop — Agent"></iframe>', $html);
         self::assertStringContainsString('<p class="mui-alert mui-alert--warning desktop-agent__notice" id="milpa-admin-section-agent-notice" role="alert" hidden>The Agent did not answer</p>', $html);
         self::assertStringNotContainsString('Sign in', $html);
     }
@@ -163,10 +176,10 @@ final class AgentGuestRendererTest extends TestCase
         self::assertStringContainsString('href="/desktop&quot;"', $html);
         self::assertStringNotContainsString('"><x', $html);
 
-        // The notice id inside the handlers is a JS string literal inside an attribute: escaped for both, so a
-        // quote in the component id neither ends the attribute nor the literal.
+        // The notice's id no longer travels through a JS string literal — the probe finds the notice by the
+        // component's own class INSIDE the region, so a quote in the id can only ever be attribute data.
         $quoted = (new AgentGuestRenderer())->render(new AgentGuestComponent(), new RenderRequest(new ComponentContext("it's\\me"), self::PROPS))->output;
-        self::assertStringContainsString("getElementById('it\\&#039;s\\\\me-notice')", $quoted, 'the literal escapes its own quote and backslash; the attribute escapes the quote');
         self::assertStringContainsString('id="it&#039;s\\me-notice"', $quoted);
+        self::assertStringNotContainsString('getElementById', $quoted, 'nothing in the markup names the notice to a script');
     }
 }

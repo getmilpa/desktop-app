@@ -57,7 +57,72 @@ export const CATALOG = {
   'settings.saved': 'Saved',
   'settings.save_failed': 'Not saved (HTTP %s)',
   'enroll.none': 'No passkey door in this app',
+  'verdict.verified': 'verified',
+  'verdict.disputed': 'disputed',
+  'verdict.backed': 'The ledger backs this turn: every completed step carries evidence, nothing was left open, and no artifact\'s latest check is red.',
+  'verdict.disputed.why': 'The ledger disputes this turn — %s.',
+  'verdict.disputed.default': 'the completion is not backed by evidence',
+  'verdict.aria.verified': 'Verified. %s',
+  'verdict.aria.disputed': 'Disputed. %s',
+  'thinking.elapsed': 'thought for %ss',
+  'turn.paused': 'The agent is waiting on your decision.',
+  'turn.stop_requested': 'stop requested',
+  'session.state.working': 'Working',
+  'session.state.idle': 'Idle',
+  'preview.failed': 'The wire does not serve «%s» (HTTP %s)',
+  'preview.unreachable': 'The wire could not be reached for «%s»',
+  'composer.tokens': '~%s tokens',
+  'command.unknown': 'unknown command %s — commands: %s',
+  'command.mode.usage': 'usage: /mode ask|acknowledge|auto',
+  'command.mode.set': 'mode %s — applies from the next turn',
+  'command.goal.set': 'goal set: %s',
+  'command.goal.none': 'no standing goal — /goal <text> sets one',
+  'op.refused': '%s refused — %s',
+  'op.no_reason': 'no reason given',
+  'op.failed': '%s → HTTP %s — %s',
+  'op.detail': '%s (%s)',
+  'op.hint.not_exposed': 'the app does not expose %s over HTTP — expose the operation in config/http.php',
+  'conn.live': '◉ live',
+  'conn.offline': '○ offline',
+  'conn.connecting': '○ connecting…',
+  'hub.waiting': 'Waiting on you: %s',
+  'cap.working': 'Working…',
+  'cap.done': 'Installed %s — reloading…',
+  'cap.failed': 'Could not install %s — %s',
+  'cap.refused': 'refused',
+  'cap.no_token': 'the house issued no confirm token',
+  'decisions.just_now': 'just now · open the conversation to answer',
+  'decisions.unnamed': 'A question is waiting for you.',
 };
+
+/**
+ * A `<template>` as the server rendered one: its `content` is a fragment holding the prototype's root.
+ *
+ * The message components are CLONED from these, so a test that wants a kind to land in the thread hands
+ * the page the same tag the shell prints.
+ */
+export function template(id, root) {
+  const tag = new El('template', { id });
+  tag.content = new El('#fragment');
+  tag.content.appendChild(root);
+
+  return tag;
+}
+
+/** The `MilpaShell` bus, as the page's inline runtime provides it — installed BEFORE the modules load. */
+export function busStub() {
+  const byType = {};
+  const any = [];
+  const statuses = [];
+
+  return {
+    on: (type, cb) => { (byType[type] ||= []).push(cb); },
+    onAny: (cb) => { any.push(cb); },
+    onStatus: (cb) => { statuses.push(cb); },
+    emit(type, data) { (byType[type] || []).forEach((cb) => cb(data)); any.forEach((cb) => cb(type, data)); },
+    status(state) { statuses.forEach((cb) => cb(state)); },
+  };
+}
 
 /** One simple selector step: `#id`, `.class`, `tag`, `[attr]`, `[attr="value"]`, `:checked`. */
 function matchesSimple(el, selector) {
@@ -118,14 +183,59 @@ export class El {
     };
   }
 
+  /** Whether this element matches one simple selector — what a module's `region()` asks of a clone. */
+  matches(selector) { return matches(this, selector); }
+  /** This element or the nearest ancestor that matches — how every delegated handler reads a click. */
+  closest(selector) {
+    let node = this;
+    while (node) {
+      if (matches(node, selector)) { return node; }
+      node = node.parent;
+    }
+
+    return null;
+  }
+  /** The focus a composer gives back to its field; the harness only needs to record that it was asked. */
+  focus() { this.focused = true; }
+  /** A deep copy, as `template.content.cloneNode(true)` hands one over. */
+  cloneNode(deep = false) {
+    const copy = new El(this.tag, { ...this.attrs, id: this.id });
+    copy.textContent = this.textContent;
+    copy.hidden = this.hidden;
+    copy.value = this.value;
+    copy.checked = this.checked;
+    if (deep) { this.children.forEach((child) => copy.appendChild(child.cloneNode(true))); }
+
+    return copy;
+  }
+  /** The class list as one string — how a module dresses an element it just created. */
+  get className() { return this.attrs.class || ''; }
+  set className(value) { this.attrs.class = String(value); }
   getAttribute(name) { return name === 'id' ? (this.id || null) : (this.attrs[name] === undefined ? null : String(this.attrs[name])); }
   setAttribute(name, value) { if (name === 'id') { this.id = String(value); } else { this.attrs[name] = String(value); } }
   removeAttribute(name) { delete this.attrs[name]; }
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
   /** Fire a listener the way a click does — the harness's stand-in for a user acting on the page. */
   fire(type, event = {}) { (this.listeners[type] || []).forEach((fn) => fn({ target: this, currentTarget: this, ...event })); }
-  appendChild(child) { child.parent = this; this.children.push(child); return child; }
+  appendChild(child) {
+    // A fragment appends its CHILDREN and is emptied, the way the DOM does it — so a thread that was
+    // handed `template.content.cloneNode(true)` ends up holding the message, not a wrapper around it.
+    if (child.tag === '#fragment') {
+      child.children.slice().forEach((each) => this.appendChild(each));
+      child.children = [];
+
+      return child;
+    }
+    // Appending a node that already has a parent MOVES it — which is exactly what dropping a work-board
+    // card on another column does. A harness that copied instead of moving would show the card twice.
+    if (child.parent) { child.parent.removeChild(child); }
+    child.parent = this;
+    this.children.push(child);
+
+    return child;
+  }
   insertBefore(child, before) {
+    if (child.parent) { child.parent.removeChild(child); }
     child.parent = this;
     const at = before ? this.children.indexOf(before) : -1;
     if (at < 0) { this.children.push(child); } else { this.children.splice(at, 0, child); }
@@ -133,13 +243,18 @@ export class El {
     return child;
   }
   removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parent = null; return child; }
+  /** Take this node out of the document — what a confirm box does when it is cancelled or answered. */
+  remove() { if (this.parent) { this.parent.removeChild(this); } return this; }
   get firstChild() { return this.children[0] || null; }
   get parentNode() { return this.parent; }
   /** Only the shape the modules write: a flat run of `<span class="…"></span>`. */
   set innerHTML(html) {
+    this._html = String(html);
     this.children = [];
     for (const m of html.matchAll(/<(\w+)\s+class="([^"]*)"\s*>/g)) { this.appendChild(new El(m[1], { class: m[2] })); }
   }
+  /** What was written, verbatim — the markdown a message rendered is asserted against this. */
+  get innerHTML() { return this._html || ''; }
   get descendants() { return this.children.flatMap((c) => [c, ...c.descendants]); }
   querySelector(selector) { return this.descendants.find((el) => matches(el, selector)) || null; }
   querySelectorAll(selector) { return this.descendants.filter((el) => matches(el, selector)); }
@@ -149,7 +264,7 @@ export class El {
  * A page: a document tree, the framework runtime, the shared guard, and whichever component modules the
  * test names — loaded in the order `LiveBoot::html()` emits them.
  */
-export function page({ elements = {}, tree = null, catalog = CATALOG, signals = SIGNALS, modules = [], withGuard = true } = {}) {
+export function page({ elements = {}, tree = null, catalog = CATALOG, signals = SIGNALS, modules = [], withGuard = true, bus = false } = {}) {
   const documentEl = tree || new El('html');
   const byId = { ...elements };
   const listeners = {};
@@ -197,6 +312,10 @@ export function page({ elements = {}, tree = null, catalog = CATALOG, signals = 
   sandbox.window = sandbox;
   vm.createContext(sandbox);
 
+  // The bus is the page's own inline runtime, which the browser runs BEFORE any deferred module — so a
+  // module that subscribes at load (the conversation, the turn) finds it, exactly as it will in a browser.
+  if (bus) { sandbox.MilpaShell = busStub(); }
+
   const load = (file) => vm.runInContext(readFileSync(file, 'utf8'), sandbox, { filename: file });
   load(LOCAL_RUNTIME);
   if (withGuard) { load(moduleFile('desktop-guard')); }
@@ -236,15 +355,25 @@ export function page({ elements = {}, tree = null, catalog = CATALOG, signals = 
     mount,
     load,
     reloads: () => reloads,
+    /** The shell bus this page was built with, when it was asked for one. */
+    bus: () => sandbox.MilpaShell,
     /** Read a shared signal (one argument) or set it (two) — the runtime's own API, as a page would. */
     signal: (key, ...value) => (value.length === 0 ? sandbox.MilpaLive.signal(key) : sandbox.MilpaLive.signal(key, value[0])),
     desktop: () => sandbox.MilpaLive.desktop,
   };
 }
 
-/** A fetch Response as the guard reads one: `ok`, `status`, and a body it reads with `text()`. */
+/**
+ * A fetch Response as the modules read one: `ok`, `status`, and the body both ways — `text()` for the
+ * guard (which must survive a door answering HTML) and `json()` for a caller that knows it asked an op.
+ */
 export function response(status, body = {}) {
-  return { ok: status >= 200 && status < 300, status, text: () => Promise.resolve(JSON.stringify(body)) };
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: () => Promise.resolve(JSON.stringify(body)),
+    json: () => Promise.resolve(body),
+  };
 }
 
 /** Install a `fetch` that answers with `responses` in order and records every call. */

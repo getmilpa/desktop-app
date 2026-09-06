@@ -1,0 +1,18 @@
+/*!
+ * desktop-statusbar — the shell's bottom bar (greenhouse decisions/0211, phase D4/D5).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the bar's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-statusbar.css. The bar ships no module: everything it shows is somebody
+ * else's truth, bound from a signal — which is why the connection stopped being an inline script
+ * assigning `textContent` and a colour to `#milpa-conn`.
+ */
+
+.statusbar { flex: none; display: flex; align-items: center; gap: var(--space-5); height: 40px; padding: 0 var(--space-4); border-top: 1px solid var(--border-subtle); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+/* The connection: muted while it is connecting or offline, accented while it is live. Both states are
+   the `conn.state` signal — the bar never learns them from anybody reaching into it. */
+.statusbar__conn { color: var(--text-muted); }
+.statusbar__conn--live { color: var(--accent-text); }
+.statusbar__host { margin-inline-start: auto; }

@@ -12,11 +12,11 @@
  *
  * What it owns:
  *   - `tr(key, arg)` — the Desktop's copy in the declared locale, read once from `#milpa-desktop-i18n`.
- *   - `guarded(response)` — every Desktop fetch() result passes through here: a 401 carrying `signin` is
- *     the passkey gate asking for a session (go there and come back through `next`; the promise never
- *     settles, so no caller paints over a page that is leaving), a 403 is told once as a notice and
- *     rejected, any other non-2xx rejects with its status and parsed body — so «Saved» is only ever said
- *     on a 2xx.
+ *   - `guarded(response)` — every Desktop fetch() result passes through here: a 401 is the passkey gate
+ *     asking for a session (go to the door the body named, or the app's declared one from
+ *     `#milpa-desktop-guard`, and come back through `next`; the promise never settles, so no caller paints
+ *     over a page that is leaving), a 403 is told once as a notice and rejected, any other non-2xx rejects
+ *     with its status and parsed body — so «Saved» is only ever said on a 2xx.
  *   - `guardedFlow(response)` — the same discipline with 428 passed through: the house's confirm gate is
  *     the capabilities FLOW, not a refusal.
  *   - `failed(err, unreachable)` — a rejected call told once (never twice for a 403 `guarded` already told).
@@ -47,9 +47,32 @@
     try { var v = el ? JSON.parse(el.textContent || '{}') : {}; return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; }
   })();
 
+  // One `%s` per argument, in order: the copy the conversation and the commands say carries two and three
+  // («%s → HTTP %s — %s»), and a sentence assembled out of fragments cannot be translated as a sentence.
   function tr(key, arg) {
     var s = Object.prototype.hasOwnProperty.call(I18N, key) ? I18N[key] : key;
-    return typeof arg === 'undefined' ? s : String(s).replace('%s', String(arg));
+    if (typeof arg === 'undefined') { return s; }
+    var args = Array.prototype.slice.call(arguments, 1);
+    for (var i = 0; i < args.length; i++) { s = String(s).replace('%s', String(args[i])); }
+
+    return s;
+  }
+
+  // The door this app signs in at (`#milpa-desktop-guard`), written by the shell as DATA and only when the
+  // Desktop really stands behind the passkey gate. It is the FALLBACK for a 401 whose BODY names none: the
+  // Desktop's own doors answer `{"signin":"…"}`, but app-runtime's operation doors (`/agent`, `/agent/goal`,
+  // `/skill/invoke`) answer a bare `MILPA_UNAUTHENTICATED`. Without it a session that expired mid-page left
+  // the human reading a runtime error with no way back in; with it, every 401 is the same door.
+  var DOORS = (function () {
+    var el = document.getElementById('milpa-desktop-guard');
+    try { var v = el ? JSON.parse(el.textContent || '{}') : {}; return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; }
+  })();
+
+  /** Where a 401 sends the human: what the door itself said, else the app's declared sign-in path. */
+  function signinFor(body) {
+    if (body && typeof body.signin === 'string' && body.signin !== '') { return body.signin; }
+
+    return typeof DOORS.signin === 'string' ? DOORS.signin : '';
   }
 
   function signal(key, value) {
@@ -80,8 +103,9 @@
       var body = null;
       try { body = JSON.parse(t); } catch (e) { /* a door may answer HTML */ }
       body = (body && typeof body === 'object') ? body : {};
-      if (r.status === 401 && typeof body.signin === 'string' && body.signin !== '') {
-        location.assign(body.signin + '?next=' + encodeURIComponent(location.pathname + location.search));
+      var signin = r.status === 401 ? signinFor(body) : '';
+      if (signin !== '') {
+        location.assign(signin + '?next=' + encodeURIComponent(location.pathname + location.search));
         return new Promise(function () {});
       }
       var err = new Error('HTTP ' + r.status);

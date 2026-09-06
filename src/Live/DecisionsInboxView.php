@@ -24,17 +24,16 @@ namespace Milpa\DesktopApp\Live;
 final class DecisionsInboxView
 {
     /**
-     * The inbox as HTML: one card per parked question, or an empty state.
+     * The inbox as HTML: one card per parked question, plus the empty line when none is waiting.
+     *
+     * The empty line's words are the CALLER's, so the screen that renders this view says them in the
+     * declared locale (greenhouse decisions/0138, 0211 phase D4). The default is the English the view
+     * used to hardcode, so a caller with no catalog still reads a sentence.
      *
      * @param list<array{session: string, goal: string, question: string, operation: string, reason: string}> $pending
      */
-    public function html(array $pending): string
+    public function html(array $pending, string $empty = 'No decisions to make. When an agent parks a gate, it appears here for you to approve or refuse.'): string
     {
-        if ($pending === []) {
-            return '<p class="mui-empty" id="milpa-decisions-empty" style="color:var(--text-muted)">'
-                . 'No decisions to make. When an agent parks a gate, it appears here for you to approve or refuse.</p>';
-        }
-
         $cards = '';
         foreach ($pending as $d) {
             $goal = $this->esc($d['goal']);
@@ -55,7 +54,14 @@ final class DecisionsInboxView
                 . '</li>';
         }
 
-        return '<ol class="mui-replay__stream" id="milpa-decisions-list" aria-live="polite">' . $cards . '</ol>';
+        // The list is ALWAYS rendered, even with nothing parked, and the empty line sits NEXT to it
+        // (greenhouse decisions/0211, phase D4): a question parked while the page is open has a list to
+        // land in, and the empty line steps aside by CSS the moment a card does — so the live inbox never
+        // has to build an `<ol>` out of a JavaScript string.
+        return '<ol class="mui-replay__stream" id="milpa-decisions-list" aria-live="polite">' . $cards . '</ol>'
+            . ($pending === []
+                ? '<p class="mui-empty" id="milpa-decisions-empty">' . $this->esc($empty) . '</p>'
+                : '');
     }
 
     private function esc(string $v): string

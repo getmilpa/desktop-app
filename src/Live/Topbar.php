@@ -41,8 +41,8 @@ final class Topbar
     public const string BEFORE_RENDER = 'desktop.topbar.before_render';
     public const string AFTER_RENDER = 'desktop.topbar.after_render';
 
-    /** @var array<string, string> */
-    private const MODE_LABELS = ['ask' => 'Ask before changing', 'acknowledge' => 'Compatibility', 'auto' => 'Continue automatically'];
+    // The mode's WORDS are the catalog's, through {@see ComposerBar::modeLabel()} — one authority for the
+    // chip here, the chip in the composer, the Settings screen and the signal the shell seeds.
 
     private readonly SignedXhtmlStateTransferCodec $codec;
 
@@ -106,7 +106,7 @@ final class Topbar
         return [
             'goal' => $goal,
             'sessionId' => $id,
-            'mode' => self::MODE_LABELS[$modeKey] ?? 'Ask before changing',
+            'mode' => ComposerBar::modeLabel($this->catalog, $modeKey),
             'modeKey' => $modeKey,
             'state' => $state,
             'hasSession' => $id !== '',

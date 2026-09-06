@@ -1,0 +1,70 @@
+/*!
+ * desktop-composer — the composer bar and its completion popup (greenhouse decisions/0202, 0211 phase D5).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the composer bar's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-composer.css. Phase C moved the bar's BEHAVIOUR into its module and left its
+ * look in the shell's inline <style>; this is the other half — including the 35 `style="…"` attributes the
+ * renderer still carried after the phase that removed the work board's, which is why the review found it.
+ */
+
+/* ── the bar's own frame ─────────────────────────────────────────────────────────────────────────── */
+.composer-wrap { position: relative; margin-top: var(--space-2); }
+.composer-row { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.composer-round { border-radius: var(--radius-full); }
+.composer-meta { margin-inline-start: auto; display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.composer-count { color: var(--text-muted); min-width: 0; }
+.composer-chip { border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); color: var(--text); padding: 4px 10px; cursor: pointer; font: inherit; }
+.composer-model { margin: var(--space-2) 0 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+
+/* ── the mode chip and its menu ──────────────────────────────────────────────────────────────────── */
+.composer-mode { position: relative; display: inline-flex; }
+.composer-mode__chip { cursor: pointer; border: 1px solid var(--border); font: inherit; display: inline-flex; align-items: center; gap: 6px; }
+.composer-mode__caret { opacity: .6; }
+.composer-mode__menu { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 60; min-width: 15rem; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 4px; }
+.milpa-mode-opt { justify-content: flex-start; text-align: start; }
+.milpa-mode-opt__badge { margin-inline-start: auto; }
+
+/* ── the two floating panels: the session's figures and the context window ───────────────────────── */
+.composer-panels { position: absolute; right: 0; bottom: calc(100% + var(--space-3)); display: flex; gap: var(--space-4); align-items: flex-end; }
+.composer-panel { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-lg); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); font-family: var(--font-mono); }
+.composer-panel--session { width: 260px; }
+.composer-panel--context { width: 300px; }
+.composer-panel__title { margin: 0; font-size: var(--text-sm); }
+.composer-panel__muted { color: var(--text-muted); }
+.composer-panel__rule { height: 1px; background: var(--border-subtle); }
+.composer-panel__row { margin: 0; display: flex; justify-content: space-between; font-size: var(--text-2xs); }
+.composer-panel__key { color: var(--text-secondary); }
+.composer-panel__state { color: var(--accent-text); }
+.composer-panel__foot { color: var(--text-secondary); }
+/* The meter's fill is DATA — the share of the window this session actually spent — so it arrives as two
+   custom properties on the element and is read here. That is the one inline style the bar still writes. */
+.composer-meter { width: 100%; }
+.composer-meter__bar { width: var(--composer-meter, 0%); background: var(--composer-meter-color, var(--success)); }
+
+/* The focus ring belongs to the composer BOX, not the bare textarea — so the accent border sits out at
+   the rounded container with its padding as breathing room, instead of hugging the typed text. */
+.milpa-composer-box:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-subtle); }
+/* One border, one authority: the milpa/live field renders its own border by default, but here it lives
+   INSIDE the composer box — a second border reads as a second authority. The box owns the frame and the
+   focus ring; the field is seamless — no border, no background, no ring of its own. */
+.milpa-composer-box .mui-field { margin: 0; }
+.milpa-composer-box { border: 1px solid var(--border); border-radius: 22px; background: var(--surface-raised); box-shadow: var(--shadow-md); padding: var(--space-4) var(--space-5) var(--space-3); }
+.milpa-composer-box .mui-textarea,
+.milpa-composer-box .mui-textarea:focus,
+.milpa-composer-box .mui-textarea:focus-visible { border: 0; outline: 0; background: transparent; box-shadow: none; padding: 0; min-height: 3rem; width: 100%; resize: none; font-size: var(--text-sm); font-family: var(--font-mono); }
+
+/* The permission mode currently in force, in the chip's menu. */
+.milpa-mode-opt[aria-current="true"] { background: var(--accent-subtle); color: var(--accent-text); }
+
+/* Command completion: the list the house serves, opened above the composer while a `/name` is typed.
+   Its visibility is CSS state on `data-open`; desktop-composer.js flips the attribute, never a style. */
+.milpa-cmds { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 60; min-width: 24rem; max-width: 100%; max-height: 16rem; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.milpa-cmds[data-open="0"] { display: none; }
+.milpa-cmd { display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-3); align-items: baseline; text-align: start; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); cursor: pointer; font: inherit; }
+.milpa-cmd:hover, .milpa-cmd[aria-selected="true"] { background: var(--accent-subtle); color: var(--accent-text); }
+.milpa-cmd__name { font-family: var(--font-mono); font-size: var(--text-xs); }
+.milpa-cmd__desc { font-size: var(--text-xs); color: var(--text-secondary); }
+.milpa-cmd__usage { grid-column: 2; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
