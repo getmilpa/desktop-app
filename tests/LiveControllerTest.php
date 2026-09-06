@@ -47,14 +47,16 @@ final class LiveControllerTest extends TestCase
         self::assertSame(1, preg_match('#(<milpa-state\b.*?</milpa-state>)#s', $field->render(), $m));
         $envelope = $m[1];
 
+        // The page session is the one the BOOT issued and the runtime echoes in the body (greenhouse
+        // decisions/0211) — never a cookie: `sessionId` travels with the action.
         $sid = 'sess-test-1';
         $body = (string) json_encode([
             'action' => 'change',
             'state' => $envelope,
             'payload' => ['value' => 'Hola Milpa'],
+            'sessionId' => $sid,
         ]);
-        $request = (new ServerRequest('POST', '/desktop/live', ['X-CSRF-Token' => $field->csrfToken($sid)], $body))
-            ->withCookieParams([ComposerField::SESSION_COOKIE => $sid]);
+        $request = new ServerRequest('POST', '/desktop/live', ['X-CSRF-Token' => $field->csrfToken($sid)], $body);
 
         $res = $controller->live($request);
         self::assertSame(200, $res->getStatusCode());
@@ -74,11 +76,31 @@ final class LiveControllerTest extends TestCase
 
         self::assertSame(1, preg_match('#(<milpa-state\b.*?</milpa-state>)#s', $field->render(), $m));
         $sid = 'sess-body-1';
-        $body = (string) json_encode(['action' => 'change', 'state' => $m[1], 'payload' => ['value' => 'x'], 'csrfToken' => $field->csrfToken($sid)]);
-        $request = (new ServerRequest('POST', '/desktop/live', [], $body))->withCookieParams([ComposerField::SESSION_COOKIE => $sid]);
+        $body = (string) json_encode(['action' => 'change', 'state' => $m[1], 'payload' => ['value' => 'x'], 'sessionId' => $sid, 'csrfToken' => $field->csrfToken($sid)]);
+        $request = new ServerRequest('POST', '/desktop/live', [], $body);
 
         $res = $controller->live($request);
         self::assertSame(200, $res->getStatusCode(), 'CSRF token in the body is accepted');
+    }
+
+    public function testACookieNoLongerNamesThePageSession(): void
+    {
+        // The falsifier for the migration (greenhouse decisions/0211): the SAME request that passes with the
+        // session id in the body is refused when the id only rides a cookie. A cookie another page set is not
+        // this page's session, and the shell sets none any more.
+        $field = new ComposerField('sign-secret', 'csrf-secret');
+        $controller = new LiveController($field->endpoint());
+
+        self::assertSame(1, preg_match('#(<milpa-state\b.*?</milpa-state>)#s', $field->render(), $m));
+        $sid = 'sess-cookie-1';
+        $body = (string) json_encode(['action' => 'change', 'state' => $m[1], 'payload' => ['value' => 'x'], 'csrfToken' => $field->csrfToken($sid)]);
+        $request = (new ServerRequest('POST', '/desktop/live', [], $body))->withCookieParams([ComposerField::SESSION_COOKIE => $sid]);
+
+        self::assertSame(403, $controller->live($request)->getStatusCode(), 'a cookie no longer answers for the page session');
+
+        // The positive control: the same call with the id where the runtime actually sends it.
+        $withBody = (string) json_encode(['action' => 'change', 'state' => $m[1], 'payload' => ['value' => 'x'], 'sessionId' => $sid, 'csrfToken' => $field->csrfToken($sid)]);
+        self::assertSame(200, $controller->live(new ServerRequest('POST', '/desktop/live', [], $withBody))->getStatusCode());
     }
 
     public function testAMalformedInteractionIsRejected(): void

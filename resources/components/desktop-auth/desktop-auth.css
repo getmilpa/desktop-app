@@ -1,0 +1,30 @@
+/*!
+ * desktop-auth — the Desktop's entry overlay, «Open workspace» (greenhouse decisions/0211, phase B5).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the overlay's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-auth.css. The fields, the alert and the buttons are the design system's; what
+ * lives here is the two-column entry itself — the inline `style` attributes the shell's template carried
+ * while this surface was raw HTML.
+ *
+ * The overlay declares `display: grid` AND the `hidden` attribute. The shell's `[hidden] { display: none
+ * !important; }` is what reconciles them — without `!important` a plain `[hidden]` rule ties with this
+ * one on specificity and loses on order, and the overlay would cover the dashboard forever (greenhouse
+ * evidence/0488).
+ */
+
+/* The entry covers everything: a wide pitch on the left, a fixed 560px form on the right. */
+.milpa-auth { position: fixed; inset: 0; z-index: 1400; display: grid; grid-template-columns: 1fr 560px; background: var(--bg); }
+/* The pitch sits at the bottom of its column — the name reads as a signature, not a banner. */
+.milpa-auth__pitch { display: flex; flex-direction: column; justify-content: flex-end; padding: var(--space-12); border-inline-end: 1px solid var(--border-subtle); background: var(--surface); }
+.milpa-auth__kicker { margin: 0 0 var(--space-3); }
+.milpa-auth__title { font-family: var(--font-heading); font-size: var(--text-4xl); line-height: 1.03; margin: 0 0 var(--space-4); }
+.milpa-auth__lede { margin: 0; max-width: 36ch; font-size: var(--text-base); line-height: var(--leading-relaxed); color: var(--text-secondary); }
+/* The form column scrolls on its own, so a long alert never pushes the action off the screen. */
+.milpa-auth__form { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-10) var(--space-8); overflow: auto; }
+/* The one action is pinned to the bottom of the column, whatever the form's height. */
+.milpa-auth__actions { margin-top: auto; }
+/* The app is machine truth — read-only and mono, like every identifier in the Desktop. */
+.milpa-auth__app { font-family: var(--font-mono); }

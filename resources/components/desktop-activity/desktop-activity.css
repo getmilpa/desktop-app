@@ -1,0 +1,17 @@
+/*!
+ * desktop-activity — the session's live fact stream (greenhouse decisions/0189, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the Activity tab's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-activity.css. The stream and the projection panel are the design system's
+ * (`mui-replay__*`); what lives here is how the component dissolves into the pane's grid and how its
+ * one prose line reads — the inline `style` attributes the markup used to carry.
+ */
+
+/* The component's root is a wrapper, not a box: `display: contents` makes its two children direct grid
+   items of the Activity pane, so the stream and the projection sit in the pane's own columns. */
+.milpa-activity { display: contents; }
+/* The one prose line above the stream — secondary, because the facts are the content. */
+.milpa-activity__intro { color: var(--text-secondary); font-size: var(--text-sm); margin: 0 0 var(--space-4); }

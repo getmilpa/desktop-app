@@ -1,0 +1,13 @@
+/*!
+ * desktop-user-message — the human's turn in the thread (greenhouse decisions/0191, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the user message's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-user-message.css.
+ */
+
+/* The user is a human PEER — a contrasting bubble (--surface) on the right. */
+.msg--user { display: flex; justify-content: flex-end; }
+.msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }

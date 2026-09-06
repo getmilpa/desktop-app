@@ -63,24 +63,43 @@ final class EmbedModeTest extends TestCase
         self::assertStringContainsString('id="milpa-chat"', $embed);
     }
 
-    public function testEveryIdTheShellScriptLooksUpStaysInTheEmbedDom(): void
+    public function testEveryIdTheShellAndItsDeclaredModulesLookUpStaysInTheEmbedDom(): void
     {
+        // The DOM contract of embed mode. It used to be "the 35 ids the page's script looks up"; since the
+        // declared views (greenhouse decisions/0211) the behaviour lives in the page AND in the component
+        // modules the page declares, so the contract is the union: every element either of them resolves by
+        // id must survive the fold, or the shell breaks at boot inside the host's frame.
         $plain = (string) $this->shell()->shell(new ServerRequest('GET', '/desktop'))->getBody();
         $embed = (string) $this->shell()->shell((new ServerRequest('GET', '/desktop'))->withQueryParams(['embed' => '1']))->getBody();
 
-        preg_match_all("/getElementById\\('([^']+)'\\)/", $plain, $m);
-        $lookedUp = array_values(array_unique($m[1]));
-        self::assertGreaterThanOrEqual(30, \count($lookedUp), 'the script contract: the ids the shell looks up at boot');
-        // The contract is the ids the plain page HAS (a few are created live, e.g. the decisions list): each one
-        // of those must still be in the embed document, or the script would break at boot.
+        $lookedUp = self::idsLookedUpIn($plain);
+        foreach (glob(\dirname(__DIR__) . '/resources/components/*/*.js') ?: [] as $module) {
+            $lookedUp = [...$lookedUp, ...self::idsLookedUpIn((string) file_get_contents($module))];
+        }
+        $lookedUp = array_values(array_unique($lookedUp));
+        self::assertGreaterThanOrEqual(20, \count($lookedUp), 'the script contract: the ids the shell resolves at boot');
+
+        // The contract is the ids the plain page HAS (a few are created live, e.g. the decisions list, and one
+        // — the strip's picker — exists only in embed): each of those must still be in the embed document.
         $present = array_values(array_filter($lookedUp, static fn (string $id): bool => str_contains($plain, 'id="' . $id . '"')));
-        self::assertGreaterThanOrEqual(30, \count($present));
+        self::assertGreaterThanOrEqual(18, \count($present));
         foreach ($present as $id) {
             self::assertStringContainsString('id="' . $id . '"', $embed, 'id «' . $id . '» must stay in the embed DOM');
         }
-        // Nothing the script needs is removed: the ids it looks up are the same in both renders.
-        preg_match_all("/getElementById\\('([^']+)'\\)/", $embed, $e);
-        self::assertSame($lookedUp, array_values(array_unique($e[1])));
+        // Nothing the page needs is removed: the ids IT looks up are the same in both renders.
+        self::assertSame(self::idsLookedUpIn($plain), self::idsLookedUpIn($embed));
+    }
+
+    /**
+     * The element ids a script resolves by literal — `getElementById('x')`, in the order they appear.
+     *
+     * @return list<string>
+     */
+    private static function idsLookedUpIn(string $script): array
+    {
+        preg_match_all("/getElementById\\('([^']+)'\\)/", $script, $m);
+
+        return array_values(array_unique($m[1]));
     }
 
     public function testTheSessionStripIsRenderedOnlyInEmbedModeAndWiredToTheSameHandlers(): void
@@ -99,12 +118,26 @@ final class EmbedModeTest extends TestCase
         self::assertStringContainsString('No session open', $embed);
         // Above the conversation: the strip precedes the tablist inside the session view.
         self::assertLessThan(strpos($embed, 'data-milpa-component="desktop-tabs"'), strpos($embed, 'id="milpa-session-strip"'));
-        // The SAME handler as the sidebar's button; picking a session navigates keeping embed=1.
-        self::assertStringContainsString("if (newBtn) { newBtn.addEventListener('click', openNewSession); }", $embed);
-        self::assertStringContainsString("document.querySelectorAll('[data-new-session]').forEach(function (b) { b.addEventListener('click', openNewSession); });", $embed);
-        self::assertStringContainsString("location.assign('?session=' + encodeURIComponent(embedPick.value) + '&embed=1')", $embed);
+        // The SAME handler as the sidebar's button — and since the declared views (greenhouse
+        // decisions/0211, B8) that handler is the SIDEBAR MODULE's, which wires both controls: the strip
+        // carries no copy of the ceremony, it calls the one implementation.
+        $sidebar = (string) file_get_contents(\dirname(__DIR__) . '/resources/components/desktop-sidebar/desktop-sidebar.js');
+        self::assertStringContainsString("var pickers = document.querySelectorAll('[data-new-session]');", $sidebar);
+        self::assertStringContainsString('pickers[i].addEventListener(\'click\', newSession);', $sidebar);
+        self::assertStringContainsString("location.assign('?session=' + encodeURIComponent(pick.value) + '&embed=1')", $sidebar);
+        self::assertSame(1, substr_count($sidebar, 'function newSession()'), 'one implementation, called by both surfaces');
+        self::assertStringContainsString('@click="newSession()"', $embed, 'the sidebar button asks the same verb');
+        self::assertStringNotContainsString('openNewSession', $embed, 'the page hangs no listener of its own any more');
+        self::assertStringContainsString('<script src="/desktop/assets/c/desktop-sidebar.js" defer></script>', $embed);
         // The guard's next carries the path AND the query, so a sign-in round trip lands back in embed mode.
-        self::assertStringContainsString("encodeURIComponent(location.pathname + location.search)", $embed);
+        // Since the guard became its own runtime module (greenhouse decisions/0211) that line lives in the
+        // module, not in the page — and the page loads it.
+        self::assertStringNotContainsString('encodeURIComponent(location.pathname + location.search)', $embed);
+        self::assertStringContainsString('<script src="/desktop/assets/c/desktop-guard.js" defer></script>', $embed);
+        self::assertStringContainsString(
+            'encodeURIComponent(location.pathname + location.search)',
+            (string) file_get_contents(\dirname(__DIR__) . '/resources/components/desktop-guard/desktop-guard.js'),
+        );
     }
 
     public function testTheStripListsTheSessionsWithTheCurrentOneSelected(): void

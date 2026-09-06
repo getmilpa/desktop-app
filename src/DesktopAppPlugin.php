@@ -28,6 +28,8 @@ use Milpa\DesktopApp\Live\ComposerField;
 use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\Data\DesktopStore;
 use Milpa\DesktopApp\Http\LoopbackOnlyMiddleware;
+use Milpa\DesktopApp\Live\DesktopAssets;
+use Milpa\DesktopApp\Live\DesktopComponents;
 use Milpa\DesktopApp\Live\MercureConfig;
 use Milpa\DesktopApp\Live\MercurePublisher;
 use Milpa\DesktopApp\Live\MercureServiceDeclaration;
@@ -147,12 +149,16 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         if ($mercure !== null) {
             $this->container->registerService(\Milpa\Mercure\MercureService::class, $mercure->service());
         }
-        // milpa/live — the framework's official UI system — powers the composer field as a real component
-        // (greenhouse decisions/0189). The registry is extensible: an agent or a human registers new
-        // primitives the same way ComposerField registers the textarea.
-        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'), $events);
+        // milpa/live — the framework's official UI system — powers the whole shell (greenhouse decisions/0189,
+        // 0211). ONE registry holds every Desktop component and its renderer: the shell composes the page
+        // through it and `POST /desktop/live` is built over the SAME one, so an interaction re-renders through
+        // the renderer that painted the surface. The registry is extensible: an agent or a human declares new
+        // components on it the same way the shell declares its own.
+        $desktopComponents = new DesktopComponents($this->liveSecret('signing'), $this->liveSecret('csrf'), $events);
+        $this->container->registerService(DesktopComponents::class, $desktopComponents);
+        $composerField = new ComposerField($this->liveSecret('signing'), $this->liveSecret('csrf'), $events, $desktopComponents);
         $this->container->registerService(ComposerField::class, $composerField);
-        $this->container->registerService(LiveController::class, new LiveController($composerField->endpoint()));
+        $this->container->registerService(LiveController::class, new LiveController($desktopComponents->endpoint()));
 
         // The sidebar is the shell's first pure-Milpa-Components surface (greenhouse decisions/0189): a
         // declared component with a signed envelope, lifecycle events and a signal-driven active nav.
@@ -213,7 +219,15 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $sessionStrip = new \Milpa\DesktopApp\Live\SessionStrip($this->liveSecret('signing'), $data, $events, $catalog);
         $this->container->registerService(\Milpa\DesktopApp\Live\SessionStrip::class, $sessionStrip);
 
-        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog, $sessionStrip));
+        // The two screens that were still raw HTML in the shell's template become declared views too
+        // (greenhouse decisions/0211, phase B): the Settings screen — whose Save says «Saved» only when
+        // the door did — and the entry overlay, the one ceremony every «New session» control runs.
+        $settingsScreen = new \Milpa\DesktopApp\Live\SettingsScreen($this->liveSecret('signing'), $data, $events, $catalog);
+        $this->container->registerService(\Milpa\DesktopApp\Live\SettingsScreen::class, $settingsScreen);
+        $authOverlay = new \Milpa\DesktopApp\Live\AuthOverlay($this->liveSecret('signing'), $data, $events, $catalog);
+        $this->container->registerService(\Milpa\DesktopApp\Live\AuthOverlay::class, $authOverlay);
+
+        $this->container->registerService(ShellController::class, new ShellController($events, $mercure, $data, $composerField, $sidebar, $topbar, $tabs, $workBoard, $activity, $context, $gate, $thinking, $agentMessage, $messages, $conversation, $settings, $catalog, $sessionStrip, $settingsScreen, $authOverlay, $desktopComponents));
 
         $this->container->registerService(AssetsController::class, new AssetsController());
 
@@ -268,6 +282,16 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
                 methods: HttpMethod::GET,
                 name: 'desktop.assets.bundle',
                 handler: new HandlerReference(AssetsController::class, 'bundle'),
+            ),
+            // Per-component files (greenhouse decisions/0211): `/desktop/assets/c/<component>.css|js`. ONE
+            // route family — the placeholder captures the whole last segment, so `<name>.css` and `<name>.js`
+            // both land here and {@see DesktopAssets::path()} decides which package file, if any, they name.
+            // Public like the design-system stylesheets: a JSON 401 to a `<link>` breaks the page in silence.
+            new Route(
+                path: DesktopAssets::BASE . '{file}',
+                methods: HttpMethod::GET,
+                name: 'desktop.assets.component',
+                handler: new HandlerReference(AssetsController::class, 'component'),
             ),
             new Route(
                 path: '/desktop/data.json',
@@ -425,15 +449,33 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
 
     /** Where the shared event log lives: `desktop.events.log` in config, else a per-app temp file. */
     /**
-     * The HMAC secret for the live component's signed state / CSRF: `desktop.live.<kind>_secret` in config,
-     * else a stable per-install value derived from this package's path. Set it in config for a real deployment.
+     * The HMAC secret every Desktop component signs its state envelope and its CSRF token with.
+     *
+     * ONE signing key per page (greenhouse decisions/0211): `desktop.live.<kind>_secret` still wins when the
+     * app declares it, but the DEFAULT is now the house's own `live.secret` — the key every other milpa/live
+     * endpoint in the app verifies with, so an envelope signed by a Desktop surface is not, to the house's
+     * endpoint, a tampered one. Only when the house declares neither does it fall back to a stable value
+     * derived from this package's path, which is a per-install default and not a secret: declare `live.secret`
+     * (or `desktop.live.*_secret`) for a real deployment.
      */
     private function liveSecret(string $kind): string
     {
         $config = $this->container->get(Config::class);
-        $configured = $config instanceof Config ? $config->get('desktop.live.' . $kind . '_secret') : null;
+        if (!$config instanceof Config) {
+            return hash('sha256', __DIR__ . '|milpa-live|' . $kind);
+        }
 
-        return is_string($configured) && $configured !== '' ? $configured : hash('sha256', __DIR__ . '|milpa-live|' . $kind);
+        $configured = $config->get('desktop.live.' . $kind . '_secret');
+        if (is_string($configured) && $configured !== '') {
+            return $configured;
+        }
+
+        $house = $config->get('live.secret');
+        if (is_string($house) && $house !== '') {
+            return $house;
+        }
+
+        return hash('sha256', __DIR__ . '|milpa-live|' . $kind);
     }
 
     private function logPath(): string

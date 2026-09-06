@@ -15,16 +15,8 @@ declare(strict_types=1);
 namespace Milpa\DesktopApp\Live;
 
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
-use Milpa\Live\Adapters\Alpine\AlpineRuntimeAdapter;
 use Milpa\Live\Components\Form\InputComponent;
 use Milpa\Live\Http\LiveEndpoint;
-use Milpa\Live\Rendering\FormPrimitiveHtmlRenderer;
-use Milpa\Live\Runtime\InMemoryComponentRegistry;
-use Milpa\Live\Security\ContractInteractionAuthorizer;
-use Milpa\Live\Security\HmacCsrfGuard;
-use Milpa\Live\Security\HmacStateSigner;
-use Milpa\Live\Security\SignedXhtmlStateTransferCodec;
-use Milpa\Live\Transport\XhtmlStateTransferCodec;
 use Milpa\Live\ValueObjects\ComponentContext;
 use Milpa\Live\ValueObjects\RenderRequest;
 use Milpa\Live\ValueObjects\RenderTarget;
@@ -47,6 +39,11 @@ final class ComposerField
     public const string COMPONENT_ID = 'composer-message';
     public const string STATUS_COMPONENT = 'input';
     public const string STATUS_ID = 'composer-status';
+    /**
+     * RETIRED (greenhouse decisions/0211): the page session travels in the boot the shell issues and the
+     * runtime echoes in every request body, so the shell sets no such cookie and `POST /desktop/live` reads
+     * none. Kept as the name a house that still sets it would use — and as the falsifier the suite points at.
+     */
     public const string SESSION_COOKIE = 'milpa_live_sid';
 
     /** Dispatched with a mutable {@see ComposerRender} BEFORE the render — a subscriber may change its props. */
@@ -54,21 +51,20 @@ final class ComposerField
     /** Dispatched with a mutable {@see ComposerRender} AFTER the render — a subscriber may change its html. */
     public const string AFTER_RENDER = 'desktop.composer.after_render';
 
-    private readonly InMemoryComponentRegistry $components;
-    private readonly SignedXhtmlStateTransferCodec $codec;
-    private readonly HmacCsrfGuard $csrf;
-    private readonly FormPrimitiveHtmlRenderer $renderer;
+    private readonly DesktopComponents $registry;
 
-    public function __construct(string $signingSecret, string $csrfSecret, private readonly ?MilpaEventDispatcherInterface $events = null)
-    {
-        $this->components = new InMemoryComponentRegistry();
-        // The message field validates on the server and re-paints the status; the status is a read-only input
-        // that the field's blur re-paints via a cross-component RenderEffect (greenhouse evidence/0491).
-        $this->components->register(self::COMPONENT, new ComposerMessageComponent($events));
-        $this->components->register(self::STATUS_COMPONENT, new InputComponent());
-        $this->codec = new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner($signingSecret), null);
-        $this->csrf = new HmacCsrfGuard($csrfSecret);
-        $this->renderer = new FormPrimitiveHtmlRenderer(new AlpineRuntimeAdapter(), $this->codec);
+    /**
+     * @param DesktopComponents|null $registry the Desktop's ONE component registry (greenhouse decisions/0211);
+     *                                         a private one is built from the secrets when none is shared in,
+     *                                         which is what a unit test that only wants the field gets
+     */
+    public function __construct(
+        string $signingSecret,
+        string $csrfSecret,
+        private readonly ?MilpaEventDispatcherInterface $events = null,
+        ?DesktopComponents $registry = null,
+    ) {
+        $this->registry = $registry ?? new DesktopComponents($signingSecret, $csrfSecret, $events);
     }
 
     /**
@@ -85,7 +81,7 @@ final class ComposerField
         $context = new ComponentContext(componentId: self::COMPONENT_ID, route: self::ROUTE);
         $state = $component->mount($subject->props, $context);
 
-        $subject->html = $this->renderer->render($component, new RenderRequest(
+        $subject->html = $this->registry->formRenderer()->render($component, new RenderRequest(
             context: $context,
             // A local field: typing is zero-network. The char count lives in the composer footer now
             // (greenhouse decisions/0191, Rod's minimalist UX) — no separate status line under the box.
@@ -106,7 +102,7 @@ final class ComposerField
         $context = new ComponentContext(componentId: self::STATUS_ID, route: self::ROUTE);
         $state = $component->mount(['name' => 'status', 'value' => $message, 'disabled' => true], $context);
 
-        return $this->renderer->render($component, new RenderRequest(
+        return $this->registry->formRenderer()->render($component, new RenderRequest(
             context: $context,
             props: ['endpoint' => self::ROUTE],
             state: $state,
@@ -117,20 +113,18 @@ final class ComposerField
     /** The CSRF token the client presents on an interaction, bound to this session and route. */
     public function csrfToken(string $sessionId): string
     {
-        return $this->csrf->issueToken($sessionId, self::ROUTE);
+        return $this->registry->csrfToken($sessionId);
+    }
+
+    /** The Desktop's ONE component registry, shared with the shell's compiler and the live endpoint. */
+    public function registry(): DesktopComponents
+    {
+        return $this->registry;
     }
 
     /** The endpoint that verifies and handles an interaction (server actions, submit). */
     public function endpoint(): LiveEndpoint
     {
-        return new LiveEndpoint(
-            components: $this->components,
-            codec: $this->codec,
-            authorizer: new ContractInteractionAuthorizer($this->components),
-            csrf: $this->csrf,
-            route: self::ROUTE,
-            renderers: [self::COMPONENT => $this->renderer, self::STATUS_COMPONENT => $this->renderer],
-            renderProps: [self::COMPONENT => ['endpoint' => self::ROUTE, 'remote' => true], self::STATUS_COMPONENT => ['endpoint' => self::ROUTE]],
-        );
+        return $this->registry->endpoint();
     }
 }

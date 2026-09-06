@@ -48,7 +48,9 @@ final class CatalogTest extends TestCase
 
         $es = new Catalog('es');
         self::assertSame(array_keys($en->all()), array_keys($es->all()), 'the same keys in both, the client gets one complete map');
-        $sameInBoth = ['gate.kind.loopback', 'gate.kind.passkey'];
+        // The words that are the same word: two gate kinds that are their own names, and «Endpoint», which
+        // Mexican Spanish uses as-is. Anything else differing by accident is caught below.
+        $sameInBoth = ['gate.kind.loopback', 'gate.kind.passkey', 'settings.model.endpoint'];
         foreach (array_keys($en->all()) as $key) {
             if (!\in_array($key, $sameInBoth, true)) {
                 self::assertNotSame($en->tr($key), $es->tr($key), 'Spanish carries its own ' . $key);

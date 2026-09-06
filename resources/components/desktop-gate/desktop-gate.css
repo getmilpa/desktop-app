@@ -1,0 +1,21 @@
+/*!
+ * desktop-gate — the Desktop's consent gate (greenhouse decisions/0189, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the gate's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-gate.css. The card and the gate layout are the design system's
+ * (`mui-card`, `mui-gate`); what lives here is the warning skin the parked question wears and the
+ * typography of its three lines — the inline `style` attributes the markup used to carry.
+ */
+
+/* A parked question is a warning, not an error: the card takes the warning skin so it reads as
+   "something is waiting for you" among the ordinary cards of the conversation. */
+.milpa-gate-card { border-color: var(--warning-border); background: var(--warning-bg); }
+/* The facts lines sit tight against the action they qualify. */
+.milpa-gate__line { margin: 0; }
+/* What the agent is asking for — the sentence a human decides on, so it is the largest line here. */
+.milpa-gate__action { margin: var(--space-2) 0; font-size: var(--text-base); }
+/* The boundary note under the buttons: answering is not resuming. Quiet, mono, never shouting. */
+.milpa-gate__note { margin: 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }

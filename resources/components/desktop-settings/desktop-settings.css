@@ -1,0 +1,27 @@
+/*!
+ * desktop-settings — the Desktop's Settings screen (greenhouse decisions/0211, phase B7).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the screen's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-settings.css. The cards, fields, switches and buttons are the design
+ * system's; what lives here is the screen's own frame — the inline `style` attributes the shell's
+ * template carried while this surface was raw HTML.
+ */
+
+/* The screen fills the main and scrolls on its own; the action row is pushed to its bottom. */
+.milpa-settings { flex: 1; min-height: 0; overflow: auto; padding: var(--space-6) var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); }
+/* Two columns of cards, each starting at the top of its row — cards differ in height by design. */
+.milpa-settings__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+@media (max-width: 900px) { .milpa-settings__grid { grid-template-columns: 1fr; } }
+/* A label and its switch on one line, pushed apart. */
+.milpa-settings__row { justify-content: space-between; }
+/* Machine truth — an endpoint, a path — reads mono and small, like every identifier in the Desktop. */
+.milpa-settings__mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+/* The mode key beside its human label. */
+.milpa-settings__badge { margin-inline-start: 8px; }
+/* The sentence under the compaction switch: what compaction does NOT touch. */
+.milpa-settings__note { margin: 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+/* Save and Discard sit at the bottom right, with the save badge beside them. */
+.milpa-settings__actions { margin-top: auto; justify-content: flex-end; flex: none; align-items: center; }

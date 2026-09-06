@@ -1,0 +1,40 @@
+/*!
+ * desktop-sidebar — the Desktop shell's sidebar (greenhouse decisions/0211, "declared views").
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by SidebarRenderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-sidebar.css. The component's frame comes from the design system
+ * (`mui-sidebar`); what lives here is where it sits in the shell grid, the brand mark it paints
+ * itself, the shape of a session row and the search filter's hidden state.
+ */
+
+/* The sidebar owns the whole first column of the shell grid — both rows, so the topbar starts beside
+   it — and scrolls inside the grid rather than pinning itself to the viewport. */
+.milpa-sidebar { grid-row: 1 / span 2; grid-column: 1; position: static; height: auto; min-height: 0; }
+/* The brand row: mark and wordmark on one line; it names the app, it is not a control. */
+.milpa-sidebar__brand { display: inline-flex; align-items: center; gap: 10px; cursor: default; }
+.milpa-grainmark { flex: none; }
+/* The footer stacks its two actions full-width: start a session, register a passkey. */
+.milpa-sidebar__footer { display: flex; flex-direction: column; gap: var(--space-2); }
+/* A count badge (parked decisions) is pushed to the end of its nav row. */
+.milpa-sidebar .mui-sidebar__item-badge { margin-inline-start: auto; }
+/* The empty state lines up with the section labels above it. */
+.milpa-sidebar__empty { padding: 0 var(--space-4); }
+/* A session row is two stacked lines — the goal, then its state badge — so it breathes more than a nav item. */
+.milpa-session-item { flex-direction: column; align-items: flex-start; gap: 4px; height: auto; padding-block: var(--space-3); }
+.milpa-session-goal { font-size: var(--text-sm); }
+
+/* The Grano mark: the 13 kernels form the M, each scaling into place in a staggered sweep (the two
+   pillars, then the inner V). The grain is oro-300 constant — the logo is brand, not UI, and does not
+   theme (per the kit). Hover replays the forming. */
+.milpa-grainmark .g { transform-box: fill-box; transform-origin: center; animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
+.milpa-grainmark:hover .g { animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
+@keyframes milpa-grain-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+/* A session the search filtered OUT — the class marks the miss, not the hit, because that is the one
+   the filter has to act on. Public API at a stable URL: named for what it means. */
+.milpa-search-miss { display: none !important; }
+/* The passkey link after the probe found no door: still readable, plainly not a way forward. */
+.milpa-enroll--absent { opacity: .6; }
+@media (prefers-reduced-motion: reduce) { .milpa-grainmark .g { animation: none !important; opacity: 1; } }

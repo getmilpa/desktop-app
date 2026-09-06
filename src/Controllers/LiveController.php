@@ -14,7 +14,6 @@ declare(strict_types=1);
 
 namespace Milpa\DesktopApp\Controllers;
 
-use Milpa\DesktopApp\Live\ComposerField;
 use Milpa\Live\Http\LiveEndpoint;
 use Milpa\Live\Http\LiveHttpRequest;
 use Nyholm\Psr7\Response;
@@ -27,6 +26,12 @@ use Psr\Http\Message\ServerRequestInterface;
  * `POST /desktop/live` verifies a signed state envelope + CSRF and runs a component interaction; the two
  * asset routes serve the client runtime and Alpine straight from the milpa/live-web package, so the Desktop
  * needs no build step.
+ *
+ * The page session the CSRF token is bound to comes from the REQUEST BODY (greenhouse decisions/0211): the
+ * shell issues it with the boot (`LiveBoot::issue()`), the runtime echoes it as `sessionId` on every
+ * action, and this adapter fills {@see LiveHttpRequest::$sessionId} from there. It is no longer read from
+ * the `milpa_live_sid` cookie — a cookie another page set is not this page's session, and the shell no
+ * longer sets one.
  */
 final class LiveController
 {
@@ -39,14 +44,14 @@ final class LiveController
     {
         $decoded = json_decode((string) $request->getBody(), true);
         $body = \is_array($decoded) ? $decoded : [];
-        $cookies = $request->getCookieParams();
 
         $response = $this->endpoint->handle(new LiveHttpRequest(
             method: $request->getMethod(),
             action: \is_string($body['action'] ?? null) ? $body['action'] : '',
             stateEnvelope: \is_string($body['state'] ?? null) ? $body['state'] : '',
             payload: \is_array($body['payload'] ?? null) ? $body['payload'] : [],
-            sessionId: \is_string($cookies[ComposerField::SESSION_COOKIE] ?? null) ? $cookies[ComposerField::SESSION_COOKIE] : '',
+            // The page session the boot issued and the runtime echoes — never a cookie (decisions/0211).
+            sessionId: \is_string($body['sessionId'] ?? null) ? $body['sessionId'] : '',
             // The client runtime sends the CSRF token in the body; a header is accepted as a fallback.
             csrfToken: \is_string($body['csrfToken'] ?? null) && $body['csrfToken'] !== '' ? $body['csrfToken'] : $request->getHeaderLine('X-CSRF-Token'),
         ));

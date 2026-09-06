@@ -18,16 +18,44 @@ use Milpa\DesktopApp\Data\DesktopData;
 use Milpa\DesktopApp\DesktopSettings;
 use Milpa\DesktopApp\Http\RequestPrincipal;
 use Milpa\DesktopApp\I18n\Catalog;
+use Milpa\DesktopApp\Live\ActivityComponent;
+use Milpa\DesktopApp\Live\AgentMessageComponent;
+use Milpa\DesktopApp\Live\AuthOverlay;
+use Milpa\DesktopApp\Live\AuthOverlayComponent;
 use Milpa\DesktopApp\Live\CapabilityCatalogueView;
 use Milpa\DesktopApp\Live\CommandListView;
+use Milpa\DesktopApp\Live\ComposerField;
+use Milpa\DesktopApp\Live\ContextComponent;
+use Milpa\DesktopApp\Live\ConversationComponent;
 use Milpa\DesktopApp\Live\DecisionsInboxView;
+use Milpa\DesktopApp\Live\DesktopAssets;
+use Milpa\DesktopApp\Live\DesktopComponents;
+use Milpa\DesktopApp\Live\GateComponent;
 use Milpa\DesktopApp\Live\MercureConfig;
+use Milpa\DesktopApp\Live\ResultClaimComponent;
 use Milpa\DesktopApp\Live\RolesView;
 use Milpa\DesktopApp\Live\ScreenPreviewView;
 use Milpa\DesktopApp\Live\SessionStrip;
+use Milpa\DesktopApp\Live\SessionStripComponent;
+use Milpa\DesktopApp\Live\SettingsScreen;
+use Milpa\DesktopApp\Live\SettingsScreenComponent;
+use Milpa\DesktopApp\Live\SidebarComponent;
 use Milpa\DesktopApp\Live\SkillsView;
+use Milpa\DesktopApp\Live\SystemNoticeComponent;
+use Milpa\DesktopApp\Live\TabsComponent;
+use Milpa\DesktopApp\Live\TaskComponent;
+use Milpa\DesktopApp\Live\ThinkingComponent;
+use Milpa\DesktopApp\Live\ToolCallComponent;
+use Milpa\DesktopApp\Live\TopbarComponent;
+use Milpa\DesktopApp\Live\UserMessageComponent;
+use Milpa\DesktopApp\Live\WorkBoardComponent;
 use Milpa\DesktopApp\ShellComposition;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
+use Milpa\Live\Http\LiveBoot;
+use Milpa\Live\Rendering\XhtmlComponentCompiler;
+use Milpa\Live\Support\ClientRuntime;
+use Milpa\Live\ValueObjects\ClientAssets;
+use Milpa\Live\ValueObjects\ComponentContext;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -68,11 +96,27 @@ final class ShellController
     /** The query flag that folds the chrome: `?embed=1` (greenhouse decisions/0210). Only `1` counts. */
     public const EMBED_PARAM = 'embed';
 
+    /**
+     * The runtime files this page loads, at the URLs the Desktop serves them from — what
+     * {@see LiveBoot::html()} emits in place of the hand-written `<script src>` tags the shell used to
+     * carry (greenhouse decisions/0211).
+     *
+     * @var array<string, string>
+     */
+    private const array RUNTIME_URLS = [
+        ClientRuntime::LOCAL => '/desktop/assets/milpa-live.js',
+        ClientRuntime::REMOTE => '/desktop/assets/milpa-live-remote.js',
+        ClientRuntime::ALPINE => '/desktop/assets/alpine.min.js',
+    ];
+
+    /** The Desktop's ONE component registry — the page's compiler and `/desktop/live` share it. */
+    private readonly DesktopComponents $live;
+
     public function __construct(
         private readonly MilpaEventDispatcherInterface $events,
         private readonly ?MercureConfig $mercure = null,
         private readonly ?DesktopData $data = null,
-        private readonly ?\Milpa\DesktopApp\Live\ComposerField $composerField = null,
+        private readonly ?ComposerField $composerField = null,
         private readonly ?\Milpa\DesktopApp\Live\Sidebar $sidebar = null,
         private readonly ?\Milpa\DesktopApp\Live\Topbar $topbar = null,
         private readonly ?\Milpa\DesktopApp\Live\Tabs $tabs = null,
@@ -87,7 +131,58 @@ final class ShellController
         private readonly ?DesktopSettings $settings = null,
         private readonly ?Catalog $catalog = null,
         private readonly ?SessionStrip $sessionStrip = null,
+        private readonly ?SettingsScreen $settingsScreen = null,
+        private readonly ?AuthOverlay $authOverlay = null,
+        ?DesktopComponents $live = null,
     ) {
+        $this->live = $live ?? $this->composerField?->registry() ?? new DesktopComponents(
+            hash('sha256', __DIR__ . '|milpa-live|signing'),
+            hash('sha256', __DIR__ . '|milpa-live|csrf'),
+            $events,
+        );
+        $this->declareSurfaces();
+    }
+
+    /**
+     * Declare every shell surface on the Desktop's one registry (greenhouse decisions/0211).
+     *
+     * Each `desktop-*` component is bound to its definition and to a renderer that paints it — the
+     * surface service that owns its markup, its lifecycle events and its signed envelope — and declares
+     * exactly that component's client files. From here the page is COMPOSED (`<milpa-desktop-sidebar/>`
+     * through {@see XhtmlComponentCompiler}) instead of stitched, and the same renderers answer
+     * `POST /desktop/live` when an interaction re-paints a surface.
+     *
+     * Declared eagerly, in the constructor: the registry is shared with the live endpoint, so a surface
+     * must be resolvable there whether or not the page has been rendered yet.
+     */
+    private function declareSurfaces(): void
+    {
+        $this->live->declare(new SidebarComponent(), fn (array $props): string => $this->sidebarOf()->render(($props['chrome'] ?? true) !== false));
+        $this->live->declare(new TopbarComponent(), fn (array $props): string => $this->topbarOf()->render(\is_string($props['principal'] ?? null) && $props['principal'] !== '' ? $props['principal'] : null));
+        $this->live->declare(new TabsComponent(), fn (array $props): string => $this->tabsOf()->render());
+        $this->live->declare(new SessionStripComponent(), fn (array $props): string => $this->sessionStripOf()->render());
+        $this->live->declare(new ConversationComponent(), fn (array $props): string => $this->conversationOf()->render());
+        $this->live->declare(new GateComponent(), fn (array $props): string => $this->gateOf()->render());
+        $this->live->declare(new WorkBoardComponent(), fn (array $props): string => $this->workBoardOf()->render());
+        $this->live->declare(new ActivityComponent(), fn (array $props): string => $this->activityOf()->render());
+        $this->live->declare(new ContextComponent(), fn (array $props): string => $this->contextOf()->render(\is_array($props['sections'] ?? null) ? $props['sections'] : []));
+        $this->live->declare(new ThinkingComponent(), fn (array $props): string => $this->thinkingOf()->render());
+        $this->live->declare(new AgentMessageComponent(), fn (array $props): string => $this->agentMessageOf()->render());
+        $this->live->declare(new UserMessageComponent(), fn (array $props): string => $this->messages()->user());
+        $this->live->declare(new ToolCallComponent(), fn (array $props): string => $this->messages()->tool());
+        $this->live->declare(new TaskComponent(), fn (array $props): string => $this->messages()->task());
+        $this->live->declare(new SystemNoticeComponent(), fn (array $props): string => $this->messages()->system());
+        $this->live->declare(new ResultClaimComponent(), fn (array $props): string => $this->messages()->resultClaim());
+        // The two screens phase B took out of the template (greenhouse decisions/0211): the Settings screen
+        // and the entry overlay were the last raw HTML the shell hand-wrote.
+        $this->live->declare(new SettingsScreenComponent(), fn (array $props): string => $this->settingsScreenOf()->render());
+        $this->live->declare(new AuthOverlayComponent(), fn (array $props): string => $this->authOverlayOf()->render());
+    }
+
+    /** The Desktop's one component registry — what `POST /desktop/live` is built over. */
+    public function components(): DesktopComponents
+    {
+        return $this->live;
     }
 
     /** The catalog the shell speaks in — the injected one, else the declared locale's, else English (greenhouse decisions/0209). */
@@ -141,28 +236,21 @@ final class ShellController
             $cookies[] = 'mercureAuthorization=' . $jwt . '; Path=/; SameSite=Lax';
         }
 
-        // The milpa/live boot payload the client runtime reads (#milpa-live-boot): the endpoint, the session
-        // id, and the CSRF token — bound to this session and route. The remote field posts with these.
-        $liveBoot = '';
-        if ($this->composerField !== null) {
-            $existing = $request->getCookieParams()[\Milpa\DesktopApp\Live\ComposerField::SESSION_COOKIE] ?? null;
-            $liveSid = \is_string($existing) && $existing !== '' ? $existing : bin2hex(random_bytes(16));
-            $cookies[] = \Milpa\DesktopApp\Live\ComposerField::SESSION_COOKIE . '=' . $liveSid . '; Path=/; SameSite=Lax; HttpOnly';
-            $liveBoot = (string) json_encode([
-                'endpoint' => \Milpa\DesktopApp\Live\ComposerField::ROUTE,
-                'sessionId' => $liveSid,
-                'csrfToken' => $this->composerField->csrfToken($liveSid),
-            ], \JSON_UNESCAPED_SLASHES);
-        }
+        // The milpa/live boot (greenhouse decisions/0211): the SERVER issues the page session and its CSRF
+        // token, `LiveBoot` is the one place they are written, and the runtime echoes the session id in every
+        // request body — so `POST /desktop/live` reads it from there and no cookie carries a page's session.
+        $boot = LiveBoot::issue($this->live->csrf(), ComposerField::ROUTE);
 
+        // The only cookies the shell still sets are the hub's (greenhouse decisions/0190) — the live session
+        // travels in the boot now, not in `milpa_live_sid` (decisions/0211), so a Desktop with no hub sets none.
         $headers = ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'];
         if ($cookies !== []) {
-            $headers['Set-Cookie'] = \count($cookies) === 1 ? $cookies[0] : $cookies;
+            $headers['Set-Cookie'] = $cookies;
         }
 
         // Who the gate let in (greenhouse decisions/0209): read from the attribute the gate leaves on the request,
         // never from a cookie — the Desktop invents no identity; the topbar shows the actor, or nobody.
-        return new Response(200, $headers, $this->html($composition, $liveBoot, $agentSid, RequestPrincipal::of($request), $embed));
+        return new Response(200, $headers, $this->html($composition, $boot, $agentSid, RequestPrincipal::of($request), $embed));
     }
 
     /**
@@ -181,21 +269,78 @@ final class ShellController
         return $params[$name] ?? null;
     }
 
-    private function html(ShellComposition $composition, string $liveBoot = '', string $agentSid = '', ?string $principal = null, bool $embed = false): string
+    private function html(ShellComposition $composition, LiveBoot $boot, string $agentSid = '', ?string $principal = null, bool $embed = false): string
     {
+        // The page is COMPOSED through the compiler over the ONE registry (greenhouse decisions/0211): every
+        // surface is `<milpa-desktop-*/>` resolved to its definition + renderer, and every declaring renderer's
+        // files are collected here — so `LiveBoot::html()` emits each of them exactly once, in this order.
+        // The shared guard module leads: it is the runtime module every component module reaches for.
+        $assets = new ClientAssets(scripts: [DesktopAssets::url(DesktopAssets::GUARD, 'js')]);
+        $compiler = $this->live->compiler([
+            'desktop-sidebar' => ['chrome' => !$embed],
+            'desktop-topbar' => ['principal' => $principal ?? ''],
+            'desktop-context' => ['sections' => $composition->sections()],
+        ]);
+        $paint = function (string $component) use ($compiler, &$assets): string {
+            $result = $compiler->compile('<milpa-' . $component . '/>', new ComponentContext(componentId: 'shell', route: ComposerField::ROUTE));
+            $assets = $assets->merge($result->clientAssets());
+
+            return $result->output;
+        };
+
+        // Painted in document order, so the declared stylesheets apply in the order the surfaces appear.
+        $sidebar = $paint('desktop-sidebar');
+        $topbar = $paint('desktop-topbar');
+        $sessionStrip = $embed ? $paint('desktop-session-strip') : '';
+        $tabs = $paint('desktop-tabs');
+        $conversation = $paint('desktop-conversation');
+        $gate = $paint('desktop-gate');
+        $work = $paint('desktop-work-board');
+        $activity = $paint('desktop-activity');
+        $context = $paint('desktop-context');
+        $thinking = $paint('desktop-thinking');
+        $agentMessage = $paint('desktop-agent-message');
+        $userMessage = $paint('desktop-user-message');
+        $toolMessage = $paint('desktop-tool-call');
+        $taskMessage = $paint('desktop-task');
+        $systemMessage = $paint('desktop-system-notice');
+        $resultMessage = $paint('desktop-result-claim');
+        $settings = $paint('desktop-settings');
+        $auth = $paint('desktop-auth');
+
         return str_replace(
             [
-                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--ROLES-->', '<!--SCREENS-->', '<!--LIVEROUTE-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--ENDPOINT-->',
-                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTHMODEL-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVEBOOT-->', '<!--LIVESIGNALS-->', '<!--AGENTSID-->', '<!--COMMANDS-->',
-                '<!--I18N-->', '<!--SAVED-->', '<!--EMBED-->', '<!--SESSIONSTRIP-->',
+                '<!--RUNTIME-->', '<!--CONTEXT-->', '<!--CAPABILITIES-->', '<!--SKILLS-->', '<!--ROLES-->', '<!--SCREENS-->', '<!--LIVEROUTE-->', '<!--DECISIONS-->', '<!--INTERRUPTED-->', '<!--SETTINGS-->',
+                '<!--SIDEBAR-->', '<!--STATUS-->', '<!--WORK-->', '<!--ACTIVITY-->', '<!--COMPOSER-->', '<!--AUTH-->', '<!--LIVE-->', '<!--TOPBAR-->', '<!--TABS-->', '<!--GATE-->', '<!--CONVERSATION-->', '<!--THINKING-->', '<!--AGENTMSG-->', '<!--USERMSG-->', '<!--TOOLMSG-->', '<!--TASKMSG-->', '<!--SYSMSG-->', '<!--RESULTMSG-->', '<!--LIVERUNTIME-->', '<!--AGENTSID-->', '<!--COMMANDS-->',
+                '<!--I18N-->', '<!--EMBED-->', '<!--SESSIONSTRIP-->',
             ],
             [
-                $this->runtimeScript(), $this->contextHtml($composition), $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $this->endpointValue(),
-                $this->sidebarHtml(!$embed), $this->statusCounters(), $this->workBoardHtml(), $this->activityHtml(), $this->composer(), $this->authModelLabel(), $this->connectScript($agentSid), $this->topbarHtml($principal), $this->tabsHtml(), $this->gateHtml(), $this->conversationHtml(), $this->thinkingHtml(), $this->agentMessageHtml(), $this->messages()->user(), $this->messages()->tool(), $this->messages()->task(), $this->messages()->system(), $this->messages()->resultClaim(), str_replace('</', '<\/', $liveBoot), str_replace('</', '<\/', $this->liveSignals()), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
-                $this->i18nJson(), htmlspecialchars($this->catalog()->tr('settings.saved'), ENT_QUOTES), $embed ? ' data-embed="1"' : '', $embed ? $this->sessionStripHtml() : '',
+                $this->runtimeScript(), $context, $this->capabilityCatalogueHtml(), $this->skillsHtml(), $this->rolesHtml(), $this->screenPreviewHtml(), htmlspecialchars($this->data?->liveRoute() ?? '/live', ENT_QUOTES), $this->decisionsInboxHtml(), $this->interruptedNoticeHtml(), $settings,
+                $sidebar, $this->statusCounters(), $work, $activity, $this->composer(), $auth, $this->connectScript($agentSid), $topbar, $tabs, $gate, $conversation, $thinking, $agentMessage, $userMessage, $toolMessage, $taskMessage, $systemMessage, $resultMessage, $this->liveRuntime($boot, $assets), htmlspecialchars($agentSid, ENT_QUOTES), $this->commandsJson(),
+                $this->i18nJson(), $embed ? ' data-embed="1"' : '', $sessionStrip,
             ],
             $this->template(),
         );
+    }
+
+    /**
+     * ONE runtime per page (greenhouse decisions/0211): the seeds the local runtime reads, then everything
+     * `LiveBoot::html()` emits — the declared stylesheets, the boot payload, `milpa-live.js`,
+     * `milpa-live-remote.js`, every declared component module (the shared guard first) and Alpine last, each
+     * `defer`, each URL once. The shell hand-writes no runtime `<script>` tag any more.
+     *
+     * The three seed tags are emitted HERE and only here — `LiveBoot` carries the boot, not the signals — so
+     * the page never has two places that could disagree about what the store starts with.
+     */
+    private function liveRuntime(LiveBoot $boot, ClientAssets $assets): string
+    {
+        $seeds = '<script id="milpa-live-signals" type="application/json">' . str_replace('</', '<\/', $this->liveSignals()) . '</script>' . "\n"
+            // Nothing is remembered in the browser: the mode is seeded from the SAVED setting on every load
+            // (one truth, server-side — greenhouse decisions/0202); the session summary is DERIVED.
+            . '<script id="milpa-live-persist" type="application/json">[]</script>' . "\n"
+            . '<script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"},"session.counters":{"template":"{session.turns} turns · {session.tool_calls} tools"},"context.usage":{"template":"{context.used}/{context.window}"},"session.status":{"template":"{session.turns} turns · {session.steps} steps · {session.tokens} tokens · {session.tool_calls} tool calls"}}</script>' . "\n";
+
+        return $seeds . $boot->html(self::RUNTIME_URLS, $assets);
     }
 
     /**
@@ -204,9 +349,9 @@ final class ShellController
      * the sidebar is folded. A milpa/live component ({@see SessionStrip}) over the same data the sidebar reads;
      * a fallback is built from that data when none was injected.
      */
-    private function sessionStripHtml(): string
+    private function sessionStripOf(): SessionStrip
     {
-        return ($this->sessionStrip ?? new SessionStrip('desktop-session-strip-fallback', $this->data, $this->events, $this->catalog()))->render();
+        return $this->sessionStrip ?? new SessionStrip('desktop-session-strip-fallback', $this->data, $this->events, $this->catalog());
     }
 
     /**
@@ -301,14 +446,16 @@ final class ShellController
             . '</div>';
     }
 
-    /** The model endpoint: the persisted setting if saved (0483), else the configured one. */
-    private function endpointValue(): string
+    /** The Settings screen surface (greenhouse decisions/0211) — the injected one, else a fallback over the same data. */
+    private function settingsScreenOf(): SettingsScreen
     {
-        $settings = $this->data?->settings() ?? [];
-        $saved = $settings['endpoint'] ?? null;
-        $endpoint = is_string($saved) && $saved !== '' ? $saved : ($this->data?->model()['endpoint'] ?? 'http://llama.local:11438');
+        return $this->settingsScreen ?? new SettingsScreen('desktop-settings-fallback', $this->data, $this->events, $this->catalog());
+    }
 
-        return htmlspecialchars($endpoint, ENT_QUOTES);
+    /** The entry overlay surface (greenhouse decisions/0211) — the injected one, else a fallback over the same data. */
+    private function authOverlayOf(): AuthOverlay
+    {
+        return $this->authOverlay ?? new AuthOverlay('desktop-auth-fallback', $this->data, $this->events, $this->catalog());
     }
 
     /** Format a token count as "9.25K". */
@@ -364,7 +511,7 @@ final class ShellController
 <div class="composer-wrap" style="position:relative;margin-top:var(--space-2)">
   <div class="composer-panels" style="position:absolute;right:0;bottom:calc(100% + var(--space-3));display:flex;gap:var(--space-4);align-items:flex-end">
 
-    <div class="composer-panel" data-panel-for="session" hidden style="width:260px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--shadow-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);font-family:var(--font-mono)">
+    <div class="composer-panel" data-panel-for="session" hidden :hidden="\$store.milpa['composer.panel'] !== 'session'" style="width:260px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--shadow-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);font-family:var(--font-mono)">
       <p style="margin:0;font-size:var(--text-sm)">Session <span style="color:var(--text-muted)">· {$c['turns']} turns</span></p>
       <div style="height:1px;background:var(--border-subtle)"></div>
       <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs)"><span style="color:var(--text-secondary)">Steps</span><span>{$c['steps']}</span></p>
@@ -372,7 +519,7 @@ final class ShellController
       <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs)"><span style="color:var(--text-secondary)">State</span><span style="color:var(--accent-text)">{$c['state']}</span></p>
     </div>
 
-    <div class="composer-panel" data-panel-for="context" hidden style="width:300px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--shadow-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);font-family:var(--font-mono)">
+    <div class="composer-panel" data-panel-for="context" hidden :hidden="\$store.milpa['composer.panel'] !== 'context'" style="width:300px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--shadow-lg);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4);font-family:var(--font-mono)">
       <p style="margin:0;font-size:var(--text-sm)">Context <span style="color:var(--text-muted)">· {$tokens} / {$window}</span></p>
       <div class="mui-progress" role="progressbar" aria-valuenow="{$pct}" aria-valuemin="0" aria-valuemax="100" style="width:100%"><span class="mui-progress__bar" style="width:{$pct}%;background:{$barColor}"></span></div>
       <p style="margin:0;display:flex;justify-content:space-between;font-size:var(--text-2xs);color:var(--text-secondary)"><span>{$pct}% used</span><span>{$free} free</span></p>
@@ -391,9 +538,9 @@ final class ShellController
       </span>
       <span style="margin-inline-start:auto;display:flex;align-items:center;gap:var(--space-2);font-family:var(--font-mono);font-size:var(--text-2xs)">
         <span id="milpa-charcount" aria-live="polite" style="color:var(--text-muted);min-width:0"></span>
-        <button type="button" class="composer-chip" data-open-panel="session" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ <span x-data x-text="\$store.milpa['session.counters']">{$c['turns']} turns · {$c['tool_calls']} tools</span></button>
-        <button type="button" class="composer-chip" data-open-panel="context" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ <span x-data x-text="\$store.milpa['context.usage']">{$tokens}/{$window}</span></button>
-        <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" id="milpa-send" aria-label="continue session" disabled style="border-radius:var(--radius-full)">↑</button>
+        <button type="button" class="composer-chip" data-open-panel="session" @click="\$store.milpa['composer.panel'] = \$store.milpa['composer.panel'] === 'session' ? '' : 'session'" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">◈ <span x-data x-text="\$store.milpa['session.counters']">{$c['turns']} turns · {$c['tool_calls']} tools</span></button>
+        <button type="button" class="composer-chip" data-open-panel="context" @click="\$store.milpa['composer.panel'] = \$store.milpa['composer.panel'] === 'context' ? '' : 'context'" style="border:1px solid var(--border);border-radius:var(--radius-full);background:var(--surface);color:var(--text);padding:4px 10px;cursor:pointer;font:inherit">▤ <span x-data x-text="\$store.milpa['context.usage']">{$tokens}/{$window}</span></button>
+        <button type="button" class="mui-btn mui-btn--primary mui-btn--icon" id="milpa-send" aria-label="continue session" disabled style="border-radius:var(--radius-full)" x-data :disabled="!\$store.milpa['session.working'] && !\$store.milpa['composer.draft']" :aria-label="\$store.milpa['session.working'] ? 'stop the turn' : 'continue session'"><span x-text="\$store.milpa['session.working'] ? '■' : '↑'">↑</span></button>
       </span>
     </div>
   </div>
@@ -402,35 +549,22 @@ final class ShellController
 HTML;
     }
 
-    /** The real model label for the Auth provider option: "Local model · <model> (<endpoint>)". */
-    private function authModelLabel(): string
+    /** The sidebar surface (greenhouse decisions/0189) — the injected one, else a fallback over the same data. */
+    private function sidebarOf(): \Milpa\DesktopApp\Live\Sidebar
     {
-        $m = $this->data?->model() ?? ['model' => 'qwen3.8-27b', 'endpoint' => 'http://llama.local:11438'];
-
-        return htmlspecialchars('Local model · ' . $m['model'] . ' (' . $m['endpoint'] . ')', ENT_QUOTES);
+        return $this->sidebar ?? new \Milpa\DesktopApp\Live\Sidebar('desktop-sidebar-fallback', $this->data, $this->events);
     }
 
-    /** The sidebar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's first
-     *  pure-component surface. A fallback Sidebar is built from the same data when none was injected. In embed
-     *  mode (`$chrome` false, decisions/0210) it keeps its ids but renders no link to a chrome screen. */
-    private function sidebarHtml(bool $chrome = true): string
+    /** The topbar surface (greenhouse decisions/0189, 0209) — the injected one, else a fallback over the same data and door. */
+    private function topbarOf(): \Milpa\DesktopApp\Live\Topbar
     {
-        return ($this->sidebar ?? new \Milpa\DesktopApp\Live\Sidebar('desktop-sidebar-fallback', $this->data, $this->events))->render($chrome);
+        return $this->topbar ?? new \Milpa\DesktopApp\Live\Topbar('desktop-topbar-fallback', $this->data, $this->events, $this->settings, $this->catalog);
     }
 
-    /** The topbar, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's second
-     *  pure-component surface, carrying who the gate let in and the gate in effect (decisions/0209). A
-     *  fallback Topbar is built from the same data and door when none was injected. */
-    private function topbarHtml(?string $principal = null): string
+    /** The main tablist surface (greenhouse decisions/0189) — the panes and composer dock read its `desktop.tab` signal. */
+    private function tabsOf(): \Milpa\DesktopApp\Live\Tabs
     {
-        return ($this->topbar ?? new \Milpa\DesktopApp\Live\Topbar('desktop-topbar-fallback', $this->data, $this->events, $this->settings, $this->catalog))->render($principal);
-    }
-
-    /** The main tablist, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's third
-     *  pure-component surface. The panes and composer dock read the same `desktop.tab` signal to show/hide. */
-    private function tabsHtml(): string
-    {
-        return ($this->tabs ?? new \Milpa\DesktopApp\Live\Tabs('desktop-tabs-fallback', $this->events))->render();
+        return $this->tabs ?? new \Milpa\DesktopApp\Live\Tabs('desktop-tabs-fallback', $this->events);
     }
 
     /** The initial shared signals, seeded into the page — one truth projected across the UI (decisions/0189). */
@@ -461,6 +595,32 @@ HTML;
             'desktop.nav' => 'sessions',
             'desktop.tab' => 'chat',
             'desktop.gate.open' => false,
+            // The couplings phase A dissolved into signals (greenhouse decisions/0211):
+            //  · `session.working` replaces setWorking() poking the send button and the topbar badge — both
+            //    BIND to it now, so anything else that must follow the turn binds too instead of being poked;
+            //  · `composer.draft` is the other half of the send button's state (is there anything to send),
+            //    so its `disabled` is a binding and not an assignment;
+            //  · `ui.dismiss` is bumped by the ONE document-level click listener the guard module owns — the
+            //    mode menu and the command popup consume it instead of each hanging its own listener;
+            //  · `desktop.notice` is what the guard SAYS when a door answers, instead of reaching into the
+            //    conversation: whoever renders notices consumes it.
+            'session.working' => \is_array($counters) && strtolower((string) $counters['state']) === 'working',
+            'composer.draft' => false,
+            'ui.dismiss' => 0,
+            'desktop.notice' => null,
+            // What phase B made signals (greenhouse decisions/0211):
+            //  · `composer.panel` is WHICH floating panel is open — the chips set it, both panels bind
+            //    `:hidden` to it, and typing clears it, so nothing pokes a `.hidden` property;
+            //  · `ui.theme` is the shell's theme in three places at once (the document, the chrome toggle,
+            //    the Settings buttons) — seeded 'system', corrected by the topbar module from what was
+            //    remembered, and never a second copy for the buttons to disagree with;
+            //  · `desktop.auth.open` is the entry overlay's visibility, so any surface can ask for it;
+            //  · `settings.saved` is what the save badge SHOWS — `{ok, text}` while a save is being
+            //    reported, null once it has been. Only the door's answer ever fills it.
+            'composer.panel' => '',
+            'ui.theme' => 'system',
+            'desktop.auth.open' => false,
+            'settings.saved' => null,
         ], \JSON_UNESCAPED_SLASHES);
     }
 
@@ -475,53 +635,46 @@ HTML;
         return '<span x-data x-text="$store.milpa[\'session.status\']">' . $seed . '</span>';
     }
 
-    /** The Work board, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's fourth
-     *  pure-component surface. Moving a card still persists through /desktop/work (decisions/0484). */
-    private function workBoardHtml(): string
+    /** The Work board surface (greenhouse decisions/0189) — moving a card still persists through /desktop/work. */
+    private function workBoardOf(): \Milpa\DesktopApp\Live\WorkBoard
     {
-        return ($this->workBoard ?? new \Milpa\DesktopApp\Live\WorkBoard('desktop-work-board-fallback', $this->data, $this->events))->render();
+        return $this->workBoard ?? new \Milpa\DesktopApp\Live\WorkBoard('desktop-work-board-fallback', $this->data, $this->events);
     }
 
-    /** The Activity tab, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's fifth
-     *  pure-component surface. Facts still arrive live over the hub, prepended to #milpa-activity. */
-    private function activityHtml(): string
+    /** The Activity tab surface (greenhouse decisions/0189) — facts arrive live over the hub, prepended to #milpa-activity. */
+    private function activityOf(): \Milpa\DesktopApp\Live\Activity
     {
-        return ($this->activity ?? new \Milpa\DesktopApp\Live\Activity('desktop-activity-fallback', $this->data, $this->events))->render();
+        return $this->activity ?? new \Milpa\DesktopApp\Live\Activity('desktop-activity-fallback', $this->data, $this->events);
     }
 
-    /** The Context tab, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's sixth
-     *  pure-component surface. Plugins still contribute panels through the composition (addPanel). */
-    private function contextHtml(ShellComposition $composition): string
+    /** The Context tab surface (greenhouse decisions/0189) — plugins contribute panels through the composition (addPanel). */
+    private function contextOf(): \Milpa\DesktopApp\Live\Context
     {
-        return ($this->context ?? new \Milpa\DesktopApp\Live\Context('desktop-context-fallback', $this->events))->render($composition->sections());
+        return $this->context ?? new \Milpa\DesktopApp\Live\Context('desktop-context-fallback', $this->events);
     }
 
-    /** The consent gate, rendered as a milpa/live component (greenhouse decisions/0189) — the shell's seventh
-     *  pure-component surface. Its visibility is the `desktop.gate.open` signal; live gate.opened fills it. */
-    private function gateHtml(): string
+    /** The consent gate surface (greenhouse decisions/0189) — its visibility is the `desktop.gate.open` signal. */
+    private function gateOf(): \Milpa\DesktopApp\Live\Gate
     {
-        return ($this->gate ?? new \Milpa\DesktopApp\Live\Gate('desktop-gate-fallback', $this->events))->render();
+        return $this->gate ?? new \Milpa\DesktopApp\Live\Gate('desktop-gate-fallback', $this->events);
     }
 
-    /** The conversation's inner content (greenhouse decisions/0191): the empty state + envelope. The chat is a
-     *  component that composes the message components; this fills its container. */
-    private function conversationHtml(): string
+    /** The conversation surface (greenhouse decisions/0191): the empty state + envelope inside the chat container. */
+    private function conversationOf(): \Milpa\DesktopApp\Live\Conversation
     {
-        return ($this->conversation ?? new \Milpa\DesktopApp\Live\Conversation('desktop-conversation-fallback', $this->events))->render();
+        return $this->conversation ?? new \Milpa\DesktopApp\Live\Conversation('desktop-conversation-fallback', $this->events);
     }
 
-    /** The thinking component's prototype (greenhouse decisions/0191): the conversation clones it per turn and
-     *  feeds it the reasoning by events. The first message type made a real Milpa Component. */
-    private function thinkingHtml(): string
+    /** The thinking prototype's surface (greenhouse decisions/0191): cloned per turn, fed the reasoning by events. */
+    private function thinkingOf(): \Milpa\DesktopApp\Live\Thinking
     {
-        return ($this->thinking ?? new \Milpa\DesktopApp\Live\Thinking('desktop-thinking-fallback', $this->events))->render();
+        return $this->thinking ?? new \Milpa\DesktopApp\Live\Thinking('desktop-thinking-fallback', $this->events);
     }
 
-    /** The agent-message component's prototype (greenhouse decisions/0191): the conversation clones it per
-     *  answer, fills the body, and its foot tools (copy, regenerate) act through a delegated handler. */
-    private function agentMessageHtml(): string
+    /** The agent-message prototype's surface (greenhouse decisions/0191): cloned per answer, its foot tools delegated. */
+    private function agentMessageOf(): \Milpa\DesktopApp\Live\AgentMessage
     {
-        return ($this->agentMessage ?? new \Milpa\DesktopApp\Live\AgentMessage('desktop-agent-message-fallback', $this->events))->render();
+        return $this->agentMessage ?? new \Milpa\DesktopApp\Live\AgentMessage('desktop-agent-message-fallback', $this->events);
     }
 
     /**
@@ -605,11 +758,22 @@ HTML;
 HTML;
     }
 
-    /** Connect the runtime to the Mercure hub when one is wired; otherwise report an offline status. */
+    /**
+     * Connect the runtime to the Mercure hub when one is wired; otherwise report an offline status.
+     *
+     * Both branches wait for `DOMContentLoaded`, and that wait is load-bearing (greenhouse decisions/0211).
+     * This is an inline script at the end of `<body>`, so it runs DURING parsing — before every deferred
+     * script, which is now where the component modules live. `desktop-gate.js` subscribes to
+     * `gate.opened` and `desktop-activity.js` to `onAny()`; both used to be registered by the page's own
+     * inline script, which ran first. Opening the stream here would put a window between the first
+     * message and the handlers that must see it — and a fact already queued at the hub arrives inside it.
+     * Every deferred script has executed by `DOMContentLoaded`, so subscribing before connecting is the
+     * whole point of the listener.
+     */
     private function connectScript(string $agentSid = ''): string
     {
         if ($this->mercure === null) {
-            return "<script>window.MilpaShell.status('offline');</script>";
+            return "<script>document.addEventListener('DOMContentLoaded', function () { window.MilpaShell.status('offline'); });</script>";
         }
 
         // Subscribe to TWO exact topics on one connection: the shell topic (desktop ShellEvents) and this
@@ -623,7 +787,10 @@ HTML;
 
         return <<<HTML
 <script>
-  (function () {
+  // Deferred to DOMContentLoaded ON PURPOSE: every component module is a deferred script, and the gate
+  // and the activity stream subscribe to this bus from theirs. Connecting first would drop whatever the
+  // hub had already queued (greenhouse decisions/0211).
+  document.addEventListener('DOMContentLoaded', function () {
     var es = new EventSource({$url}, { withCredentials: true });
     es.onopen = function () { window.MilpaShell.status('live'); };
     es.onerror = function () { window.MilpaShell.status('offline'); };
@@ -634,7 +801,7 @@ HTML;
       if (env && typeof env.event === 'string') { window.MilpaShell.emit(env.event, env.data); return; }
       if (env && typeof env.kind === 'string') { window.MilpaShell.session(env); }
     };
-  })();
+  });
 </script>
 HTML;
     }
@@ -670,20 +837,10 @@ HTML;
   html[data-embed="1"] .chrome, html[data-embed="1"] .statusbar, html[data-embed="1"] .mui-sidebar, html[data-embed="1"] .mui-topbar { display: none !important; }
   html[data-embed="1"] .mui-shell { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
   html[data-embed="1"] .mui-shell__main { grid-column: 1 !important; grid-row: 1 !important; }
-  .milpa-session-strip { display: flex; align-items: center; gap: var(--space-3); flex: none; padding: var(--space-3) var(--space-8); border-bottom: 1px solid var(--border-subtle); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-xs); }
-  .milpa-session-strip__goal { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-  .milpa-session-strip__pick { flex: none; max-width: 22rem; }
   ul.feed { list-style: none; margin: 0; padding: 0; font: var(--text-xs)/1.5 var(--font-mono); overflow: auto; }
   ul.feed li { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); margin: var(--space-2) 0; word-break: break-word; }
   .mui-empty { color: var(--text-muted); font-size: var(--text-sm); }
   .panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: var(--space-4); }
-  /* The Grano mark: the 13 kernels form the M, each scaling into place in a staggered sweep (the two
-     pillars, then the inner V). The grain is oro-300 constant — the logo is brand, not UI, and does not
-     theme (per the kit). Hover replays the forming. */
-  .milpa-grainmark .g { transform-box: fill-box; transform-origin: center; animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
-  .milpa-grainmark:hover .g { animation: milpa-grain-in .5s cubic-bezier(.22,1,.36,1) both; }
-  @keyframes milpa-grain-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
-  .milpa-search-hit { display: none !important; }
   /* Capabilities catalogue: installed vs available, the same list the agent reads (greenhouse decisions/0193). */
   .cap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); align-items: start; }
   @media (max-width: 760px) { .cap-grid { grid-template-columns: 1fr; } }
@@ -750,110 +907,12 @@ HTML;
   /* No visible scrollbars anywhere — scrolling still works. */
   * { scrollbar-width: none; -ms-overflow-style: none; }
   *::-webkit-scrollbar { width: 0; height: 0; display: none; }
-  /* The message stream: one visual language, a distinct voice per kind. New messages arrive at the bottom
-     and the composer is docked below (sticky), so the thread reads top→down and the box never moves. */
-  #milpa-chat { display: flex; flex-direction: column; gap: var(--space-5); max-width: 88ch; }
-  /* The conversation's empty state hides itself the moment a message component is cloned in. */
-  #milpa-chat:has(.msg) .milpa-empty-convo { display: none; }
-  .msg__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); display: block; }
-  .msg--user { display: flex; justify-content: flex-end; }
-  .msg--user > div { max-width: 56ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
-  /* The user is a human PEER — a contrasting bubble (--surface) on the right. The agent is the SYSTEM
-     speaking, not another human (Rod): its own bubble on the left, but tinted toward the app surface —
-     quieter, closer to the system chrome — and a subtle border, so it reads as the house's voice, not a peer's. */
-  .msg--agent { align-self: flex-start; max-width: 72ch; padding: var(--space-3) var(--space-5); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface); background: color-mix(in oklab, var(--surface) 55%, var(--bg)); }
-  .msg--agent > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
-  /* The agent's answer is rendered markdown (safe subset): headings, lists, code, emphasis — legible, not raw. */
-  .msg__md { margin-top: var(--space-2); font-size: var(--text-sm); line-height: var(--leading-relaxed); text-wrap: pretty; }
-  .msg__md p { margin: 0 0 var(--space-2); }
-  .msg__md p:last-child { margin-bottom: 0; }
-  .msg__md .md-h { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-base); font-weight: var(--weight-medium); }
-  .msg__md .md-ul { margin: 0 0 var(--space-2); padding-inline-start: var(--space-5); display: flex; flex-direction: column; gap: 2px; }
-  .msg__md .md-code { font-family: var(--font-mono); font-size: var(--text-xs); padding: 1px 5px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); }
-  .msg__md .md-pre { margin: var(--space-2) 0; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); overflow-x: auto; }
-  .msg__md .md-pre code { font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); }
-  .msg__md a { color: var(--accent-text); text-decoration: underline; }
-  /* Agent message tools: a quiet row of icon buttons at the foot of the answer — copy, regenerate. They stay
-     dim until the message is hovered, then come forward; a copied tool flashes the accent. */
-  .msg__tools { display: flex; gap: var(--space-1); margin-top: var(--space-2); opacity: 0; transition: opacity var(--dur-fast, 120ms) ease-out; }
-  .msg--agent:hover .msg__tools, .msg__tools:focus-within { opacity: 1; }
-  .msg__tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: none; border-radius: var(--radius-sm); background: none; color: var(--text-muted); cursor: pointer; transition: color var(--dur-fast, 120ms) ease-out, background var(--dur-fast, 120ms) ease-out; }
-  .msg__tool-btn:hover { color: var(--text); background: var(--surface); }
-  .msg__tool-btn.is-done { color: var(--accent-text); }
-  /* The ledger's verdict, riding the answer's tool row (Rod's ask — saves a line): a compact mark + label at
-     the far end, with a tooltip on hover/focus that says WHAT the ledger judged. Anchored right so it never
-     runs off-screen. */
-  .msg__verdict { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; padding: 0 var(--space-2); height: 28px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); cursor: help; }
-  .msg__verdict[data-verified="1"] .msg__verdict-mark { color: var(--success); }
-  .msg__verdict[data-verified="0"] .msg__verdict-mark { color: var(--warning); }
-  .msg__verdict[data-verified="0"] { color: var(--warning); }
-  .msg__verdict:hover, .msg__verdict:focus-visible { color: var(--text-secondary); background: var(--surface); }
-  .msg__verdict:focus-visible { outline: 2px solid var(--accent-subtle); outline-offset: 2px; }
-  .msg__verdict-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: min(22rem, 60vw); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; white-space: normal; text-align: left; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
-  .msg__verdict:hover .msg__verdict-tip, .msg__verdict:focus-visible .msg__verdict-tip, .msg__verdict:focus-within .msg__verdict-tip { opacity: 1; transform: translateY(0); }
-  @media (prefers-reduced-motion: reduce) { .msg__verdict-tip { transition: none; } }
-  /* Thinking: the agent reasoning aloud — dimmed and italic, clearly not final speech. */
-  .msg--thinking { color: var(--text-muted); font-style: italic; }
-  .msg--thinking > p { margin: var(--space-1) 0 0; font-size: var(--text-xs); line-height: var(--leading-relaxed); white-space: pre-wrap; }
-  /* Live thinking block: the words assemble in front of the user WHILE the model is still reasoning — a
-     breathing spark, typing dots, and an accent edge say "alive"; all of it stops the instant it's done and
-     the block settles to a quiet, collapsible aside — the model's private reasoning, never its answer. */
-  .milpa-think { font-style: normal; border-inline-start: 2px solid var(--border); padding-inline-start: var(--space-3); transition: border-color .45s ease; }
-  .milpa-think[data-thinking-active="1"] { border-inline-start-color: var(--accent); }
-  .milpa-think__toggle { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 0; background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; transition: color .3s ease; }
-  .milpa-think__toggle:hover { color: var(--text-secondary); }
-  .milpa-think[data-thinking-active="1"] .milpa-think__toggle { color: var(--text-secondary); }
-  /* The spark: a quiet diamond at rest, a breathing accent mark while the model reasons. */
-  .milpa-think__spark { display: inline-block; color: var(--text-muted); }
-  .milpa-think[data-thinking-active="1"] .milpa-think__spark { color: var(--accent-text); animation: milpa-think-pulse 1.6s ease-in-out infinite; }
-  /* Typing dots: the universal "working" cue — only while active, hidden once the block settles. */
-  .milpa-think__dots { display: none; align-items: center; gap: 3px; }
-  .milpa-think[data-thinking-active="1"] .milpa-think__dots { display: inline-flex; }
-  .milpa-think__dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--accent-text); opacity: .25; animation: milpa-think-dot 1.2s ease-in-out infinite; }
-  .milpa-think__dots i:nth-child(2) { animation-delay: .18s; }
-  .milpa-think__dots i:nth-child(3) { animation-delay: .36s; }
-  @keyframes milpa-think-pulse { 0%, 100% { opacity: .5; transform: scale(.88); } 50% { opacity: 1; transform: scale(1.18); } }
-  @keyframes milpa-think-dot { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-1.5px); } }
-  /* The caret shows only once the block is done (active=0): no collapse chevron competes with the live dots. */
-  .milpa-think[data-thinking-active="0"][data-open="1"] .milpa-think__toggle::after { content: ' ▾'; opacity: .6; }
-  .milpa-think[data-thinking-active="0"][data-open="0"] .milpa-think__toggle::after { content: ' ▸'; opacity: .6; }
-  /* Collapse animates (max-height), never a hard cut. */
-  .milpa-think__body { margin-top: var(--space-2); max-height: 16rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; transition: max-height .3s ease, opacity .22s ease, margin-top .3s ease; }
-  .milpa-think[data-open="0"] .milpa-think__body { max-height: 0; margin-top: 0; opacity: 0; overflow: hidden; }
-  @media (prefers-reduced-motion: reduce) {
-    .milpa-think[data-thinking-active="1"] .milpa-think__spark { animation: none; }
-    .milpa-think__dots i { animation: none; opacity: .8; }
-    .milpa-think, .milpa-think__toggle, .milpa-think__body { transition: none; }
-  }
-  /* Tool call: a compact mono card, the machinery made legible — name + summary, the raw result collapsed. */
-  .msg--tool .msg__tool-head { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); cursor: pointer; }
-  .msg--tool .msg__tool-head:hover { border-color: var(--border); }
-  .msg--tool .msg__tool-name { color: var(--accent-text); }
-  .msg--tool .msg__tool-summary { color: var(--text-secondary); }
-  .msg--tool[data-open="1"] .msg__tool-head::after { content: ' ▾'; opacity: .5; }
-  .msg--tool[data-open="0"] .msg__tool-head::after { content: ' ▸'; opacity: .5; }
-  .msg--tool[data-open="0"] .msg__tool-raw { display: none; }
-  .msg--tool .msg__tool-raw { margin: var(--space-2) 0 0; max-height: 18rem; overflow: auto; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: var(--text-2xs); line-height: var(--leading-relaxed); color: var(--text-muted); white-space: pre-wrap; }
-  /* Result claim: the ledger's verdict on the turn — a quiet line, green when verified, warning when disputed.
-     An ⓘ affordance + a hover/focus tooltip explain WHAT the ledger judged, so "verified" is never opaque. */
-  .msg--result { position: relative; display: inline-flex; align-items: baseline; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); cursor: help; }
-  .msg--result[data-verified="1"] .msg__result-mark { color: var(--success); }
-  .msg--result[data-verified="0"] .msg__result-mark { color: var(--warning); }
-  .msg--result[data-verified="0"] { color: var(--warning); }
-  .msg__result-info { color: var(--text-muted); opacity: .5; font-size: .95em; transition: opacity .2s ease, color .2s ease; }
-  .msg--result:hover .msg__result-info, .msg--result:focus-visible .msg__result-info { opacity: 1; color: var(--accent-text); }
-  .msg--result:focus-visible { outline: 2px solid var(--accent-subtle); outline-offset: 3px; border-radius: var(--radius-sm); }
-  .msg__result-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: min(22rem, 60vw); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; text-transform: none; white-space: normal; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
-  .msg--result:hover .msg__result-tip, .msg--result:focus-visible .msg__result-tip, .msg--result:focus-within .msg__result-tip { opacity: 1; transform: translateY(0); }
-  @media (prefers-reduced-motion: reduce) { .msg__result-tip { transition: none; } }
-  /* System: a centered, quiet notice — the house speaking, not a participant. */
-  .msg--system { align-self: center; text-align: center; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; }
-  /* Task: a row the agent added to the plan — a leading mark, monospace title. */
-  .msg--task > div { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-subtle); }
-  .msg--task .msg__mark { color: var(--accent-text); font-weight: var(--weight-bold); }
-  .msg--task .msg__title { font-size: var(--text-sm); }
-  @media (prefers-reduced-motion: reduce) { .milpa-grainmark .g { animation: none !important; opacity: 1; } * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 </style>
+<!-- ONE runtime per page (greenhouse decisions/0211): every stylesheet the compiled components declared,
+     the boot the server issued, the two runtimes, the Desktop's client modules and Alpine — emitted by
+     LiveBoot::html(), each once, each deferred. The shell hand-writes no runtime script tag. -->
+<!--LIVERUNTIME-->
 </head>
 <body>
 <!--RUNTIME-->
@@ -930,48 +989,10 @@ HTML;
       <template id="milpa-system-msg-proto"><!--SYSMSG--></template>
       <template id="milpa-result-msg-proto"><!--RESULTMSG--></template>
 
-      <div class="view" data-view="settings" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-5)">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);align-items:start">
-
-          <div class="mui-card mui-card--raised">
-            <div class="mui-card__header"><h2 class="mui-card__title">Model and provider</h2></div>
-            <div class="mui-card__body mui-stack">
-              <div class="mui-field"><label class="mui-field__label" for="set-prov">Provider</label><span class="mui-select-wrap"><select id="set-prov" class="mui-select"><option>Local model</option><option>Local-network model</option><option>External provider</option></select></span></div>
-              <div class="mui-field"><label class="mui-field__label" for="set-end">Endpoint</label><input id="set-end" class="mui-input" style="font-family:var(--font-mono);font-size:var(--text-xs)" value="<!--ENDPOINT-->"><span class="mui-field__hint">The endpoint receives context. It does not execute operations.</span></div>
-              <div class="mui-field mui-field--row" style="justify-content:space-between"><label class="mui-field__label" for="set-stream">Show streaming tokens</label><input class="mui-switch" type="checkbox" id="set-stream" checked="checked"></div>
-            </div>
-          </div>
-
-          <div class="mui-card mui-card--raised">
-            <div class="mui-card__header"><h2 class="mui-card__title">Default autonomy</h2></div>
-            <div class="mui-card__body mui-stack mui-stack--sm">
-              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" value="ask" checked="checked"><span class="mui-choice__text">Ask before changing <span class="mui-badge" style="margin-inline-start:8px">ask</span><span class="mui-choice__hint">Pauses mutations without a standing permission.</span></span></label>
-              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" value="acknowledge"><span class="mui-choice__text">Compatibility <span class="mui-badge" style="margin-inline-start:8px">acknowledge</span><span class="mui-choice__hint">Today decides like auto: no observable prior notice.</span></span></label>
-              <label class="mui-choice"><input class="mui-radio" type="radio" name="set-mode" value="auto"><span class="mui-choice__text">Continue automatically <span class="mui-badge" style="margin-inline-start:8px">auto</span><span class="mui-choice__hint">Signatures and incomplete intent still stop.</span></span></label>
-              <div class="mui-alert mui-alert--info" role="note"><span class="mui-alert__icon" aria-hidden="true">i</span><div class="mui-alert__content"><p class="mui-alert__desc">The three values are not yet three behaviorally distinct levels.</p></div></div>
-            </div>
-          </div>
-
-          <div class="mui-card">
-            <div class="mui-card__header"><h2 class="mui-card__title">Context and storage</h2></div>
-            <div class="mui-card__body mui-stack mui-stack--sm">
-              <div class="mui-field mui-field--row" style="justify-content:space-between"><label class="mui-field__label" for="set-comp">Compact context automatically</label><input class="mui-switch" id="set-comp" type="checkbox" checked="checked"></div>
-              <p style="margin:0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Compaction reduces what the model sees, never the session record.</p>
-              <div class="mui-field"><label class="mui-field__label" for="set-path">Sessions folder</label><input id="set-path" class="mui-input mui-input--sm" style="font-family:var(--font-mono);font-size:var(--text-xs)" value=".milpa/sessions/" readonly="readonly"></div>
-            </div>
-          </div>
-
-          <div class="mui-card">
-            <div class="mui-card__header"><h2 class="mui-card__title">Appearance</h2></div>
-            <div class="mui-card__body mui-stack mui-stack--sm">
-              <div class="mui-field"><span class="mui-field__label">Theme</span><div class="mui-cluster mui-cluster--sm"><button type="button" class="mui-btn mui-btn--sm" data-theme-set="system">System</button><button type="button" class="mui-btn mui-btn--sm" data-theme-set="dark" aria-pressed="true">Dark</button><button type="button" class="mui-btn mui-btn--sm" data-theme-set="light">Light</button></div></div>
-              <div class="mui-field"><span class="mui-field__label">Interface scale</span><div class="mui-cluster mui-cluster--sm"><button type="button" class="mui-btn mui-btn--sm" aria-pressed="true">100%</button><button type="button" class="mui-btn mui-btn--sm">115%</button><button type="button" class="mui-btn mui-btn--sm">130%</button></div></div>
-            </div>
-          </div>
-
-        </div>
-        <div class="mui-cluster" style="margin-top:auto;justify-content:flex-end;flex:none;align-items:center"><span id="milpa-settings-saved" class="mui-badge mui-badge--success" hidden><!--SAVED--></span><button type="button" class="mui-btn" id="milpa-discard">Discard changes</button><button type="button" class="mui-btn mui-btn--primary" id="milpa-save-settings">Save settings</button></div>
-      </div>
+      <!-- The Settings screen is the `desktop-settings` component now (greenhouse decisions/0211): the
+           four cards, the Save/Discard row and the save badge all come from its renderer, its look from
+           desktop-settings.css and its behaviour from desktop-settings.js. -->
+      <!--SETTINGS-->
 
       <div class="view" data-view="capabilities" hidden style="flex:1;min-height:0;overflow:auto;padding:var(--space-6) var(--space-8)">
         <p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">What this app can do today, and what it could — the same catalogue the agent reads.</p>
@@ -1012,26 +1033,10 @@ HTML;
   </div>
 </div>
 
-<!-- Auth (wireframe 2a): open the workspace. An entry overlay; nothing runs on open. -->
-<div class="view" data-view="auth" id="milpa-auth" hidden style="position:fixed;inset:0;z-index:1400;display:grid;grid-template-columns:1fr 560px;background:var(--bg)">
-  <div style="display:flex;flex-direction:column;justify-content:flex-end;padding:var(--space-12);border-inline-end:1px solid var(--border-subtle);background:var(--surface)">
-    <p class="mui-section__kicker" style="margin:0 0 var(--space-3)">local workspace</p>
-    <h1 style="font-family:var(--font-heading);font-size:var(--text-4xl);line-height:1.03;margin:0 0 var(--space-4)">Milpa Desktop</h1>
-    <p style="margin:0;max-width:36ch;font-size:var(--text-base);line-height:var(--leading-relaxed);color:var(--text-secondary)">Open a Milpa app to start, understand and resume an agent's work. The session is the unit; nothing runs on open.</p>
-  </div>
-  <div style="display:flex;flex-direction:column;gap:var(--space-6);padding:var(--space-10) var(--space-8);overflow:auto">
-    <div class="mui-stack">
-      <div class="mui-field"><label class="mui-field__label" for="auth-app">Milpa app</label><input id="auth-app" class="mui-input mui-input--lg" style="font-family:var(--font-mono)" value="getmilpa/framework" readonly="readonly"><span class="mui-field__hint">Reads <code>.milpa/foundation.json</code>. One app at a time.</span></div>
-      <div class="mui-field"><span class="mui-field__label">Decision identity</span>
-        <label class="mui-choice"><input class="mui-radio" type="radio" name="auth-id" checked="checked"><span class="mui-choice__text">System user<span class="mui-choice__hint">Not verified. Call signatures are asked for separately.</span></span></label>
-        <label class="mui-choice"><input class="mui-radio" type="radio" name="auth-id"><span class="mui-choice__text">Signature-verified principal<span class="mui-choice__hint">Requires an external mechanism.</span></span></label>
-      </div>
-      <div class="mui-field"><label class="mui-field__label" for="auth-prov">Model provider</label><span class="mui-select-wrap"><select id="auth-prov" class="mui-select mui-select--lg"><option><!--AUTHMODEL--></option><option>Local-network model</option><option>External provider</option></select></span></div>
-    </div>
-    <div class="mui-alert mui-alert--warning" role="note"><span class="mui-alert__icon" aria-hidden="true">!</span><div class="mui-alert__content"><p class="mui-alert__title">Your system user is not a verified identity</p><p class="mui-alert__desc">Authorizing in a session grants the operation; it is not signing the call.</p></div></div>
-    <div style="margin-top:auto"><button type="button" class="mui-btn mui-btn--primary mui-btn--full mui-btn--lg" id="milpa-auth-enter">Open workspace</button></div>
-  </div>
-</div>
+<!-- The entry overlay — «Open workspace» — is the `desktop-auth` component now (greenhouse
+     decisions/0211): its markup comes from a renderer, its look from desktop-auth.css and its ceremony
+     from desktop-auth.js. Its visibility is the shared `desktop.auth.open` signal. -->
+<!--AUTH-->
 
 <!-- The composer's commands (greenhouse decisions/0202): the house's own plus every user-invocable skill, the
      same list the completion popup renders. Served BEFORE the shell script, which reads it once on boot. -->
@@ -1040,93 +1045,34 @@ HTML;
 <script id="milpa-desktop-i18n" type="application/json"><!--I18N--></script>
 <script>
   (function () {
-    // The Desktop's copy, in the declared locale (greenhouse decisions/0209): the server hands it over as JSON
-    // (#milpa-desktop-i18n) so the client says the same words. A key nobody wrote answers as itself.
-    var I18N = (function () {
-      var el = document.getElementById('milpa-desktop-i18n');
-      try { var v = el ? JSON.parse(el.textContent || '{}') : {}; return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; }
-    })();
-    function tr(key, arg) {
-      var s = Object.prototype.hasOwnProperty.call(I18N, key) ? I18N[key] : key;
-      return typeof arg === 'undefined' ? s : s.replace('%s', String(arg));
-    }
-    // Every Desktop fetch() result passes through here (greenhouse decisions/0209): the Desktop sits behind the
-    // same door as the admin, so any call may be answered by the gate instead of the handler. A 401 carrying
-    // `signin` is the passkey gate asking for a session — go there and come back (`next`); the promise never
-    // settles, so no caller paints a result over a page that is leaving. A 403 is a refusal (the address, a
-    // missing scope) — told once as a system notice, then rejected. Any other non-2xx rejects with its status
-    // and the parsed body, so «Saved» and its kin are said only on a 2xx.
-    function guarded(r) {
-      if (r.ok) { return Promise.resolve(r); }
-      return r.text().then(function (t) {
-        var body = null; try { body = JSON.parse(t); } catch (e) {}
-        body = (body && typeof body === 'object') ? body : {};
-        if (r.status === 401 && typeof body.signin === 'string' && body.signin !== '') {
-          location.assign(body.signin + '?next=' + encodeURIComponent(location.pathname + location.search));
-          return new Promise(function () {});
-        }
-        var err = new Error('HTTP ' + r.status); err.status = r.status; err.body = body; err.told = false;
-        if (r.status === 403) {
-          notice((typeof body.error === 'string' && body.error !== '') ? tr('guard.forbidden.reason', body.error) : tr('guard.forbidden'));
-          err.told = true;
-        }
-        return Promise.reject(err);
-      });
-    }
-    // A rejected call, told once: a 403 was already told by guarded(); a status error names the body's error or
-    // the status; anything else — the network — says what the caller passed, if anything.
-    function failed(err, unreachable) {
-      if (err && err.told) { return; }
-      if (err && err.status) { notice((err.body && typeof err.body.error === 'string' && err.body.error !== '') ? err.body.error : tr('guard.failed', err.status)); return; }
-      if (unreachable) { notice(unreachable); }
+    // The shared guard is its OWN runtime module now (greenhouse decisions/0211, phase A4): the Desktop's copy
+    // (#milpa-desktop-i18n), the fetch discipline every call passes through (401 → sign in and come back,
+    // 403 → told once, 428 → the capabilities flow, anything else → rejected with its status), the
+    // `desktop.notice` signal and the ONE document-level click listener all live in
+    // /desktop/assets/c/desktop-guard.js and hang off `MilpaLive.desktop` — so this script and every component
+    // module that follows reach the SAME guard instead of each carrying a copy of it. LiveBoot emits it
+    // deferred, after the runtime, so it is resolved ON USE and never at parse time.
+    function desk() { return (window.MilpaLive && window.MilpaLive.desktop) || null; }
+    function tr(key, arg) { var d = desk(); return d ? d.tr(key, arg) : key; }
+    // Fail CLOSED: with no guard loaded a call is refused, never passed through unread.
+    function guard(r) { var d = desk(); return d ? d.guarded(r) : Promise.reject(new Error('desktop-guard not loaded')); }
+    function guardFlow(r) { var d = desk(); return d ? d.guardedFlow(r) : Promise.reject(new Error('desktop-guard not loaded')); }
+    function failed(err, unreachable) { var d = desk(); if (d) { d.failed(err, unreachable); } }
+    // notice() no longer reaches into the conversation: it EMITS `desktop.notice` (kind, text) and whoever
+    // renders notices consumes it — below, until the Conversation component's own module takes the seam.
+    function notice(text) { var d = desk(); if (d) { d.notice('system', text); } }
+    // Registering WITH the module has to wait for it: it is deferred, so it runs after this inline script and
+    // before DOMContentLoaded. Anything that only CALLS the module resolves it lazily instead.
+    function whenGuard(cb) {
+      var d = desk();
+      if (d) { cb(d); return; }
+      document.addEventListener('DOMContentLoaded', function () { var g = desk(); if (g) { cb(g); } });
     }
 
-    // Auth overlay (open the workspace) — creating a session PERSISTS it, then reload shows it (0483).
-    var auth = document.getElementById('milpa-auth');
-    document.getElementById('milpa-auth-open').addEventListener('click', function () { auth.hidden = false; });
-    document.getElementById('milpa-auth-enter').addEventListener('click', function () {
-      var app = document.getElementById('auth-app');
-      fetch('/desktop/sessions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal: 'New session · ' + (app ? app.value : '') })
-      }).then(guarded).then(function () { location.reload(); }).catch(function (err) {
-        // The door answered instead of the handler: close the overlay so the notice is in view.
-        auth.hidden = true;
-        failed(err, tr('guard.unreachable'));
-      });
-    });
-
-    // The settings badge: a green «Saved» on a 2xx, a warning naming the status on anything else — never a
-    // «Saved» the server did not say (greenhouse decisions/0209).
-    var savedBadge = document.getElementById('milpa-settings-saved');
-    function showSaved(ok, text) {
-      if (!savedBadge) { return; }
-      savedBadge.textContent = text;
-      savedBadge.className = 'mui-badge ' + (ok ? 'mui-badge--success' : 'mui-badge--warning');
-      savedBadge.hidden = false;
-      setTimeout(function () { savedBadge.hidden = true; }, ok ? 2000 : 4000);
-    }
-    // Settings persistence: Save posts the form, Discard reloads the persisted values.
-    var saveBtn = document.getElementById('milpa-save-settings');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', function () {
-        var end = document.getElementById('set-end'), stream = document.getElementById('set-stream');
-        var comp = document.getElementById('set-comp'), mode = document.querySelector('input[name="set-mode"]:checked');
-        fetch('/desktop/settings', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            endpoint: end ? end.value : '', stream: stream ? stream.checked : true,
-            compact: comp ? comp.checked : true, mode: mode ? mode.value : 'ask'
-          })
-        }).then(guarded).then(function () {
-          showSaved(true, tr('settings.saved'));
-        }).catch(function (err) {
-          showSaved(false, tr('settings.save_failed', (err && err.status) || 0));
-        });
-      });
-    }
-    var discardBtn = document.getElementById('milpa-discard');
-    if (discardBtn) { discardBtn.addEventListener('click', function () { location.reload(); }); }
+    // The entry overlay and the Settings screen are DECLARED VIEWS now (greenhouse decisions/0211, phase B):
+    // `desktop-auth.js` owns «Open workspace» and the session ceremony, `desktop-settings.js` owns Save,
+    // Discard and the `settings.saved` badge — both through this same guard, both reporting only what the
+    // door answered. Not a line of either is left here.
 
     // Capabilities catalogue actions (greenhouse decisions/0193): the click on a named capability shows its
     // exact command, and confirming runs the two-step gate over HTTP; on success the page reloads.
@@ -1159,32 +1105,52 @@ HTML;
       var url = '/capabilities/enable', hdr = { 'Content-Type': 'application/json' }, body = JSON.stringify({ capability: pkg });
       // The first step may answer with the house's confirm gate (428 + the token): that is the flow, not a
       // refusal, so it passes the guard; a door's 401/403 does not (greenhouse decisions/0209).
-      return fetch(url, { method: 'POST', headers: hdr, body: body }).then(function (r) { return r.status === 428 ? r : guarded(r); }).then(function (r) { return r.json(); }).then(function (a) {
+      return fetch(url, { method: 'POST', headers: hdr, body: body }).then(guardFlow).then(function (r) { return r.json(); }).then(function (a) {
         if (!a || !a.confirm_token) { return (a && a.ok) ? a : { ok: false, error: (a && a.error) || 'no token' }; }
         var h2 = { 'Content-Type': 'application/json', 'Confirm-Token': a.confirm_token };
-        return fetch(url, { method: 'POST', headers: h2, body: body }).then(guarded).then(function (r2) {
+        return fetch(url, { method: 'POST', headers: h2, body: body }).then(guard).then(function (r2) {
           return r2.json().then(function (d) { return (d && typeof d.ok === 'boolean') ? d : { ok: r2.ok, error: d && d.error }; });
         });
       }).catch(function (err) { return { ok: false, error: (err && err.body && err.body.error) || (err && err.status ? 'HTTP ' + err.status : String(err)) }; });
     }
 
-    // Composer floating panels (wireframe 3a): open on their figures, close as you type.
-    var composerPanels = document.querySelectorAll('.composer-panel');
-    document.querySelectorAll('.composer-chip').forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        var target = chip.getAttribute('data-open-panel');
-        composerPanels.forEach(function (p) {
-          p.hidden = p.getAttribute('data-panel-for') === target ? !p.hidden : true;
-        });
-      });
-    });
+    // Composer floating panels (wireframe 3a): open on their figures, close as you type. WHICH one is open
+    // is the `composer.panel` signal (greenhouse decisions/0211, B4): each chip's @click sets it, both
+    // panels bind `:hidden` to it, and typing (below) clears it — no click handler, no `.hidden` poked.
     // The composer's textarea — the milpa/live component's field when wired, else the fallback (same query).
     var composerInput = document.querySelector('#milpa-composer-dock textarea');
     var sendBtn = document.getElementById('milpa-send');
     var chat = document.getElementById('milpa-chat');
-    // The send button is enabled only when there is something to send (text today; attachments later).
+    // The send button is enabled only when there is something to send (text today; attachments later) — and
+    // that is a SIGNAL, `composer.draft` (greenhouse decisions/0211): the button BINDS its `disabled` to it
+    // together with `session.working`, so nothing reaches in and sets the property.
     function refreshSend() {
-      if (sendBtn) { sendBtn.disabled = !composerInput || composerInput.value.trim() === ''; }
+      setSig('composer.draft', !!composerInput && composerInput.value.trim() !== '');
+    }
+    // The composer field is a milpa/live component (milpaField): setting its text is an INTERACTION with the
+    // component's own data — `reset('')` to clear (value, dirty, touched, error) and `change(text)` to fill a
+    // command in — never the synthetic `input` event this used to dispatch. Measured as the least invasive of
+    // the three candidates (greenhouse decisions/0211, A3): a StateEffect would spend a server round trip on a
+    // local clear, and the synthetic event lied to every other listener on the field, announcing a keystroke
+    // that never happened. The element's own value is mirrored in the same tick so the readers that run before
+    // Alpine's next flush see the new text.
+    function composerData() {
+      if (!composerInput || !window.Alpine || typeof window.Alpine.$data !== 'function') { return null; }
+      var root = composerInput.closest ? composerInput.closest('[x-data]') : null;
+      if (!root) { return null; }
+      try {
+        var d = window.Alpine.$data(root);
+        return (d && typeof d.reset === 'function' && typeof d.change === 'function') ? d : null;
+      } catch (e) { return null; }
+    }
+    function setComposerText(text) {
+      if (!composerInput) { return; }
+      var d = composerData();
+      if (d) { if (text === '') { d.reset(''); } else { d.change(text); } }
+      composerInput.value = text;
+      refreshSend();
+      refreshCount();
+      refreshCommandList();
     }
     // The draft's token count lives in the composer footer now (Rod's minimalist UX): live, quiet, empty at
     // zero. A client-side estimate (~4 chars/token — there is no tokenizer in the browser); the real usage is
@@ -1198,7 +1164,7 @@ HTML;
     }
     if (composerInput) {
       composerInput.addEventListener('input', function () {
-        composerPanels.forEach(function (p) { p.hidden = true; });
+        setSig('composer.panel', '');
         refreshSend();
         refreshCount();
         refreshCommandList();
@@ -1232,30 +1198,36 @@ HTML;
       html = html.replace(/�B(\d+)�/g, function (_, i) { return blocks[i]; });
       return html;
     }
+    // One data region of a cloned message: the region is a DESCENDANT of the clone, or the clone's own
+    // root. `querySelector` never returns the node it was called on, and the system notice carries
+    // `data-system-body` ON the `.msg` root (MessagePrototypes::system) — so the plain descendant lookup
+    // found nothing and every guard notice painted an EMPTY bubble. Asking for it both ways makes a fill
+    // independent of where a component (or a plugin that re-rendered it) put its region.
+    function region(root, selector) { return root.matches(selector) ? root : root.querySelector(selector); }
     // Every message is a Milpa Component (greenhouse decisions/0191): the conversation CLONES the prototype for
     // its kind and fills the instance's data regions — no more createElement. The backend's stream routes here
     // by event type; the user's own message uses it too. (Running the turn is the agent runtime, decisions/0254.)
     var MSG_PROTOS = {
-      agent: { id: 'milpa-agent-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-agent-body]'); if (b) { b.innerHTML = renderMarkdown(o.text || ''); } } },
-      user: { id: 'milpa-user-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-user-body]'); if (b) { b.textContent = o.text || ''; } } },
+      agent: { id: 'milpa-agent-msg-proto', fill: function (r, o) { var b = region(r, '[data-agent-body]'); if (b) { b.innerHTML = renderMarkdown(o.text || ''); } } },
+      user: { id: 'milpa-user-msg-proto', fill: function (r, o) { var b = region(r, '[data-user-body]'); if (b) { b.textContent = o.text || ''; } } },
       tool: { id: 'milpa-tool-msg-proto', fill: function (r, o) {
-        var n = r.querySelector('[data-tool-name]'); if (n) { n.textContent = o.name || 'tool'; }
+        var n = region(r, '[data-tool-name]'); if (n) { n.textContent = o.name || 'tool'; }
         var raw = String(o.result || '');
-        var sum = r.querySelector('[data-tool-summary]'); if (sum) { sum.textContent = toolSummary(raw); }
-        var body = r.querySelector('[data-tool-body]'); if (body) { body.textContent = prettyMaybe(raw); }
+        var sum = region(r, '[data-tool-summary]'); if (sum) { sum.textContent = toolSummary(raw); }
+        var body = region(r, '[data-tool-body]'); if (body) { body.textContent = prettyMaybe(raw); }
       } },
-      task: { id: 'milpa-task-msg-proto', fill: function (r, o) { var t = r.querySelector('[data-task-title]'); if (t) { t.textContent = o.title || ''; } var s = r.querySelector('[data-task-status]'); if (s) { s.textContent = o.status || 'todo'; } } },
-      system: { id: 'milpa-system-msg-proto', fill: function (r, o) { var b = r.querySelector('[data-system-body]'); if (b) { b.textContent = o.text || ''; } } },
+      task: { id: 'milpa-task-msg-proto', fill: function (r, o) { var t = region(r, '[data-task-title]'); if (t) { t.textContent = o.title || ''; } var s = region(r, '[data-task-status]'); if (s) { s.textContent = o.status || 'todo'; } } },
+      system: { id: 'milpa-system-msg-proto', fill: function (r, o) { var b = region(r, '[data-system-body]'); if (b) { b.textContent = o.text || ''; } } },
       result: { id: 'milpa-result-msg-proto', fill: function (r, o) {
         var ok = o.verified !== false;
         r.setAttribute('data-verified', ok ? '1' : '0');
-        var mark = r.querySelector('[data-result-mark]'); if (mark) { mark.textContent = ok ? '✓' : '⚠'; }
-        var txt = r.querySelector('[data-result-text]'); if (txt) { txt.textContent = ok ? 'verified' : 'disputed'; }
+        var mark = region(r, '[data-result-mark]'); if (mark) { mark.textContent = ok ? '✓' : '⚠'; }
+        var txt = region(r, '[data-result-text]'); if (txt) { txt.textContent = ok ? 'verified' : 'disputed'; }
         // The tooltip carries WHAT the ledger judged — the reasons go here now, not inline (Rod's minimalism).
         var tip = ok
           ? "The ledger backs this turn: every completed step carries evidence, nothing was left open, and no artifact's latest check is red."
           : ('The ledger disputes this turn — ' + (o.reasons ? o.reasons : 'the completion is not backed by evidence') + '.');
-        var te = r.querySelector('[data-result-tip]'); if (te) { te.textContent = tip; }
+        var te = region(r, '[data-result-tip]'); if (te) { te.textContent = tip; }
         r.setAttribute('aria-label', (ok ? 'Verified. ' : 'Disputed. ') + tip);
       } }
     };
@@ -1288,6 +1260,12 @@ HTML;
       if (root) { root.scrollIntoView({ block: 'end' }); }
       return root;
     }
+    // The conversation CONSUMES `desktop.notice` (greenhouse decisions/0211): the guard says what happened,
+    // the thread renders it as a system message. This is the seam the Conversation component's own module
+    // takes over when the conversation group moves; nothing else couples the guard to the chat.
+    whenGuard(function (d) {
+      d.onNotice(function (n) { appendMessage('system', { text: (n && n.text) || '' }); });
+    });
 
     // The thinking block is the `desktop-thinking` Milpa Component (greenhouse decisions/0191): the conversation
     // CLONES its server-rendered prototype per turn and feeds THIS instance — the reasoning into its body, the
@@ -1392,7 +1370,7 @@ HTML;
       fetch('/agent', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text, session: agentSession, mode: currentMode() })
-      }).then(guarded).then(function (r) { return r.json(); }).then(function (res) {
+      }).then(guard).then(function (r) { return r.json(); }).then(function (res) {
         if (res && res.ok && res.answer) { appendMessage('agent', { text: res.answer }); }
         else if (res && res.paused) { appendMessage('system', { text: res.hint || 'The agent is waiting on your decision.' }); }
         else if (res && res.error) { appendMessage('system', { text: res.error }); }
@@ -1411,6 +1389,8 @@ HTML;
     }
     // The counters as signals, updated from the turn and the stream — the single source projected everywhere.
     function sig(key) { return (window.MilpaLive && MilpaLive.signal) ? (MilpaLive.signal(key) || 0) : 0; }
+    // The same read WITHOUT the numeric coercion — a boolean signal (`session.working`) is not a counter.
+    function rawSig(key) { return (window.MilpaLive && MilpaLive.signal) ? MilpaLive.signal(key) : null; }
     function setSig(key, val) { if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal(key, val); } }
     function kfmt(n) { return (n / 1000).toFixed(2) + 'K'; }
     function updateCounters(res) {
@@ -1455,7 +1435,6 @@ HTML;
     // Exactly `/name` — no args — that names no command: almost surely a mistyped command, so it is told
     // rather than sent to the model. With args it is a prompt.
     function isBareUnknownCommand(text) { return /^\/[a-z0-9-]+$/.test(text) && !parseCommand(text); }
-    function notice(text) { appendMessage('system', { text: text }); }
     // The mode every turn sends is the `composer.mode` signal — the chip's VALUE, never a hardcoded 'ask'.
     // Unset or unknown → ask: the mode that asks is the default.
     function currentMode() {
@@ -1482,7 +1461,7 @@ HTML;
       } else {
         req = fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
-      return req.then(guarded).then(read).catch(function (err) {
+      return req.then(guard).then(read).catch(function (err) {
         // The door answered (greenhouse decisions/0209): the status and body survive for opFailure; a refusal
         // guarded() already told is marked, so it is not told twice.
         if (err && err.status) { return { status: err.status, ok: false, data: err.body || {}, told: !!err.told }; }
@@ -1571,8 +1550,7 @@ HTML;
     }
     function fillCommand(name) {
       if (!composerInput) { return; }
-      composerInput.value = '/' + name + ' ';
-      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setComposerText('/' + name + ' ');
       cmdHide();
       composerInput.focus();
     }
@@ -1610,10 +1588,8 @@ HTML;
       var text = composerInput.value.trim();
       if (text === '') { return; }
       appendMessage('user', { text: text });
-      composerInput.value = '';
-      // Notify the milpa/live component (Alpine x-model / @input) so its state clears too.
-      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
-      refreshSend();
+      // Clear the field THROUGH its component (milpaField.reset), not with a synthetic input event.
+      setComposerText('');
       cmdHide();
       composerInput.focus();
       // A slash command is the house's, not the model's (greenhouse decisions/0202): parsed here and run as
@@ -1627,34 +1603,28 @@ HTML;
       }
       runTurn(text);
     }
-    // While the agent works, the send button becomes Stop; the topbar state follows. "Working" is the
-    // backend's to declare (it arrives as a `session.state` event) — the Desktop reflects and signals, it
-    // does not run the turn. Stop signals an interrupt; honoring it is the agent runtime's (decisions/0254).
-    var working = false;
+    // While the agent works, the send button becomes Stop and the topbar badge lights. "Working" is the
+    // backend's to declare (it arrives as a `session.state` event) — the Desktop reflects and SIGNALS it, it
+    // does not run the turn. `session.working` is that signal (greenhouse decisions/0211): the send button
+    // (its glyph, its label, its disabled) and the topbar badge (its modifier classes) each BIND to it, so
+    // nothing is poked and any surface that must follow the turn binds too. Stop signals an interrupt;
+    // honoring it is the agent runtime's (decisions/0254).
+    function working() { return rawSig('session.working') === true; }
     function setWorking(on) {
-      working = !!on;
-      if (sendBtn) {
-        sendBtn.textContent = working ? '■' : '↑';
-        sendBtn.setAttribute('aria-label', working ? 'stop the turn' : 'continue session');
-        sendBtn.disabled = working ? false : (!composerInput || composerInput.value.trim() === '');
-      }
-      // Set the shared session-state signal (the badge's text reads it); keep the accent class local.
-      if (window.MilpaLive && window.MilpaLive.signal) { window.MilpaLive.signal('session.state.label', working ? 'Working' : 'Idle'); }
-      var top = document.getElementById('milpa-topstate');
-      if (top) { top.className = working ? 'mui-badge mui-badge--accent mui-badge--dot' : 'mui-badge'; }
+      setSig('session.working', !!on);
+      setSig('session.state.label', on ? 'Working' : 'Idle');
     }
     if (sendBtn) {
       sendBtn.addEventListener('click', function () {
-        if (working) { setWorking(false); appendMessage('system', { text: 'stop requested' }); return; }
+        if (working()) { setWorking(false); notice('stop requested'); return; }
         send();
       });
-      setWorking(document.getElementById('milpa-topstate') && document.getElementById('milpa-topstate').textContent.trim() === 'Working');
     }
     if (composerInput) {
       // Enter sends; Shift+Enter keeps the newline. An open command popup takes its keys first.
       composerInput.addEventListener('keydown', function (e) {
         if (commandListHandlesKey(e)) { return; }
-        if (e.key === 'Enter' && !e.shiftKey && !working) { e.preventDefault(); send(); }
+        if (e.key === 'Enter' && !e.shiftKey && !working()) { e.preventDefault(); send(); }
       });
     }
 
@@ -1681,86 +1651,19 @@ HTML;
               index: parseInt(dragged.getAttribute('data-index'), 10),
               status: col.getAttribute('data-status')
             })
-          }).then(guarded).catch(function (err) { failed(err, tr('guard.unreachable')); });
+          }).then(guard).catch(function (err) { failed(err, tr('guard.unreachable')); });
           dragged = null;
         });
       });
     }
 
-    // Theme (dark-first; the design system reads data-theme on <html>). The choice PERSISTS across reloads
-    // (greenhouse decisions/0196): 'system' drops the attribute so prefers-color-scheme decides, 'dark'/'light'
-    // pin it. localStorage is wrapped in try/catch — a private window that throws must not break the shell.
-    function persistTheme(v) { try { if (v === 'system') { localStorage.removeItem('milpa.theme'); } else { localStorage.setItem('milpa.theme', v); } } catch (e) {} }
-    function applyTheme(v) {
-      var html = document.documentElement;
-      if (v === 'system') { html.removeAttribute('data-theme'); } else { html.setAttribute('data-theme', v); }
-      document.querySelectorAll('[data-theme-set]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-theme-set') === v)); });
-    }
-    (function restoreTheme() {
-      var v = null; try { v = localStorage.getItem('milpa.theme'); } catch (e) {}
-      if (v === 'dark' || v === 'light') { applyTheme(v); } else { applyTheme('system'); }
-    })();
-    document.getElementById('milpa-theme').addEventListener('click', function () {
-      var html = document.documentElement;
-      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      applyTheme(next); persistTheme(next);
-    });
-
-    // Tabs are the `desktop-tabs` Milpa Component (greenhouse decisions/0189): the tablist sets the shared
-    // `desktop.tab` signal on click, and the panes + composer dock read it to show/hide (Alpine `:hidden`).
-    // No imperative click-wiring here; switching a tab is setting one signal.
-    function showTab(name) {
-      if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal('desktop.tab', name); }
-    }
-
-    // Sidebar navigation: swap the whole main between the session view and settings — same shell, not a window.
-    var navItems = document.querySelectorAll('.mui-sidebar__item[data-nav]');
-    var navToView = { sessions: 'session', decisions: 'decisions', capabilities: 'capabilities', skills: 'skills', preview: 'preview', settings: 'settings' };
-    function showView(view) {
-      // Swap the whole main between its views — same shell, not a window. The auth overlay is a `.view`
-      // too but is opened on demand, so it is never toggled by navigation. The sidebar's active-nav highlight
-      // is the `desktop.nav` signal (Alpine binds aria-current to it), so this only switches the view.
-      document.querySelectorAll('.view').forEach(function (v) {
-        if (v.getAttribute('data-view') !== 'auth') { v.hidden = v.getAttribute('data-view') !== view; }
-      });
-    }
-    navItems.forEach(function (n) {
-      n.addEventListener('click', function (e) {
-        e.preventDefault();
-        showView(navToView[n.getAttribute('data-nav')] || 'session');
-      });
-    });
-
-    // The composer field's server round-trip on blur (validate + cross-component effects) is now the
+    // The THEME, the TABLIST and the SIDEBAR are declared views now (greenhouse decisions/0211, phase B).
+    // The theme is the shared `ui.theme` signal owned by `desktop-topbar.js` (the chrome's toggle and the
+    // Settings buttons set the same value); switching a tab is setting `desktop.tab`, which the tablist's
+    // own factory in `desktop-tabs.js` does; and `desktop-sidebar.js` owns navigation, the view swap, the
+    // session search, «New session» (the embed strip's control runs the SAME one) and the passkey probe.
+    // The composer field's server round-trip on blur (validate + cross-component effects) is the
     // framework's own remote runtime (milpaFieldRemote, bound via `remote`); no Desktop JS drives it.
-
-    // New session: open the entry overlay to configure and confirm a new session. The sidebar's button and,
-    // in embed mode, the session strip's control (`data-new-session`) run the SAME handler (decisions/0210).
-    function openNewSession() { auth.hidden = false; }
-    var newBtn = document.getElementById('milpa-new-session');
-    if (newBtn) { newBtn.addEventListener('click', openNewSession); }
-    document.querySelectorAll('[data-new-session]').forEach(function (b) { b.addEventListener('click', openNewSession); });
-    // Embed mode: picking a session in the strip navigates to it as a sidebar click would — keeping embed=1,
-    // so the host's frame stays a frame.
-    var embedPick = document.getElementById('milpa-embed-session');
-    if (embedPick) {
-      embedPick.addEventListener('change', function () {
-        if (embedPick.value !== '') { location.assign('?session=' + encodeURIComponent(embedPick.value) + '&embed=1'); }
-      });
-    }
-
-    // Search: filter the sidebar session list by goal text (client-side over the rendered list).
-    var search = document.getElementById('milpa-search');
-    if (search) {
-      search.addEventListener('input', function () {
-        var q = search.value.trim().toLowerCase();
-        document.querySelectorAll('.milpa-session-item').forEach(function (item) {
-          var goalEl = item.querySelector('.milpa-session-goal');
-          var goal = goalEl ? goalEl.textContent.toLowerCase() : '';
-          item.classList.toggle('milpa-search-hit', q !== '' && goal.indexOf(q) === -1);
-        });
-      });
-    }
 
     // Composer mode chip: open a menu to switch ask / acknowledge / auto quickly. The choice is a SIGNAL PAIR
     // (greenhouse decisions/0202): `composer.mode` is the VALUE every turn sends and `composer.mode.label`
@@ -1785,7 +1688,7 @@ HTML;
       fetch('/desktop/settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: key })
-      }).then(guarded).catch(function (err) { failed(err, tr('guard.unreachable')); });
+      }).then(guard).catch(function (err) { failed(err, tr('guard.unreachable')); });
     }
     if (modeChip && modeMenu) {
       modeChip.addEventListener('click', function (e) {
@@ -1795,12 +1698,6 @@ HTML;
         modeChip.setAttribute('aria-expanded', String(willOpen));
       });
       modeMenu.addEventListener('click', function (e) { e.stopPropagation(); });
-      document.addEventListener('click', function (e) {
-        modeMenu.hidden = true;
-        modeChip.setAttribute('aria-expanded', 'false');
-        // A click inside the composer's field is the typist placing the caret — the popup stays.
-        if (!(composerInput && e.target === composerInput)) { cmdHide(); }
-      });
       modeMenu.querySelectorAll('.milpa-mode-opt').forEach(function (opt) {
         opt.addEventListener('click', function () {
           applyMode(opt.getAttribute('data-mode'));
@@ -1809,32 +1706,20 @@ HTML;
         });
       });
     }
-    // Register a passkey: only navigate if this app actually mounts the passkey door; otherwise say so
-    // in place instead of replacing the whole app with a 404 (the door is the app's to configure).
-    var enroll = document.getElementById('milpa-enroll-link');
-    if (enroll) {
-      enroll.addEventListener('click', function (e) {
-        e.preventDefault();
-        fetch('/webauthn/enroll', { method: 'GET' }).then(guarded).then(function () { location.href = '/webauthn/enroll'; }).catch(function (err) {
-          // A 401 is the door asking for a session — guarded() already left for sign-in — and a 403 is the door
-          // refusing: neither means the door is absent (greenhouse decisions/0209). Only a 404, or no answer at
-          // all, degrades the link to «no passkey door».
-          if (err && err.status && err.status !== 404) { failed(err); return; }
-          enroll.textContent = tr('enroll.none');
-          enroll.setAttribute('aria-disabled', 'true');
-          enroll.style.opacity = '.6';
-        });
-      });
-    }
-
-    // Appearance theme buttons in Settings (dark / light / system).
-    document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var choice = btn.getAttribute('data-theme-set'); // 'system' | 'dark' | 'light'
-        applyTheme(choice); persistTheme(choice);
+    // Click-away is ONE signal now (greenhouse decisions/0211): the guard module owns the single
+    // document-level listener and bumps `ui.dismiss`; the mode menu and the command popup CONSUME it here
+    // instead of each hanging a listener of its own on the document. A surface that stops propagation (the
+    // mode chip, the menu itself) is never dismissed by its own click.
+    whenGuard(function (d) {
+      d.onDismiss(function (e) {
+        if (modeChip && modeMenu) {
+          modeMenu.hidden = true;
+          modeChip.setAttribute('aria-expanded', 'false');
+        }
+        // A click inside the composer's field is the typist placing the caret — the popup stays.
+        if (!(composerInput && e && e.target === composerInput)) { cmdHide(); }
       });
     });
-
     // Declared-screen preview (greenhouse decisions/0197): point the iframe at the live wire's page route for a
     // screen the agent declared — same-origin, so its own runtime/Alpine boot inside the frame. A chip carries
     // the exact path it is served at; the manual box builds it from the live route + the typed name.
@@ -1859,9 +1744,9 @@ HTML;
       });
     })();
 
-    // Connection status → status bar + top badge.
+    // Connection status → the status bar. The TOP badge is a binding now (greenhouse decisions/0211, B2):
+    // the topbar's module owns it through `session.working`, so nothing here reaches for its id.
     var conn = document.getElementById('milpa-conn');
-    var top = document.getElementById('milpa-topstate');
     window.MilpaShell.onStatus(function (state) {
       if (state === 'live') { conn.textContent = '◉ live'; conn.style.color = 'var(--accent-text)'; }
       else { conn.textContent = '○ offline'; conn.style.color = 'var(--text-muted)'; }
@@ -1877,57 +1762,17 @@ HTML;
     window.MilpaShell.on('system.notice', function (d) { appendMessage('system', { text: (d && d.text) || '' }); });
     window.MilpaShell.on('session.state', function (d) { if (d && d.state !== 'working') { endReasoning(); } setWorking(d && d.state === 'working'); });
 
-    // Activity / audit stream: prepend each live fact as a mui-replay event.
-    var list = document.getElementById('milpa-activity');
-    window.MilpaShell.onAny(function (type, data) {
-      var placeholder = list.querySelector('.mui-replay__actor');
-      if (placeholder && placeholder.textContent.indexOf('no facts') === 0) { list.removeChild(placeholder.parentNode); }
-      var li = document.createElement('li');
-      li.className = 'mui-replay__event';
-      li.innerHTML = '<span class="mui-replay__type"></span> <span class="mui-replay__actor"></span>';
-      li.querySelector('.mui-replay__type').textContent = type;
-      li.querySelector('.mui-replay__actor').textContent = JSON.stringify(data) + ' · live';
-      list.insertBefore(li, list.firstChild);
-    });
-
-    // The consent gate is the `desktop-gate` component (greenhouse decisions/0189): its VISIBILITY is the
-    // shared `desktop.gate.open` signal (the card binds :hidden to it; Dismiss sets it via @click). The live
-    // gate.opened event fills the dynamic fields and opens the signal — the content transport is unchanged.
-    var gate = document.getElementById('milpa-gate');
-    var badge = document.getElementById('milpa-decisions-badge');
-    function setGateOpen(v) {
-      if (window.MilpaLive && MilpaLive.signal) { MilpaLive.signal('desktop.gate.open', v); } else if (gate) { gate.hidden = !v; }
-    }
-    window.MilpaShell.on('gate.opened', function (g) {
-      var args = (g && g.arguments) || {};
-      var href = '/webauthn/intent?operation=' + encodeURIComponent(g.operation)
-        + '&arguments=' + encodeURIComponent(JSON.stringify(args))
-        + '&session=' + encodeURIComponent(g.session || '');
-      gate.querySelector('[data-gate-op]').textContent = g.operation || '';
-      gate.querySelector('[data-gate-args]').textContent = JSON.stringify(args);
-      gate.querySelector('[data-gate-action]').textContent = 'An agent is asking to run ' + (g.operation || '') + '.';
-      gate.querySelector('[data-gate-approve]').setAttribute('href', href);
-      setGateOpen(true);
-      badge.hidden = false;
-      showTab('chat');
-    });
-    // Dismiss closes the signal (via @click in the markup); mirror the decisions badge here.
-    gate.querySelector('[data-gate-dismiss]').addEventListener('click', function () { badge.hidden = true; });
+    // The ACTIVITY tab and the CONSENT GATE are declared views now (greenhouse decisions/0211, phase B):
+    // `desktop-activity.js` prepends every live fact of the shell bus to its own stream, and
+    // `desktop-gate.js` fills the gate from `gate.opened` as component DATA the card binds to — which is
+    // also where the bug died: the page's handler ended on `#milpa-decisions-badge`, an element nothing
+    // renders, so every parked question threw after painting the card. The decisions count is the
+    // sidebar's badge, ticked by MilpaShell.addDecision(); the gate does not own it and no longer reaches
+    // for it.
   })();
 </script>
 <!-- The connection to the Mercure hub is rendered here when a hub is wired; it feeds MilpaShell. -->
 <!--LIVE-->
-<!-- milpa/live — the framework's official UI system. The boot payload feeds the remote runtime; the local
-     and remote runtimes register their Alpine factories BEFORE Alpine boots. Served from the package. -->
-<script id="milpa-live-boot" type="application/json"><!--LIVEBOOT--></script>
-<script id="milpa-live-signals" type="application/json"><!--LIVESIGNALS--></script>
-<!-- Nothing is remembered in the browser: the mode is seeded from the SAVED setting on every load (one truth,
-     server-side — greenhouse decisions/0202); the session summary is DERIVED from the state and turn signals. -->
-<script id="milpa-live-persist" type="application/json">[]</script>
-<script id="milpa-live-computed" type="application/json">{"session.summary":{"template":"{session.state.label} · {session.turns} turns"},"session.counters":{"template":"{session.turns} turns · {session.tool_calls} tools"},"context.usage":{"template":"{context.used}/{context.window}"},"session.status":{"template":"{session.turns} turns · {session.steps} steps · {session.tokens} tokens · {session.tool_calls} tool calls"}}</script>
-<script src="/desktop/assets/milpa-live.js"></script>
-<script src="/desktop/assets/milpa-live-remote.js"></script>
-<script src="/desktop/assets/alpine.min.js"></script>
 </body>
 </html>
 HTML;

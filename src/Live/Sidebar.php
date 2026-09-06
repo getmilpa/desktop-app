@@ -92,14 +92,17 @@ final class Sidebar
         $current = (string) ($props['activeSession'] ?? '');
         $chrome = ($props['chrome'] ?? true) !== false;
 
-        return '<nav class="mui-sidebar" aria-label="main" data-milpa-runtime="alpine" data-milpa-component="desktop-sidebar" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data'
-            . ' style="grid-row:1 / span 2;grid-column:1;position:static;height:auto;min-height:0">'
+        // A DECLARED VIEW (greenhouse decisions/0211): the look is `desktop-sidebar.css`, the behaviour is the
+        // `desktopSidebar` factory of `desktop-sidebar.js` — navigation, the session search, «New session»
+        // and the passkey probe, none of them written into the page.
+        return '<nav class="mui-sidebar milpa-sidebar" aria-label="main" data-milpa-runtime="alpine" data-milpa-component="desktop-sidebar" data-milpa-component-id="' . self::COMPONENT_ID . '"'
+            . ' x-data="desktopSidebar({ active: \'' . htmlspecialchars($active, ENT_QUOTES) . '\' })">'
             . $this->brand()
             . '<div class="mui-sidebar__nav"><div class="mui-sidebar__section">' . $this->navItems($active, (int) ($props['decisions'] ?? 0), $chrome) . '</div>'
             . '<div class="mui-sidebar__section" id="milpa-sessions"><span class="mui-sidebar__section-label">sessions · goal and state</span>' . $this->sessionsList($sessions, $current) . '</div></div>'
-            . '<div class="mui-sidebar__footer" style="display:flex;flex-direction:column;gap:var(--space-2)">'
-            . '<button type="button" class="mui-btn mui-btn--subtle mui-btn--full" id="milpa-new-session">New session</button>'
-            . '<a class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" id="milpa-enroll-link" href="/webauthn/enroll">Register a passkey</a>'
+            . '<div class="mui-sidebar__footer milpa-sidebar__footer">'
+            . '<button type="button" class="mui-btn mui-btn--subtle mui-btn--full" id="milpa-new-session" @click="newSession()">New session</button>'
+            . '<a class="mui-btn mui-btn--ghost mui-btn--sm mui-btn--full" id="milpa-enroll-link" href="/webauthn/enroll" @click.prevent="enroll($event)">Register a passkey</a>'
             . '</div></nav>';
     }
 
@@ -118,17 +121,16 @@ final class Sidebar
             // The Decisions item carries a count badge when questions are parked (greenhouse decisions/0195):
             // the human sees there is a decision waiting without opening the pane. Hidden at zero.
             $badge = ($key === 'decisions' && $decisions > 0)
-                ? '<span class="mui-sidebar__item-badge mui-badge mui-badge--warning" style="margin-inline-start:auto">' . $decisions . '</span>'
+                ? '<span class="mui-sidebar__item-badge mui-badge mui-badge--warning">' . $decisions . '</span>'
                 : '';
-            // The active nav is the shared `desktop.nav` signal: click sets it (instant highlight), the shell
-            // switches the view on the same data-nav, and aria-current tracks the signal — one truth.
+            // The active nav is the shared `desktop.nav` signal: the component's own factory sets it (instant
+            // highlight) AND swaps the view the same key names, and aria-current tracks the signal — one
+            // truth, and the page no longer hangs a click handler on every item.
             $out .= sprintf(
-                '<a class="mui-sidebar__item" href="#" data-nav="%s"%s @click="$store.milpa[\'%s\'] = \'%s\'" :aria-current="$store.milpa[\'%s\'] === \'%s\' ? \'page\' : null"><span class="mui-sidebar__item-icon">%s</span><span class="mui-sidebar__item-label">%s</span>%s</a>',
+                '<a class="mui-sidebar__item" href="#" data-nav="%s"%s @click.prevent="go(\'%s\')" :aria-current="isCurrent(\'%s\') ? \'page\' : null"><span class="mui-sidebar__item-icon">%s</span><span class="mui-sidebar__item-label">%s</span>%s</a>',
                 $key,
                 $key === $active ? ' aria-current="page"' : '',
-                SidebarComponent::NAV_SIGNAL,
                 $key,
-                SidebarComponent::NAV_SIGNAL,
                 $key,
                 $item['icon'],
                 htmlspecialchars($item['label'], ENT_QUOTES),
@@ -143,7 +145,7 @@ final class Sidebar
     private function sessionsList(array $sessions, string $current): string
     {
         if ($sessions === []) {
-            return '<p class="mui-empty" style="padding:0 var(--space-4)">No sessions yet. Open a workspace to start one.</p>';
+            return '<p class="mui-empty milpa-sidebar__empty">No sessions yet. Open a workspace to start one.</p>';
         }
         $out = '';
         foreach ($sessions as $s) {
@@ -152,7 +154,7 @@ final class Sidebar
             }
             $id = (string) ($s['id'] ?? '');
             $out .= sprintf(
-                '<a class="mui-sidebar__item milpa-session-item" data-session-id="%s" href="?session=%s"%s style="flex-direction:column;align-items:flex-start;gap:4px;height:auto;padding-block:var(--space-3)"><span class="milpa-session-goal" style="font-size:var(--text-sm)">%s</span><span class="mui-badge">%s</span></a>',
+                '<a class="mui-sidebar__item milpa-session-item" data-session-id="%s" href="?session=%s"%s><span class="milpa-session-goal">%s</span><span class="mui-badge">%s</span></a>',
                 htmlspecialchars($id, ENT_QUOTES),
                 rawurlencode($id),
                 $id === $current ? ' aria-current="page"' : '',
@@ -168,11 +170,12 @@ final class Sidebar
     {
         $grains = '';
         foreach (self::GRAIN as $i => [$x, $y]) {
+            // The stagger is per-kernel data, not a rule: it stays inline, the look of the mark does not.
             $grains .= sprintf('<rect class="g" x="%s" y="%s" width="10" height="10" rx="2.5" style="animation-delay:%ss"/>', $x, $y, $i * 0.045);
         }
 
-        return '<span class="mui-sidebar__brand" style="display:inline-flex;align-items:center;gap:10px;cursor:default">'
-            . '<svg class="milpa-grainmark" viewBox="0 0 60 60" width="26" height="26" role="img" aria-label="Milpa" style="flex:none"><g fill="#E8B14C">' . $grains . '</g></svg>'
+        return '<span class="mui-sidebar__brand milpa-sidebar__brand">'
+            . '<svg class="milpa-grainmark" viewBox="0 0 60 60" width="26" height="26" role="img" aria-label="Milpa"><g fill="#E8B14C">' . $grains . '</g></svg>'
             . '<span class="mui-sidebar__wordmark">Milpa</span></span>';
     }
 

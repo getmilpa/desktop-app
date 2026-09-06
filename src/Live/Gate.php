@@ -64,21 +64,25 @@ final class Gate
 
     private function markup(): string
     {
-        // The gate is hidden by default (server) and its visibility is the shared `desktop.gate.open` signal:
-        // the live gate.opened event sets it true after filling the fields, dismiss sets it false — one truth.
-        return '<div class="mui-card mui-card--raised" id="milpa-gate" data-milpa-component="desktop-gate" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data hidden'
-            . ' :hidden="!$store.milpa[\'' . GateComponent::OPEN_SIGNAL . '\']" style="border-color:var(--warning-border);background:var(--warning-bg)">'
+        // A DECLARED VIEW (greenhouse decisions/0211): the look is `desktop-gate.css`, the behaviour is the
+        // `desktopGate` factory of `desktop-gate.js`. The gate is hidden by default (server) and its
+        // visibility is the shared `desktop.gate.open` signal, which the factory reads and writes: the live
+        // `gate.opened` event FILLS the component's own data — the fields below BIND to it, nothing is poked
+        // into them — and Dismiss closes the signal. The `data-gate-*` hooks stay: a plugin that extends the
+        // gate finds the same anchors it always did.
+        return '<div class="mui-card mui-card--raised milpa-gate-card" id="milpa-gate" data-milpa-runtime="alpine" data-milpa-component="desktop-gate" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data="desktopGate()" hidden'
+            . ' :hidden="!open">'
             . '<div class="mui-card__body mui-gate">'
             . '<div class="mui-gate__request">'
-            . '<p class="mui-gate__actor" style="margin:0">an agent stopped its turn · a durable question, not a modal</p>'
-            . '<p class="mui-gate__action" style="margin:var(--space-2) 0;font-size:var(--text-base)" data-gate-action>An agent is asking to act.</p>'
-            . '<p class="mui-gate__facts" style="margin:0">operation <strong data-gate-op></strong> · arguments <code data-gate-args></code></p>'
+            . '<p class="mui-gate__actor milpa-gate__line">an agent stopped its turn · a durable question, not a modal</p>'
+            . '<p class="mui-gate__action milpa-gate__action" data-gate-action x-text="action">An agent is asking to act.</p>'
+            . '<p class="mui-gate__facts milpa-gate__line">operation <strong data-gate-op x-text="operation"></strong> · arguments <code data-gate-args x-text="args"></code></p>'
             . '</div>'
             . '<div class="mui-gate__decisions">'
-            . '<a class="mui-btn mui-btn--primary" data-gate-approve href="#">Approve with passkey</a>'
-            . '<button type="button" class="mui-btn" data-gate-dismiss @click="$store.milpa[\'' . GateComponent::OPEN_SIGNAL . '\'] = false">Dismiss</button>'
+            . '<a class="mui-btn mui-btn--primary" data-gate-approve href="#" :href="href">Approve with passkey</a>'
+            . '<button type="button" class="mui-btn" data-gate-dismiss @click="dismiss()">Dismiss</button>'
             . '</div>'
-            . '<p style="margin:0;font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Answering keeps your answer; it does not resume the session. Continuing is another verb.</p>'
+            . '<p class="milpa-gate__note">Answering keeps your answer; it does not resume the session. Continuing is another verb.</p>'
             . '</div></div>';
     }
 

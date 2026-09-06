@@ -44,8 +44,19 @@ final class SidebarTest extends TestCase
         self::assertStringContainsString('data-milpa-state="sidebar"', $html);
         self::assertStringContainsString('security="signed"', $html);
         // The active nav is the shared `desktop.nav` signal: click sets it, aria-current tracks it.
-        self::assertStringContainsString("\$store.milpa['desktop.nav'] = 'settings'", $html);
-        self::assertStringContainsString("\$store.milpa['desktop.nav'] === 'sessions' ? 'page' : null", $html);
+        // A DECLARED VIEW (greenhouse decisions/0211): the markup asks the `desktopSidebar` factory —
+        // `go()` sets the signal AND swaps the view, `isCurrent()` is what aria-current binds to.
+        self::assertStringContainsString('x-data="desktopSidebar({ active: \'sessions\' })"', $html);
+        self::assertStringContainsString('@click.prevent="go(\'settings\')"', $html);
+        self::assertStringContainsString(':aria-current="isCurrent(\'sessions\') ? \'page\' : null"', $html);
+        self::assertStringNotContainsString('$store.milpa', $html, 'the store is the factory\'s to touch, not the markup\'s');
+        // «New session» and the passkey probe are the component's own verbs now, not the page's listeners.
+        self::assertStringContainsString('@click="newSession()"', $html);
+        self::assertStringContainsString('@click.prevent="enroll($event)"', $html);
+        // Its look is a declared file: only the per-kernel animation delay stays inline (it is data).
+        self::assertStringContainsString('class="mui-sidebar milpa-sidebar"', $html);
+        self::assertSame(13, substr_count($html, 'style="animation-delay:'), 'the only inline styles left are the mark\'s stagger');
+        self::assertSame(13, substr_count($html, 'style='));
         // Brand (the Grano mark), the session from the store, and the actions are all in the component.
         self::assertSame(13, substr_count($html, 'class="g"'));
         self::assertStringContainsString('href="?session=aaa11111"', $html);

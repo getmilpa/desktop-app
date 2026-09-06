@@ -37,9 +37,18 @@ final class GateTest extends TestCase
         self::assertStringContainsString('security="signed"', $html);
         // Hidden by default (server) and its visibility bound to the shared signal.
         self::assertStringContainsString('id="milpa-gate"', $html);
-        self::assertStringContainsString("!\$store.milpa['desktop.gate.open']", $html);
-        // Dismiss sets the signal false; the live fill hooks are preserved.
-        self::assertStringContainsString("\$store.milpa['desktop.gate.open'] = false", $html);
+        // A DECLARED VIEW (greenhouse decisions/0211): the card binds the `desktopGate` factory's own data
+        // — the live `gate.opened` fact fills it, nothing writes into these elements.
+        self::assertStringContainsString('x-data="desktopGate()"', $html);
+        self::assertStringContainsString(':hidden="!open"', $html);
+        self::assertStringContainsString('x-text="operation"', $html);
+        self::assertStringContainsString('x-text="args"', $html);
+        self::assertStringContainsString('x-text="action"', $html);
+        self::assertStringContainsString(':href="href"', $html);
+        // Dismiss is the component's verb; the live fill hooks are preserved for plugins.
+        self::assertStringContainsString('@click="dismiss()"', $html);
+        self::assertStringNotContainsString('$store.milpa', $html, 'the store is the factory\'s to touch, not the markup\'s');
+        self::assertStringNotContainsString('style=', $html, 'the warning skin is a declared file');
         self::assertStringContainsString('data-gate-op', $html);
         self::assertStringContainsString('data-gate-args', $html);
         self::assertStringContainsString('data-gate-action', $html);

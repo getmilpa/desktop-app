@@ -1,0 +1,17 @@
+/*!
+ * desktop-conversation — the message stream the message components compose into (greenhouse decisions/0191, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the conversation's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-conversation.css.
+ */
+
+/* The message stream: one visual language, a distinct voice per kind. New messages arrive at the bottom
+   and the composer is docked below (sticky), so the thread reads top→down and the box never moves. */
+#milpa-chat { display: flex; flex-direction: column; gap: var(--space-5); max-width: 88ch; }
+/* The conversation's empty state hides itself the moment a message component is cloned in. */
+#milpa-chat:has(.msg) .milpa-empty-convo { display: none; }
+/* Every message kind names its author and its moment the same way. */
+.msg__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); display: block; }

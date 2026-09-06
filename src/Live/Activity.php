@@ -71,9 +71,12 @@ final class Activity
     /** @param array<string, mixed> $props */
     private function markup(array $props): string
     {
-        return '<div data-milpa-component="desktop-activity" data-milpa-component-id="' . self::COMPONENT_ID . '" style="display:contents">'
+        // A DECLARED VIEW (greenhouse decisions/0211): the look is `desktop-activity.css`, the behaviour is
+        // the `desktopActivity` factory of `desktop-activity.js` — which subscribes to the shell bus and
+        // prepends every live fact to the stream below.
+        return '<div class="milpa-activity" data-milpa-runtime="alpine" data-milpa-component="desktop-activity" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data="desktopActivity()">'
             . '<div>'
-            . '<p style="color:var(--text-secondary);font-size:var(--text-sm);margin:0 0 var(--space-4)">A projection of the session\'s facts — not a full audit log. Live over the hub.</p>'
+            . '<p class="milpa-activity__intro">A projection of the session\'s facts — not a full audit log. Live over the hub.</p>'
             . '<ol class="mui-replay__stream" id="milpa-activity" aria-live="polite">' . $this->stream($props) . '</ol>'
             . '</div>'
             . '<aside class="mui-replay__projection">' . $this->projection($props) . '</aside>'

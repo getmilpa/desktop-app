@@ -40,8 +40,16 @@ final class TabsTest extends TestCase
         self::assertStringContainsString('data-tab="work"', $html);
         self::assertStringContainsString('data-tab="activity"', $html);
         self::assertStringContainsString('data-tab="context"', $html);
-        self::assertStringContainsString("\$store.milpa['desktop.tab'] = 'work'", $html);
-        self::assertStringContainsString("\$store.milpa['desktop.tab'] === 'chat'", $html);
+        // The strip is a DECLARED VIEW (greenhouse decisions/0211): its behaviour is the `desktopTabs`
+        // factory, so the markup asks the component (`select` / `isActive`) instead of reaching into the
+        // store, and the signal it drives is named once, on the root.
+        self::assertStringContainsString('x-data="desktopTabs({ signal: \'desktop.tab\', active: \'chat\' })"', $html);
+        self::assertStringContainsString('@click="select(\'work\')"', $html);
+        self::assertStringContainsString(':aria-selected="isActive(\'chat\')"', $html);
+        self::assertStringNotContainsString('$store.milpa', $html, 'the store is the factory\'s to touch, not the markup\'s');
+        // Its look is a declared file, not an inline style attribute.
+        self::assertStringContainsString('class="mui-tabs milpa-tabs"', $html);
+        self::assertStringNotContainsString('style=', $html);
         // Conversation is the server-rendered default.
         self::assertStringContainsString('data-tab="chat" @click', $html);
         self::assertStringContainsString('aria-selected="true">Conversation', $html);
@@ -61,7 +69,8 @@ final class TabsTest extends TestCase
 
         self::assertStringContainsString('tabs extended', $html, 'after_render changed the html');
         // before_render changed the active tab, so the server-rendered aria-selected lands on Work.
-        self::assertStringContainsString('data-tab="work" @click="$store.milpa[\'desktop.tab\'] = \'work\'" :aria-selected="$store.milpa[\'desktop.tab\'] === \'work\'" aria-selected="true"', $html);
+        self::assertStringContainsString('data-tab="work" @click="select(\'work\')" :aria-selected="isActive(\'work\')" aria-selected="true"', $html);
+        self::assertStringContainsString('active: \'work\'', $html, 'the factory is told which tab the server painted');
     }
 
     public function testTheComponentSelectActionDeclaresTheTabSignal(): void

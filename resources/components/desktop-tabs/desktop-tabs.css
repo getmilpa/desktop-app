@@ -1,0 +1,15 @@
+/*!
+ * desktop-tabs — the Desktop shell's main tablist (greenhouse decisions/0189, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the tablist's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-tabs.css. The tab CHROME is the design system's (`mui-tabs`); what lives
+ * here is how the strip sits in the shell's column — the inline `style` attribute the markup used to
+ * carry, so the component's look is a file the browser caches, not a string in the page.
+ */
+
+/* The strip is a fixed band above the scrolling pane: it never grows, and its inline padding lines the
+   tabs up with the pane's own gutter. */
+.milpa-tabs { padding: 0 var(--space-6); flex: none; }

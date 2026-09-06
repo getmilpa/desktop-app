@@ -1,0 +1,14 @@
+/*!
+ * desktop-task — a row the agent added to the plan (greenhouse decisions/0191, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the task's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-task.css.
+ */
+
+/* Task: a row the agent added to the plan — a leading mark, monospace title. */
+.msg--task > div { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--accent-subtle); }
+.msg--task .msg__mark { color: var(--accent-text); font-weight: var(--weight-bold); }
+.msg--task .msg__title { font-size: var(--text-sm); }

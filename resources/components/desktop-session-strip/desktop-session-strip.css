@@ -1,0 +1,13 @@
+/*!
+ * desktop-session-strip — the sidebar's reach in one row, embed mode (greenhouse decisions/0210, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the strip's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-session-strip.css.
+ */
+
+.milpa-session-strip { display: flex; align-items: center; gap: var(--space-3); flex: none; padding: var(--space-3) var(--space-8); border-bottom: 1px solid var(--border-subtle); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-xs); }
+.milpa-session-strip__goal { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.milpa-session-strip__pick { flex: none; max-width: 22rem; }

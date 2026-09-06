@@ -1,0 +1,21 @@
+/*!
+ * desktop-topbar — the Desktop shell's header (greenhouse decisions/0189, 0209, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the topbar's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-topbar.css. The header CHROME is the design system's (`mui-topbar`); what
+ * lives here is where the header sits in the shell grid and how its two title lines read — the inline
+ * `style` attributes the markup used to carry.
+ */
+
+/* The header owns the top row of the shell grid, beside the sidebar, and never collapses below the
+   height that fits its two lines. */
+.milpa-topbar { grid-row: 1; grid-column: 2; min-height: 64px; }
+/* Two stacked lines, not the design system's single row: the goal, then the session's facts. */
+.milpa-topbar__start { flex-direction: column; align-items: flex-start; gap: 2px; }
+/* The session's goal — the sentence the human recognises the session by. */
+.milpa-topbar__goal { font-size: var(--text-base); font-weight: var(--weight-medium); }
+/* The facts under it: machine truth, so mono and quiet. */
+.milpa-topbar__meta { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }

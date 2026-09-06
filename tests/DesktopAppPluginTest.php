@@ -39,9 +39,13 @@ use Psr\Log\NullLogger;
  */
 final class DesktopAppPluginTest extends TestCase
 {
-    /** The five package files a page load pulls with `<link>` and `<script>`: never behind the door. */
+    /**
+     * The package files a page load pulls with `<link>` and `<script>`: never behind the door. Since the
+     * declared views (greenhouse decisions/0211) that includes the per-component route family, whose path
+     * carries the `{file}` placeholder.
+     */
     private const ASSETS = [
-        '/desktop/assets/tokens.css', '/desktop/assets/bundle.css',
+        '/desktop/assets/tokens.css', '/desktop/assets/bundle.css', '/desktop/assets/c/{file}',
         '/desktop/assets/milpa-live.js', '/desktop/assets/milpa-live-remote.js', '/desktop/assets/alpine.min.js',
     ];
 
@@ -50,7 +54,7 @@ final class DesktopAppPluginTest extends TestCase
         $plugin = new DesktopAppPlugin(new DIContainer());
 
         $routes = $plugin->routes();
-        self::assertCount(13, $routes);
+        self::assertCount(14, $routes);
         foreach ($routes as $route) {
             self::assertInstanceOf(Route::class, $route);
             self::assertNotNull($route->handler);
@@ -58,7 +62,7 @@ final class DesktopAppPluginTest extends TestCase
         $paths = array_map(static fn (Route $r): string => $r->path, $routes);
         self::assertSame(
             [
-                '/desktop', '/desktop/events', '/desktop/assets/tokens.css', '/desktop/assets/bundle.css',
+                '/desktop', '/desktop/events', '/desktop/assets/tokens.css', '/desktop/assets/bundle.css', '/desktop/assets/c/{file}',
                 '/desktop/data.json', '/desktop/export', '/desktop/live', '/desktop/assets/milpa-live.js', '/desktop/assets/milpa-live-remote.js',
                 '/desktop/assets/alpine.min.js', '/desktop/settings', '/desktop/sessions', '/desktop/work',
             ],
@@ -210,7 +214,7 @@ final class DesktopAppPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
 
-        self::assertCount(13, $plugin->routes(), 'the shell, feed, assets, data, export, live + its assets, and the write endpoints');
+        self::assertCount(14, $plugin->routes(), 'the shell, feed, assets (design system + per component), data, export, live + its assets, and the write endpoints');
         $paths = array_map(static fn ($r): string => $r->path, $plugin->routes());
         self::assertContains('/desktop/export', $paths, 'the session export (autopsy/video material)');
     }

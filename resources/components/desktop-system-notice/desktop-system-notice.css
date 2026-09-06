@@ -1,0 +1,12 @@
+/*!
+ * desktop-system-notice — the house speaking, not a participant (greenhouse decisions/0191, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the system notice's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-system-notice.css. Every `desktop.notice` signal the guard emits
+ * lands in one of these.
+ */
+
+.msg--system { align-self: center; text-align: center; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; }

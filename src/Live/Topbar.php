@@ -119,8 +119,11 @@ final class Topbar
     /** @param array<string, mixed> $props */
     private function markup(array $props): string
     {
-        return '<header class="mui-topbar" data-milpa-runtime="alpine" data-milpa-component="desktop-topbar" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data style="grid-row:1;grid-column:2;min-height:64px">'
-            . '<div class="mui-topbar__start" style="flex-direction:column;align-items:flex-start;gap:2px">' . $this->header($props) . '</div>'
+        // A DECLARED VIEW (greenhouse decisions/0211): the look is `desktop-topbar.css`, the behaviour is the
+        // `desktopTopbar` factory of `desktop-topbar.js` — which also owns the shell's theme, the one control
+        // that lives in the window chrome but belongs to this surface.
+        return '<header class="mui-topbar milpa-topbar" data-milpa-runtime="alpine" data-milpa-component="desktop-topbar" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data="desktopTopbar()">'
+            . '<div class="mui-topbar__start milpa-topbar__start">' . $this->header($props) . '</div>'
             . '<div class="mui-topbar__end">' . $this->actions($props) . '</div>'
             . '</header>';
     }
@@ -129,14 +132,14 @@ final class Topbar
     private function header(array $props): string
     {
         if (($props['hasSession'] ?? false) === false) {
-            return '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">No session open</span>'
-                . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">Open a workspace to start one</span>';
+            return '<span class="milpa-topbar__goal">No session open</span>'
+                . '<span class="milpa-topbar__meta">Open a workspace to start one</span>';
         }
 
         return sprintf(
-            '<span style="font-size:var(--text-base);font-weight:var(--weight-medium)">%s</span>'
+            '<span class="milpa-topbar__goal">%s</span>'
             // The derived `session.summary` signal ("{state} · {turns} turns") re-computes reactively.
-            . '<span style="font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)">immutable goal · session %s · %s mode · <span x-text="$store.milpa[\'session.summary\']"></span></span>',
+            . '<span class="milpa-topbar__meta">immutable goal · session %s · %s mode · <span x-text="$store.milpa[\'session.summary\']"></span></span>',
             htmlspecialchars(($props['goal'] ?? '') !== '' ? (string) $props['goal'] : '(no goal recorded)', ENT_QUOTES),
             htmlspecialchars((string) ($props['sessionId'] ?? ''), ENT_QUOTES),
             htmlspecialchars((string) ($props['modeKey'] ?? 'ask'), ENT_QUOTES),
@@ -152,8 +155,14 @@ final class Topbar
         $href = '/desktop/export' . ($id !== '' ? '?session=' . rawurlencode($id) : '');
 
         return $this->chips($props) . sprintf(
-            // The session state is a SHARED signal — the badge reads it (a panel can read the same).
-            '<span class="%s" id="milpa-topstate" x-text="$store.milpa[\'session.state.label\']">%s</span>'
+            // The session state is a SHARED signal — the badge reads it (a panel can read the same). Whether
+            // the turn is RUNNING is the `session.working` signal, and the badge BINDS to it through the
+            // component's OWN factory (greenhouse decisions/0211, phase B2): nothing pokes this element's
+            // className any more, and the markup asks the component rather than reaching into the store. The
+            // server-rendered class is the seed for the moment before Alpine boots; the object binding then
+            // adds or removes exactly those two modifiers.
+            '<span class="%s" id="milpa-topstate" x-text="$store.milpa[\'session.state.label\']"'
+            . ' :class="{ \'mui-badge--accent\': working, \'mui-badge--dot\': working }">%s</span>'
             // The mode is a SHARED signal: this badge and the composer's chip read one truth (decisions/0189).
             . '<span class="mui-badge" x-text="$store.milpa[\'composer.mode.label\']">%s</span>'
             . '<a class="mui-btn mui-btn--sm" id="milpa-export" href="%s" download>Export session</a>',

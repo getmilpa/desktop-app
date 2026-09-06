@@ -16,6 +16,7 @@ namespace Milpa\DesktopApp\Tests;
 
 use Milpa\Container\DIContainer;
 use Milpa\DesktopApp\DesktopAppPlugin;
+use Milpa\DesktopApp\Live\DesktopAssets;
 use Milpa\DesktopApp\Tests\Fixtures\PasskeyGateStub;
 use Milpa\DesktopApp\Tests\Fixtures\RedirectingGateStub;
 use Milpa\Runtime\Http\RequestHandler;
@@ -52,9 +53,14 @@ final class RuntimeBootTest extends TestCase
         self::assertStringContainsString('text/html', $response->getHeaderLine('Content-Type'));
         $body = (string) $response->getBody();
         self::assertStringContainsString('Milpa Desktop', $body);
-        // Same origin as the doors it must reach — the whole point of serving over HTTP (0188).
+        // Same origin as the doors it must reach — the whole point of serving over HTTP (0188). The
+        // enrolment door is a link in the page; the consent ceremony is built by the gate's own declared
+        // module (greenhouse decisions/0211), which the page loads from this same origin.
         self::assertStringContainsString('/webauthn/enroll', $body);
-        self::assertStringContainsString('/webauthn/intent', $body);
+        self::assertStringContainsString('<script src="' . DesktopAssets::url('desktop-gate', 'js') . '" defer></script>', $body);
+        $gate = self::dispatch($kernel, 'GET', DesktopAssets::url('desktop-gate', 'js'), '127.0.0.1');
+        self::assertSame(200, $gate->getStatusCode());
+        self::assertStringContainsString('/webauthn/intent', (string) $gate->getBody());
         // The topbar names the gate in effect: the default, loopback-only.
         self::assertStringContainsString('data-gate="loopback"', $body);
         self::assertStringNotContainsString('data-principal=', $body, 'no gate authenticated anyone: no principal chip');
@@ -92,10 +98,19 @@ final class RuntimeBootTest extends TestCase
         self::assertSame(403, self::dispatch($kernel, 'GET', '/desktop/export', '203.0.113.9')->getStatusCode(), 'the export is gated');
         self::assertSame(403, self::dispatch($kernel, 'GET', '/desktop/data.json', '203.0.113.9')->getStatusCode());
 
-        // The assets are public package files: a JSON 401/403 to a <link> or <script> would break the page silently.
+        // The assets are public package files: a JSON 401/403 to a <link> or <script> would break the page
+        // silently. Since the declared views (greenhouse decisions/0211) that includes every per-component
+        // file the page's own renderers declared — served by the `{file}` route family, gate-free.
         foreach (['/desktop/assets/tokens.css', '/desktop/assets/bundle.css', '/desktop/assets/milpa-live.js', '/desktop/assets/milpa-live-remote.js', '/desktop/assets/alpine.min.js'] as $asset) {
             self::assertSame(200, self::dispatch($kernel, 'GET', $asset, '203.0.113.9')->getStatusCode(), $asset . ' is served to anyone');
         }
+        foreach (DesktopAssets::declared() as $component) {
+            $declared = DesktopAssets::of($component);
+            foreach ([...$declared->styles, ...$declared->scripts] as $url) {
+                self::assertSame(200, self::dispatch($kernel, 'GET', $url, '203.0.113.9')->getStatusCode(), $url . ' is served to anyone');
+            }
+        }
+        self::assertSame(404, self::dispatch($kernel, 'GET', '/desktop/assets/c/nope.css', '127.0.0.1')->getStatusCode(), 'a name no renderer declared is a 404');
 
         // No address at all fails closed.
         self::assertSame(403, self::dispatch($kernel, 'GET', '/desktop', '')->getStatusCode());
@@ -183,12 +198,57 @@ final class RuntimeBootTest extends TestCase
         self::assertSame('/webauthn/signin?next=%2Fdesktop', self::dispatch($gated, 'GET', '/desktop', '203.0.113.9', ['Accept' => 'text/html'])->getHeaderLine('Location'));
     }
 
+    public function testBothModesEmitTheSameOneRuntimeAndTheLiveEndpointTakesTheBootsSessionId(): void
+    {
+        // Declared views end to end through the real Kernel (greenhouse decisions/0211): /desktop and
+        // /desktop?embed=1 emit the SAME runtime — one boot, one Alpine, the modules LiveBoot lists — and the
+        // session id that boot issued is the one `POST /desktop/live` verifies the CSRF token against.
+        $kernel = Kernel::boot(['root' => sys_get_temp_dir(), 'plugins' => [DesktopAppPlugin::class]]);
+
+        foreach (['/desktop', '/desktop?embed=1'] as $path) {
+            $body = (string) self::dispatch($kernel, 'GET', $path, '127.0.0.1')->getBody();
+            foreach ([
+                '<script id="milpa-live-boot" type="application/json">',
+                '<script src="/desktop/assets/milpa-live.js" defer></script>',
+                '<script src="/desktop/assets/milpa-live-remote.js" defer></script>',
+                '<script src="/desktop/assets/c/desktop-guard.js" defer></script>',
+                '<script src="/desktop/assets/alpine.min.js" defer></script>',
+            ] as $tag) {
+                self::assertSame(1, substr_count($body, $tag), $path . ' emits ' . $tag . ' exactly once');
+            }
+        }
+
+        // The boot the page issued, read back the way the runtime does — and used as the runtime uses it.
+        $page = (string) self::dispatch($kernel, 'GET', '/desktop', '127.0.0.1')->getBody();
+        self::assertSame(1, preg_match('#<script id="milpa-live-boot" type="application/json">(.*?)</script>#s', $page, $m));
+        $boot = json_decode($m[1], true);
+        self::assertIsArray($boot);
+        self::assertSame('/desktop/live', $boot['endpoint']);
+        self::assertStringStartsWith('live-', (string) $boot['sessionId']);
+
+        self::assertSame(1, preg_match('#(<milpa-state\b[^>]*component="textarea".*?</milpa-state>)#s', $page, $s), 'the composer field carries its envelope');
+        $interaction = (string) json_encode([
+            'action' => 'change',
+            'state' => $s[1],
+            'payload' => ['value' => 'from the boot'],
+            'sessionId' => $boot['sessionId'],
+            'csrfToken' => $boot['csrfToken'],
+        ]);
+        $live = self::dispatch($kernel, 'POST', '/desktop/live', '127.0.0.1', ['Content-Type' => 'application/json'], $interaction);
+        self::assertSame(200, $live->getStatusCode(), 'the endpoint answers the session id the boot issued');
+        self::assertSame('from the boot', (json_decode((string) $live->getBody(), true) ?: [])['data']['value'] ?? null);
+
+        // The falsifier: the same interaction with a session id the boot never issued is refused.
+        $forged = (string) json_encode(['action' => 'change', 'state' => $s[1], 'payload' => ['value' => 'x'], 'sessionId' => 'someone-elses', 'csrfToken' => $boot['csrfToken']]);
+        self::assertSame(403, self::dispatch($kernel, 'POST', '/desktop/live', '127.0.0.1', ['Content-Type' => 'application/json'], $forged)->getStatusCode());
+    }
+
     /**
      * @param array<string, string> $headers
      */
-    private static function dispatch(Kernel $kernel, string $method, string $path, string $address, array $headers = []): ResponseInterface
+    private static function dispatch(Kernel $kernel, string $method, string $path, string $address, array $headers = [], ?string $body = null): ResponseInterface
     {
-        $request = new ServerRequest($method, $path, $headers, null, '1.1', $address === '' ? [] : ['REMOTE_ADDR' => $address]);
+        $request = new ServerRequest($method, $path, $headers, $body, '1.1', $address === '' ? [] : ['REMOTE_ADDR' => $address]);
 
         return (new RequestHandler($kernel, new Psr17Factory()))->handle($request);
     }

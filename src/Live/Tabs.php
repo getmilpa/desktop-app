@@ -76,7 +76,10 @@ final class Tabs
         /** @var list<array{key: string, label: string}> $tabs */
         $tabs = \is_array($props['tabs'] ?? null) ? $props['tabs'] : self::TABS;
 
-        return '<div class="mui-tabs" role="tablist" data-milpa-runtime="alpine" data-milpa-component="desktop-tabs" data-milpa-component-id="' . self::COMPONENT_ID . '" x-data style="padding:0 var(--space-6);flex:none">'
+        // A DECLARED VIEW (greenhouse decisions/0211): the look is `desktop-tabs.css`, the behaviour is the
+        // `desktopTabs` factory of `desktop-tabs.js` — both declared by the renderer, neither inline.
+        return '<div class="mui-tabs milpa-tabs" role="tablist" data-milpa-runtime="alpine" data-milpa-component="desktop-tabs" data-milpa-component-id="' . self::COMPONENT_ID . '"'
+            . ' x-data="desktopTabs({ signal: \'' . TabsComponent::TAB_SIGNAL . '\', active: \'' . htmlspecialchars($active, ENT_QUOTES) . '\' })">'
             . $this->tabButtons($tabs, $active)
             . '</div>';
     }
@@ -89,14 +92,13 @@ final class Tabs
         $out = '';
         foreach ($tabs as $tab) {
             $key = $tab['key'];
-            // The active tab is the shared `desktop.tab` signal: click sets it (instant switch), the panes and
-            // the composer dock read the same signal, and aria-selected tracks it — one truth, no imperative JS.
+            // The active tab is the shared `desktop.tab` signal: the component's own factory sets it (instant
+            // switch), the panes and the composer dock read the same signal, and aria-selected tracks it —
+            // one truth, no imperative JS and no `$store` reached into from the markup.
             $out .= sprintf(
-                '<button class="mui-tabs__tab" role="tab" type="button" data-tab="%s" @click="$store.milpa[\'%s\'] = \'%s\'" :aria-selected="$store.milpa[\'%s\'] === \'%s\'" aria-selected="%s">%s</button>',
+                '<button class="mui-tabs__tab" role="tab" type="button" data-tab="%s" @click="select(\'%s\')" :aria-selected="isActive(\'%s\')" aria-selected="%s">%s</button>',
                 $key,
-                TabsComponent::TAB_SIGNAL,
                 $key,
-                TabsComponent::TAB_SIGNAL,
                 $key,
                 $key === $active ? 'true' : 'false',
                 htmlspecialchars($tab['label'], ENT_QUOTES),

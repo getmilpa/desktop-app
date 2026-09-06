@@ -1,0 +1,22 @@
+/*!
+ * desktop-result-claim — the ledger's verdict on the turn (greenhouse decisions/0191, 0211).
+ *
+ * (c) Rodrigo Vicente - TeamX Agency — https://teamx.agency <hola@teamx.agency>
+ * @license Apache-2.0
+ *
+ * Declared by the result claim's renderer through DeclaresClientAssets and served at
+ * /desktop/assets/c/desktop-result-claim.css.
+ */
+
+/* Result claim: the ledger's verdict on the turn — a quiet line, green when verified, warning when disputed.
+   An ⓘ affordance + a hover/focus tooltip explain WHAT the ledger judged, so "verified" is never opaque. */
+.msg--result { position: relative; display: inline-flex; align-items: baseline; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-2xs); cursor: help; }
+.msg--result[data-verified="1"] .msg__result-mark { color: var(--success); }
+.msg--result[data-verified="0"] .msg__result-mark { color: var(--warning); }
+.msg--result[data-verified="0"] { color: var(--warning); }
+.msg__result-info { color: var(--text-muted); opacity: .5; font-size: .95em; transition: opacity .2s ease, color .2s ease; }
+.msg--result:hover .msg__result-info, .msg--result:focus-visible .msg__result-info { opacity: 1; color: var(--accent-text); }
+.msg--result:focus-visible { outline: 2px solid var(--accent-subtle); outline-offset: 3px; border-radius: var(--radius-sm); }
+.msg__result-tip { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 70; width: max-content; max-width: min(22rem, 60vw); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); color: var(--text-secondary); font-size: var(--text-2xs); line-height: var(--leading-relaxed); letter-spacing: normal; text-transform: none; white-space: normal; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+.msg--result:hover .msg__result-tip, .msg--result:focus-visible .msg__result-tip, .msg--result:focus-within .msg__result-tip { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) { .msg__result-tip { transition: none; } }

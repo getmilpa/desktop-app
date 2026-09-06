@@ -1,0 +1,13 @@
+{
+  "name": "@milpa/desktop-app-client-tests",
+  "private": true,
+  "description": "Test harness for the no-build client modules shipped in resources/components (node:test, nothing to install).",
+  "license": "Apache-2.0",
+  "author": "Rodrigo Vicente - TeamX Agency",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test 'tests/js/**/*.test.mjs'"
+  }
+}

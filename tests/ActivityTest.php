@@ -40,8 +40,12 @@ final class ActivityTest extends TestCase
         // The counter projection is present (default counters: state idle).
         self::assertStringContainsString('mui-replay__projection', $html);
         self::assertStringContainsString('mui-replay__stat', $html);
-        // display:contents keeps the two children as grid items of the pane.
-        self::assertStringContainsString('style="display:contents"', $html);
+        // A DECLARED VIEW (greenhouse decisions/0211): `display: contents` — which keeps the two children as
+        // grid items of the pane — is a rule in desktop-activity.css now, and the prepending of live facts
+        // is the `desktopActivity` factory's, not the page's.
+        self::assertStringContainsString('class="milpa-activity"', $html);
+        self::assertStringContainsString('x-data="desktopActivity()"', $html);
+        self::assertStringNotContainsString('style="display:contents"', $html);
     }
 
     public function testItEmitsRenderEventsSoPluginsCanExtendIt(): void

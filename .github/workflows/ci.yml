@@ -51,9 +51,20 @@ jobs:
           XDEBUG_MODE: coverage
         run: |
           vendor/bin/phpunit --testsuite desktop-app --coverage-clover=build/clover.xml
-          # 95, no 96: tres superficies sólo se prueban con una app arrancada y viven excluidas
-          # en phpunit.xml, con el motivo escrito ahí. Medido sobre el resto: 95.97 %.
+          # 95, not the measured number: a handful of surfaces only answer with an app booted, and the
+          # floor leaves room for one to be added before its test is. Measured on this tree: 97.30 %.
           php tools/coverage-floor.php build/clover.xml 95
+
+      # Pinned: `node --test '<glob>'` needs a Node that expands the glob itself (>= 21), and
+      # package.json declares >= 22. Without this the step runs on whatever the runner image ships and
+      # the gate is a coin flip on the image, not on the code.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Client modules (node:test — the shipped .js measured by execution)
+        run: node --test 'tests/js/**/*.test.mjs'
 
       - name: DocBlock coverage gate
         run: php tools/validate-docblocks.php
