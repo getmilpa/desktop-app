@@ -21,6 +21,9 @@
 
   var live = window.MilpaLive || null;
 
+  /** The graph operation's own HTTP projection — the same door a terminal takes. */
+  var DECIDE_ROUTE = '/graph/decide';
+
   /** The list the cards live in, and the prototype the server rendered for one. */
   var LIST_ID = 'milpa-decisions-list';
   var PROTO = 'milpa-decision-proto';
@@ -72,4 +75,57 @@
 
   subscribe();
   document.addEventListener('DOMContentLoaded', subscribe);
+
+  /**
+   * Answering a GRAPH decision, right here.
+   *
+   * An agent's parked question is answered in the conversation of its own session, so its card is a link.
+   * A graph's is answered from the inbox, because the run is parked in a log and not in a process — so the
+   * options the server rendered are posted straight to `graph:decide`, the same operation a terminal calls.
+   *
+   * The options are the cases of the enum the routes were declared with, so this handler never has to know
+   * what they mean: it sends the one the human pressed and lets the engine refuse anything it should.
+   */
+  function answer(card, decision) {
+    var d = desk();
+    var status = card.querySelector('[data-decision-status]') || card.appendChild(document.createElement('p'));
+    status.className = 'decision-card__facts';
+    status.setAttribute('data-decision-status', '');
+    status.textContent = tr('decisions.answering');
+
+    var body = JSON.stringify({
+      graph: card.getAttribute('data-graph') || '',
+      instance: card.getAttribute('data-graph-instance') || '',
+      decision: decision,
+      principal: card.getAttribute('data-graph-principal') || '',
+    });
+
+    var send = fetch(DECIDE_ROUTE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
+
+    return (d && d.guardedFlow ? send.then(d.guardedFlow) : send)
+      .then(function (response) { return response.json(); })
+      .then(function (read) {
+        if (read && read.ok === false) { throw new Error(read.error || 'refused'); }
+        status.textContent = tr('decisions.answered');
+        card.setAttribute('data-answered', '');
+      })
+      .catch(function (err) {
+        status.textContent = tr('decisions.refused', (err && err.message) || 'unknown');
+      });
+  }
+
+  // Delegated on the list, not bound per card: a decision can arrive live, and a handler bound at load
+  // would never see it (greenhouse decisions/0191 — the same lesson the conversation paid for).
+  document.addEventListener('click', function (event) {
+    var button = event.target && event.target.closest ? event.target.closest('[data-graph-decide]') : null;
+
+    if (!button) { return; }
+
+    var card = button.closest('.decision-card--graph');
+
+    if (!card || card.hasAttribute('data-answered')) { return; }
+
+    event.preventDefault();
+    answer(card, button.getAttribute('data-graph-decide') || '');
+  });
 })();

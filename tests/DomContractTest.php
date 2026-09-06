@@ -65,6 +65,8 @@ final class DomContractTest extends TestCase
      */
     private const array WRITTEN_BY_A_MODULE = [
         'data-cap-package' => 'desktop-capabilities.js stamps the package onto the confirm box it clones',
+        'data-answered' => 'desktop-decisions.js stamps it on a graph card once its decision came back accepted',
+        'data-decision-status' => 'desktop-decisions.js creates the line it writes the answer\'s outcome into',
     ];
 
     /**

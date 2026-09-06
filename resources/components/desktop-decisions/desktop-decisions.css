@@ -22,3 +22,9 @@
 .decision-card__q { margin: 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text); text-wrap: pretty; }
 .decision-card__facts { margin: var(--space-2) 0 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
 .decision-card__open { margin-top: var(--space-3); }
+
+/* A graph decision is answered here, so its options are buttons rather than a link elsewhere. */
+.decision-card__options { display: flex; flex-wrap: wrap; gap: var(--mui-space-2, .5rem); margin: var(--mui-space-2, .5rem) 0 0; }
+.decision-card--graph[data-answered] .decision-card__options { display: none; }
+.decision-card--graph[data-answered] { opacity: .6; }
+

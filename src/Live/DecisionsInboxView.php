@@ -30,11 +30,38 @@ final class DecisionsInboxView
      * declared locale (greenhouse decisions/0138, 0211 phase D4). The default is the English the view
      * used to hardcode, so a caller with no catalog still reads a sentence.
      *
-     * @param list<array{session: string, goal: string, question: string, operation: string, reason: string}> $pending
+     * @param list<array{session: string, goal: string, question: string, operation: string, reason: string}>          $pending
+     * @param list<array{graph: string, instance: string, question: string, options: list<string>, requester: string}> $graphs
+     *                                                                                                                          Decisions DECLARED GRAPHS are waiting on. They render differently on purpose: an agent's parked
+     *                                                                                                                          question is answered in the conversation of its own session, so its card is a link there; a graph's
+     *                                                                                                                          is answered HERE, so its card carries its options as buttons — and those options are the cases of
+     *                                                                                                                          the enum its routes were declared with, which is why the buttons cannot drift from the machine.
      */
-    public function html(array $pending, string $empty = 'No decisions to make. When an agent parks a gate, it appears here for you to approve or refuse.'): string
-    {
+    public function html(
+        array $pending,
+        string $empty = 'No decisions to make. When an agent parks a gate, it appears here for you to approve or refuse.',
+        array $graphs = [],
+        string $principal = '',
+    ): string {
         $cards = '';
+
+        foreach ($graphs as $g) {
+            $options = '';
+            foreach ($g['options'] as $option) {
+                $options .= '<button type="button" class="mui-btn mui-btn--sm decision-card__option"'
+                    . ' data-graph-decide="' . $this->esc($option) . '">' . $this->esc($option) . '</button>';
+            }
+
+            $cards .= '<li class="decision-card decision-card--graph" data-graph="' . $this->esc($g['graph']) . '"'
+                . ' data-graph-instance="' . $this->esc($g['instance']) . '"'
+                . ' data-graph-principal="' . $this->esc($principal) . '">'
+                . '<p class="decision-card__goal">' . $this->esc($g['graph']) . '</p>'
+                . '<p class="decision-card__q">' . $this->esc($g['question']) . '</p>'
+                . ($g['requester'] !== '' ? '<p class="decision-card__facts">started by <strong>' . $this->esc($g['requester']) . '</strong></p>' : '')
+                . '<p class="decision-card__options">' . $options . '</p>'
+                . '</li>';
+        }
+
         foreach ($pending as $d) {
             $goal = $this->esc($d['goal']);
             $facts = [];

@@ -101,6 +101,51 @@ final class DesktopData
     }
 
     /**
+     * The decisions DECLARED GRAPHS are waiting on — the other half of the same inbox.
+     *
+     * A graph parks in an append-only log rather than holding a process, so its question outlives the run
+     * that raised it and can be answered from anywhere. Unlike an agent's parked question, which is answered
+     * in the conversation of its own session, a graph decision is answered HERE: its options are the cases of
+     * the enum its routes were declared with, so the buttons and the machine cannot drift apart.
+     *
+     * Guarded so an app without `milpa/orchestrator`, or one that declares no graphs, degrades to none.
+     *
+     * @return list<array{graph: string, instance: string, question: string, options: list<string>, requester: string}>
+     *
+     * @codeCoverageIgnore reads through to GraphRuns; exercised on a booted app, not by the standalone suite
+     */
+    public function pendingGraphDecisions(): array
+    {
+        if (!class_exists(\Milpa\Orchestrator\Declaration\GraphRuns::class)
+            || !$this->container->getContainer()->has(\Milpa\Orchestrator\Declaration\GraphRuns::class)) {
+            return [];
+        }
+
+        $runs = $this->container->get(\Milpa\Orchestrator\Declaration\GraphRuns::class);
+
+        if (!$runs instanceof \Milpa\Orchestrator\Declaration\GraphRuns) {
+            return [];
+        }
+
+        $rows = [];
+
+        foreach ($runs->pending() as $row) {
+            /** @var list<string> $options */
+            $options = \is_array($row['options'] ?? null) ? array_values(array_filter($row['options'], 'is_string')) : [];
+
+            $rows[] = [
+                'graph' => (string) ($row['definition'] ?? $row['process'] ?? ''),
+                'instance' => (string) ($row['instance_id'] ?? ''),
+                'question' => (string) ($row['gate_id'] ?? ''),
+                'options' => $options,
+                'requester' => (string) ($row['requester'] ?? ''),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * The decisions inbox: every session that has a question an agent parked, across all sessions.
      *
      * The live gate lives in the conversation of the session it belongs to; this is the cross-session

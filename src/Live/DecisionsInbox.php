@@ -47,13 +47,18 @@ final class DecisionsInbox
         private readonly ?DesktopData $data = null,
         private readonly ?MilpaEventDispatcherInterface $events = null,
         private readonly ?Catalog $catalog = null,
+        private readonly string $principal = '',
     ) {
     }
 
     /** The screen, with its signed envelope, after the render events a plugin may extend it through. */
     public function render(): string
     {
-        $subject = new ComposerRender(['pending' => $this->data?->pendingDecisions() ?? []]);
+        $subject = new ComposerRender([
+            'pending' => $this->data?->pendingDecisions() ?? [],
+            'graphs' => $this->data?->pendingGraphDecisions() ?? [],
+            'principal' => $this->principal,
+        ]);
         $this->events?->dispatch(self::BEFORE_RENDER, ['decisions' => $subject]);
 
         $state = (new DecisionsInboxComponent())->mount($subject->props, new ComponentContext(componentId: self::COMPONENT_ID));
@@ -69,11 +74,21 @@ final class DecisionsInbox
     {
         /** @var list<array{session: string, goal: string, question: string, operation: string, reason: string}> $pending */
         $pending = \is_array($props['pending'] ?? null) ? $props['pending'] : [];
+        /** @var list<array{graph: string, instance: string, question: string, options: list<string>, requester: string}> $graphs */
+        $graphs = \is_array($props['graphs'] ?? null) ? $props['graphs'] : [];
 
         return '<div class="view milpa-decisions" data-view="decisions"'
             . ' data-milpa-component="desktop-decisions" data-milpa-component-id="' . self::COMPONENT_ID . '" hidden>'
             . '<p class="milpa-decisions__intro">' . $this->tr('decisions.intro') . '</p>'
-            . (new DecisionsInboxView())->html($pending, $this->plain('decisions.empty'))
+            . (new DecisionsInboxView())->html($pending, $this->plain('decisions.empty'), $graphs, (string) ($props['principal'] ?? ''))
+            // The prototype for a GRAPH card, always printed: the module reaches for these hooks, and a hook
+            // no page ever carries is a module talking to itself (this package's DOM contract refuses it).
+            . '<template id="milpa-graph-decision-proto">'
+            . '<li class="decision-card decision-card--graph" data-graph data-graph-instance data-graph-principal>'
+            . '<p class="decision-card__goal"></p><p class="decision-card__q"></p>'
+            . '<p class="decision-card__options"><button type="button" class="mui-btn mui-btn--sm decision-card__option" data-graph-decide></button></p>'
+            . '</li>'
+            . '</template>'
             . '<template id="milpa-decision-proto">'
             . '<li class="decision-card"><p class="decision-card__q" data-decision-question></p>'
             . '<p class="decision-card__facts" data-decision-facts></p></li>'

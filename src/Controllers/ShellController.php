@@ -195,7 +195,7 @@ final class ShellController
         $this->live->declare(new CapabilitiesScreenComponent(), fn (array $props): string => (new CapabilitiesScreen($this->live->codec(), $this->data, $this->events, $this->catalog()))->render());
         $this->live->declare(new SkillsScreenComponent(), fn (array $props): string => (new SkillsScreen($this->live->codec(), $this->data, $this->events, $this->catalog()))->render());
         $this->live->declare(new ScreenPreviewComponent(), fn (array $props): string => (new ScreenPreview($this->live->codec(), $this->data, $this->events, $this->catalog()))->render());
-        $this->live->declare(new DecisionsInboxComponent(), fn (array $props): string => (new DecisionsInbox($this->live->codec(), $this->data, $this->events, $this->catalog()))->render());
+        $this->live->declare(new DecisionsInboxComponent(), fn (array $props): string => (new DecisionsInbox($this->live->codec(), $this->data, $this->events, $this->catalog(), \is_string($props['principal'] ?? null) ? $props['principal'] : ''))->render());
         $this->live->declare(new StatusBarComponent(), fn (array $props): string => (new StatusBar($this->live->codec(), $this->data, $this->events, $this->catalog()))->render());
     }
 
@@ -324,6 +324,7 @@ final class ShellController
         $compiler = $this->live->compiler([
             'desktop-sidebar' => ['chrome' => !$embed],
             'desktop-topbar' => ['principal' => $principal ?? ''],
+            'desktop-decisions' => ['principal' => $principal ?? ''],
             'desktop-context' => ['sections' => $composition->sections()],
         ]);
         $paint = function (string $component) use ($compiler, &$assets): string {

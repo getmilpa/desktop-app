@@ -1,6 +1,6 @@
 {
     "name": "milpa/desktop-app",
-    "description": "Turns a Milpa app into a desktop app: a plugin that SERVES its own shell over HTTP, so an Electron (or browser) host loads the UI at a real origin. The web surface IS the desktop channel (greenhouse decisions/0188) \u2014 and WebAuthn, live components and consent all run in that one origin.",
+    "description": "Turns a Milpa app into a desktop app: a plugin that SERVES its own shell over HTTP, so an Electron (or browser) host loads the UI at a real origin. The web surface IS the desktop channel (greenhouse decisions/0188) — and WebAuthn, live components and consent all run in that one origin.",
     "license": "Apache-2.0",
     "authors": [
         {
@@ -29,7 +29,8 @@
         "phpunit/phpunit": "^11.5"
     },
     "suggest": {
-        "milpa/admin": "The Desktop becomes the admin's guest (greenhouse decisions/0211): DesktopAppPlugin declares an Agent section whose whole VIEW is the Desktop's own components — the conversation, the composer and the consent gate composed inline in the panel's own document, behind the same door, with one runtime for the page. Nothing is required for the Desktop itself."
+        "milpa/admin": "The Desktop becomes the admin's guest (greenhouse decisions/0211): DesktopAppPlugin declares an Agent section whose whole VIEW is the Desktop's own components — the conversation, the composer and the consent gate composed inline in the panel's own document, behind the same door, with one runtime for the page. Nothing is required for the Desktop itself.",
+        "milpa/orchestrator": "Declare agent graphs and answer their decisions from the Desktop inbox (>=0.8)"
     },
     "autoload": {
         "psr-4": {
@@ -48,7 +49,7 @@
         "milpa": {
             "capability": {
                 "id": "desktop-app",
-                "title": "Serve the app's own shell over HTTP \u2014 the desktop channel is the web channel",
+                "title": "Serve the app's own shell over HTTP — the desktop channel is the web channel",
                 "unlocks": [],
                 "provides": [
                     "desktop-shell",
