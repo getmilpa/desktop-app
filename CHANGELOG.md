@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.52.0](https://github.com/getmilpa/desktop-app/compare/v0.51.0...v0.52.0) (2026-09-06)
+
+
+### Features
+
+* the decisions inbox answers a declared graph, not only an agent's session ([#95](https://github.com/getmilpa/desktop-app/issues/95)) ([e4f9236](https://github.com/getmilpa/desktop-app/commit/e4f9236e1ac76fe3d9d2e57befb07424add3ee48))
+
 ## [0.51.0](https://github.com/getmilpa/desktop-app/compare/v0.50.0...v0.51.0) (2026-09-06)
 
 
