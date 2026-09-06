@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.53.0](https://github.com/getmilpa/desktop-app/compare/v0.52.2...v0.53.0) (2026-09-06)
+
+
+### Features
+
+* the Desktop declares the components it brings ([#102](https://github.com/getmilpa/desktop-app/issues/102)) ([9d4958b](https://github.com/getmilpa/desktop-app/commit/9d4958b5ddf15f47608d9b6acde19b7f51f2a36e))
+
 ## [0.52.2](https://github.com/getmilpa/desktop-app/compare/v0.52.1...v0.52.2) (2026-09-06)
 
 
