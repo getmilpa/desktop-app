@@ -134,7 +134,7 @@ final class DesktopData
             $options = \is_array($row['options'] ?? null) ? array_values(array_filter($row['options'], 'is_string')) : [];
 
             $rows[] = [
-                'graph' => (string) ($row['definition'] ?? $row['process'] ?? ''),
+                'graph' => (string) ($row['graph'] ?? ''),
                 'instance' => (string) ($row['instance_id'] ?? ''),
                 'question' => (string) ($row['gate_id'] ?? ''),
                 'options' => $options,
