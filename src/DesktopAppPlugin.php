@@ -44,9 +44,11 @@ use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Runtime\Config;
+use Milpa\Runtime\Kernel;
 use Milpa\Runtime\Http\RouteProviderInterface;
 use Milpa\Runtime\Stack\ServiceDeclaration;
 use Milpa\Runtime\Stack\StackProviderInterface;
+use Milpa\Runtime\Support\RootResolver;
 
 /**
  * The «Desktop App» plugin: a Milpa app SERVES ITS OWN SHELL over HTTP (greenhouse decisions/0188).
@@ -443,13 +445,44 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         return $config instanceof Config ? MercureConfig::fromConfig($config) : null;
     }
 
+    /**
+     * Where this app lives — asked, or walked to, never taken from the working directory.
+     *
+     * The two paths below used to default to `getcwd()`, and what that resolves to depends on HOW the app
+     * was launched: `php -S … -t public public/router.php` — the form this README documents — leaves the
+     * working directory alone, but the shorter `php -S … -t public` makes PHP's built-in server chdir()
+     * into the DOCROOT on every request. Under that form these defaults put the app's settings and its
+     * whole SESSION STORE inside `public/`, where they are served.
+     *
+     * A default that changes meaning with the command line is not a default, it is a trap — and the same
+     * shape, in `milpa/app-runtime`, put passkey credentials and one-time WebAuthn challenges on the public
+     * web (greenhouse evidence/0535). So: the kernel first, and failing that the platform's own
+     * {@see RootResolver}, which walks UP to the nearest composer.json. From `public/` that lands on the app.
+     *
+     * It asks the PSR-11 REGISTRY rather than `DIContainerInterface::has()`, which answers true for any
+     * auto-wirable class and would hand back a kernel rooted wherever that constructor decided
+     * (greenhouse evidence/0522).
+     */
+    private function root(): string
+    {
+        if ($this->container->getContainer()->has(Kernel::class)) {
+            $kernel = $this->container->get(Kernel::class);
+
+            if ($kernel instanceof Kernel) {
+                return $kernel->root();
+            }
+        }
+
+        return (new RootResolver())->resolve();
+    }
+
     /** Where persisted Desktop settings live: `desktop.settings.path` in config, else `.milpa/desktop-settings.json`. */
     private function settingsPath(): string
     {
         $config = $this->container->get(Config::class);
         $configured = $config instanceof Config ? $config->get('desktop.settings.path') : null;
 
-        return is_string($configured) && $configured !== '' ? $configured : getcwd() . '/.milpa/desktop-settings.json';
+        return is_string($configured) && $configured !== '' ? $configured : $this->root() . '/.milpa/desktop-settings.json';
     }
 
     /** Where the app's session store lives: `desktop.sessions.path` in config, else `.milpa/sessions/`. */
@@ -458,7 +491,7 @@ final class DesktopAppPlugin implements PluginInterface, RouteProviderInterface,
         $config = $this->container->get(Config::class);
         $configured = $config instanceof Config ? $config->get('desktop.sessions.path') : null;
 
-        return is_string($configured) && $configured !== '' ? $configured : getcwd() . '/.milpa/sessions';
+        return is_string($configured) && $configured !== '' ? $configured : $this->root() . '/.milpa/sessions';
     }
 
     /** Where the shared event log lives: `desktop.events.log` in config, else a per-app temp file. */
