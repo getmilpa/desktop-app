@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.51.0](https://github.com/getmilpa/desktop-app/compare/v0.50.0...v0.51.0) (2026-09-06)
+
+
+### Features
+
+* **views:** the Agent is composed inside the panel — the iframe of 0210 is deleted ([#93](https://github.com/getmilpa/desktop-app/issues/93)) ([acab135](https://github.com/getmilpa/desktop-app/commit/acab1358768124c8f2a229792ec0e7e727c6e63c))
+
 ## [0.50.0](https://github.com/getmilpa/desktop-app/compare/v0.49.0...v0.50.0) (2026-09-06)
 
 
