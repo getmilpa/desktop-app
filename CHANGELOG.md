@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.54.0](https://github.com/getmilpa/desktop-app/compare/v0.53.1...v0.54.0) (2026-09-07)
+
+
+### Features
+
+* the Settings action declares that it does not save ([#106](https://github.com/getmilpa/desktop-app/issues/106)) ([b17181c](https://github.com/getmilpa/desktop-app/commit/b17181c4cc8717b9730619b30e4691b2c23ba388))
+
 ## [0.53.1](https://github.com/getmilpa/desktop-app/compare/v0.53.0...v0.53.1) (2026-09-07)
 
 
