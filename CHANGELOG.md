@@ -3,6 +3,17 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.55.0](https://github.com/getmilpa/desktop-app/compare/v0.54.0...v0.55.0) (2026-09-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* this package is abandoned in favour of milpa/agent-workspace. Every Milpa\DesktopApp\ class is Milpa\AgentWorkspace\. See UPGRADING.md.
+
+### Miscellaneous Chores
+
+* renamed to milpa/agent-workspace ([#108](https://github.com/getmilpa/desktop-app/issues/108)) ([5aad3c2](https://github.com/getmilpa/desktop-app/commit/5aad3c28e8cebb1cf43d2a7a419a5715b61e0d4a))
+
 ## [0.54.0](https://github.com/getmilpa/desktop-app/compare/v0.53.1...v0.54.0) (2026-09-07)
 
 
