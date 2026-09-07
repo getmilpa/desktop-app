@@ -16,6 +16,8 @@ namespace Milpa\DesktopApp\Live;
 
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\ValueObjects\ComponentContext;
+use Milpa\Command\Effect\EffectProfile;
+use Milpa\Live\ValueObjects\ActionContract;
 use Milpa\Live\ValueObjects\ComponentContract;
 use Milpa\Live\ValueObjects\InteractionRequest;
 use Milpa\Live\ValueObjects\InteractionResult;
@@ -54,7 +56,16 @@ final class SettingsScreenComponent implements ComponentDefinitionInterface
                 'savedLabel' => ['type' => 'string', 'default' => 'Saved'],
             ],
             stateSchema: ['saved' => ['type' => 'bool']],
-            actions: ['save' => ['payload' => ['endpoint' => 'string', 'mode' => 'string']]],
+            actions: ['save' => new ActionContract(
+                // An action NAMED save that does not save: the write is `POST /desktop/settings` and this
+                // only records what the door answered. Before an action could declare what it is FOR, the
+                // NAME was the only signal a reader had — and here the name says the opposite of the truth.
+                // That is the case this declaration exists for.
+                summary: 'Record that the door reported a successful save. The write is POST /desktop/settings.',
+                mutating: false,
+                effects: EffectProfile::readOnly(),
+                payload: ['endpoint' => 'string', 'mode' => 'string'],
+            )],
         );
     }
 
