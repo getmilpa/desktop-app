@@ -3,6 +3,13 @@
 All notable changes to milpa/desktop-app are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.53.1](https://github.com/getmilpa/desktop-app/compare/v0.53.0...v0.53.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* the live endpoint receives the principal the gate left on the request ([#104](https://github.com/getmilpa/desktop-app/issues/104)) ([6b9f394](https://github.com/getmilpa/desktop-app/commit/6b9f394bcc3876a6144db28ad45ed49de3e52d70))
+
 ## [0.53.0](https://github.com/getmilpa/desktop-app/compare/v0.52.2...v0.53.0) (2026-09-06)
 
 
