@@ -42,7 +42,7 @@ final class SettingsScreen
     public const string AFTER_RENDER = 'desktop.settings.after_render';
 
     /** The default endpoint a Desktop with no configuration talks to. */
-    private const string DEFAULT_ENDPOINT = 'http://llama.local:11438';
+    private const string DEFAULT_ENDPOINT = 'http://model.example:11438';
 
     private readonly SignedXhtmlStateTransferCodec $codec;
 
