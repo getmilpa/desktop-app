@@ -90,7 +90,7 @@ test('a parked question fills the gate, opens it and shows the conversation — 
 /** The Settings screen's own root, with the four fields its save reads. */
 function settingsRoot() {
   const root = new El('div', { class: 'view milpa-settings' });
-  root.appendChild(new El('input', { id: 'set-end', value: 'http://llama.local:11438' }));
+  root.appendChild(new El('input', { id: 'set-end', value: 'http://model.example:11438' }));
   root.appendChild(new El('input', { id: 'set-stream', checked: true }));
   root.appendChild(new El('input', { id: 'set-comp', checked: false }));
   root.appendChild(new El('input', { name: 'set-mode', value: 'ask' }));
@@ -111,7 +111,7 @@ test('Save posts the form through the guard and says Saved only on a 2xx', async
   assert.equal(calls[0].url, '/desktop/settings');
   assert.equal(calls[0].init.method, 'POST');
   assert.deepEqual(JSON.parse(calls[0].init.body), {
-    endpoint: 'http://llama.local:11438', stream: true, compact: false, mode: 'auto',
+    endpoint: 'http://model.example:11438', stream: true, compact: false, mode: 'auto',
   }, 'the form is read from the component\'s own root, checked radio and all');
   assert.equal(p.signal('settings.saved').ok, true);
   assert.equal(p.signal('settings.saved').text, 'Saved');

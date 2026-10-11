@@ -84,7 +84,7 @@ final class AuthOverlay
     /** The real model label for the provider option: "Local model · <model> (<endpoint>)", in the locale. */
     private function providerLabel(): string
     {
-        $model = $this->data?->model() ?? ['model' => 'qwen3.8-27b', 'endpoint' => 'http://llama.local:11438'];
+        $model = $this->data?->model() ?? ['model' => 'qwen3.8-27b', 'endpoint' => 'http://model.example:11438'];
 
         return $this->catalog->tr('auth.provider.local', (string) $model['model'], (string) $model['endpoint']);
     }
