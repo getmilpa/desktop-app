@@ -91,7 +91,7 @@ final class DeclaredScreensTest extends TestCase
         // With no persisted endpoint the configured one stands; with no data seam at all, the default.
         $configured = (new SettingsScreen('secret', new DesktopData(new DIContainer(), null, '', new DesktopStore($dir . '/s2', $dir . '/none.json'))))->render();
         self::assertMatchesRegularExpression('/id="set-end"[^>]*value="http/', $configured);
-        self::assertStringContainsString('value="http://llama.local:11438"', (new SettingsScreen('secret'))->render());
+        self::assertStringContainsString('value="http://model.example:11438"', (new SettingsScreen('secret'))->render());
 
         unlink($dir . '/settings.json');
         rmdir($dir);
@@ -153,7 +153,7 @@ final class DeclaredScreensTest extends TestCase
         self::assertStringContainsString('Your system user is not a verified identity', $html);
         self::assertStringContainsString('Authorizing in a session grants the operation; it is not signing the call.', $html);
         // The provider option names the app's REAL model, never a provider it does not have.
-        self::assertStringContainsString('Local model · qwen3.8-27b (http://llama.local:11438)', $html);
+        self::assertStringContainsString('Local model · qwen3.8-27b (http://model.example:11438)', $html);
         // Its look is a declared file.
         self::assertStringNotContainsString('style=', $html);
     }
